@@ -173,13 +173,6 @@ interface FarmContextType {
 
 const FarmContext = createContext<FarmContextType | undefined>(undefined);
 
-const MOCK_IMAGES = {
-  goat1: "https://images.unsplash.com/photo-1524413840807-0c3cb6fa808d?w=500&auto=format&fit=crop&q=80",
-  goat2: "https://images.unsplash.com/photo-1516467508483-a7212febe31a?w=500&auto=format&fit=crop&q=80",
-  ram: "https://images.unsplash.com/photo-1484557985045-edf25e08da73?w=500&auto=format&fit=crop&q=80",
-  chicken: "https://images.unsplash.com/photo-1548550023-2bdb3c5beed7?w=500&auto=format&fit=crop&q=80",
-};
-
 export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [animals, setAnimals] = useState<Animal[]>([]);
   const [healthRecords, setHealthRecords] = useState<HealthRecord[]>([]);
@@ -193,9 +186,9 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [onboardingCompleted, setOnboardingCompletedState] = useState<boolean>(false);
   const [farmProfile, setFarmProfile] = useState<FarmProfile>({
-    name: "Adam Farms",
-    description: "Pedigree multi-species family livestock and feed supply unit.",
-    ownerName: "Abdulazeez Adam",
+    name: "My Farm",
+    description: "Multi-species pedigree livestock and supply tracking unit.",
+    ownerName: "Operator",
     location: "Kano, Nigeria",
     image: "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=600&auto=format&fit=crop&q=80",
   });
@@ -207,9 +200,9 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [aiUsage, setAiUsage] = useState({
-    questionsUsed: 3,
+    questionsUsed: 0,
     questionsLimit: 10,
-    imageUsed: 1,
+    imageUsed: 0,
     imageLimit: 5,
   });
 
@@ -252,7 +245,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Load and sync state on initial load
   useEffect(() => {
     const loadState = async () => {
-      // Load local cache as instant fallback
       const storedAnimals = localStorage.getItem("farm_animals");
       const storedHealth = localStorage.getItem("farm_health");
       const storedTreatments = localStorage.getItem("farm_treatments");
@@ -429,8 +421,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } catch (err) {
           console.error("Supabase load error, using local fallback state", err);
         }
-      } else if (!storedAnimals) {
-        seedSampleData();
       }
     };
 
@@ -438,104 +428,11 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const seedSampleData = () => {
-    const initialAnimals: Animal[] = [
-      {
-        id: "a1",
-        animal_code: "GOAT-0024",
-        name: "Aisha",
-        species: "Goat",
-        breed: "West African Dwarf",
-        sex: "Female",
-        dob: "2024-03-12",
-        source: "Born on farm",
-        status: "Healthy",
-        healthStatus: "Healthy",
-        primaryPhoto: MOCK_IMAGES.goat1,
-        photos: [MOCK_IMAGES.goat1],
-        parents: {},
-        offspring: ["a4"],
-        notes: "Excellent milk yield, highly docile mother.",
-        created_at: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-      },
-      {
-        id: "a2",
-        animal_code: "RAM-0001",
-        name: "Sultan",
-        species: "Ram",
-        breed: "Balami",
-        sex: "Male",
-        dob: "2023-01-15",
-        purchaseDate: "2023-11-20",
-        source: "Purchased",
-        status: "Active",
-        healthStatus: "Healthy",
-        primaryPhoto: MOCK_IMAGES.ram,
-        photos: [MOCK_IMAGES.ram],
-        notes: "Heavyweight stud. Purchased for active ewe breeding runs.",
-        created_at: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(),
-      },
-      {
-        id: "a3",
-        animal_code: "GOAT-0025",
-        name: "Nala",
-        species: "Goat",
-        breed: "Boer Goat Cross",
-        sex: "Female",
-        dob: "2024-05-01",
-        source: "Born on farm",
-        status: "Under Treatment",
-        healthStatus: "Under Treatment",
-        primaryPhoto: MOCK_IMAGES.goat2,
-        photos: [MOCK_IMAGES.goat2],
-        notes: "Monitoring response to antiseptic hoof sprays daily.",
-        created_at: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
-      }
-    ];
-
-    const initialInventory: InventoryItem[] = [
-      {
-        id: "i1",
-        name: "Maize Feed Bags",
-        category: "Feed",
-        quantity: 12,
-        unit: "Bags (50kg)",
-        minStock: 5,
-        notes: "High quality energy booster feed.",
-      },
-      {
-        id: "i2",
-        name: "Broad Spectrum Penicillin",
-        category: "Medication",
-        quantity: 2,
-        unit: "Bottles (100ml)",
-        minStock: 3,
-        notes: "Keep in cool storage. For veterinary treatment only.",
-      }
-    ];
-
-    const initialReminders: Reminder[] = [
-      {
-        id: "r1",
-        title: "Hoof rot treatment follow-up",
-        type: "Treatment",
-        dueDate: "2025-02-25",
-        animal_id: "a3",
-        completed: false,
-        notes: "Inspect hoof moisture levels.",
-      }
-    ];
-
-    setAnimals(initialAnimals);
-    setInventory(initialInventory);
-    setReminders(initialReminders);
-
-    saveState("farm_animals", initialAnimals);
-    saveState("farm_inventory", initialInventory);
-    saveState("farm_reminders", initialReminders);
+    // Left empty since user requested removing dummy seed datasets entirely
   };
 
   const login = (email: string, farmName: string): boolean => {
-    const currentProfile = { ...farmProfile, name: farmName || "Adam Farms" };
+    const currentProfile = { ...farmProfile, name: farmName || "My Farm" };
     setFarmProfile(currentProfile);
     saveState("farm_profile", currentProfile);
 
@@ -552,9 +449,9 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signupAndSetup = (email: string, name: string, farmName: string, location: string) => {
     const updatedProfile: FarmProfile = {
-      name: farmName || "Adam Farms",
+      name: farmName || "My Farm",
       description: `Premium agricultural production unit managed by ${name}.`,
-      ownerName: name || "Y",
+      ownerName: name || "Operator",
       location: location || "Kano, Nigeria",
       image: "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=600&auto=format&fit=crop&q=80",
     };
@@ -569,7 +466,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setSession(userSession);
     saveState("farm_user_session", userSession);
 
-    seedSampleData();
     showSuccess(`Farm setup complete! Welcome to ${farmName}!`);
   };
 
