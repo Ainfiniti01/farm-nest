@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useFarm, Animal, HealthRecord, Treatment, InventoryItem, Contact, Reminder } from "@/context/FarmContext";
 import { ReportDownloader } from "@/components/ReportDownloader";
 import { 
@@ -53,6 +53,7 @@ const Index = () => {
     activityLogs,
     farmProfile,
     session,
+    onboardingCompleted,
     aiUsage,
     addAnimal,
     updateAnimal,
@@ -71,24 +72,33 @@ const Index = () => {
     updateFarmProfile,
     login,
     signupAndSetup,
-    logout
+    logout,
+    setOnboardingCompleted
   } = useFarm();
 
-  // Active Bottom Navigation Tab: 'dashboard' | 'animals' | 'ai' | 'inventory' | 'settings'
+  // Bottom Navigation tab: 'dashboard' | 'animals' | 'ai' | 'inventory' | 'settings'
   const [activeTab, setActiveTab] = useState<"dashboard" | "animals" | "ai" | "inventory" | "settings">("dashboard");
 
   // Selected animal detail modal/drawer
   const [selectedAnimal, setSelectedAnimal] = useState<Animal | null>(null);
 
-  // Authentication Flow States: 'welcome' | 'login' | 'signup' | 'app'
-  const [authScreen, setAuthScreen] = useState<"welcome" | "login" | "signup">("welcome");
+  // Onboarding Active Screen: 0 | 1 | 2 | 3
+  const [onboardingIndex, setOnboardingIndex] = useState(0);
+
+  // Authentication screens: 'welcome' | 'login' | 'signup' | 'forgot_password'
+  const [authScreen, setAuthScreen] = useState<"welcome" | "login" | "signup" | "forgot_password">("welcome");
 
   // Authentication credentials forms
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
+  const [authConfirmPassword, setAuthConfirmPassword] = useState("");
   const [authFarmName, setAuthFarmName] = useState("");
   const [authOperatorName, setAuthOperatorName] = useState("");
   const [authLocation, setAuthLocation] = useState("");
+
+  // Loading Screen simulation state
+  const [isInitializingApp, setIsInitializingApp] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState("Preparing your farm...");
 
   // New animal form state
   const [showAddAnimal, setShowAddAnimal] = useState(false);
@@ -106,7 +116,6 @@ const Index = () => {
     fatherId: "",
   });
 
-  // Photo uploads
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Health record form state
@@ -116,7 +125,7 @@ const Index = () => {
     type: "Observation" as HealthRecord["type"],
     details: "",
     medication: "",
-    recordedBy: farmProfile.ownerName || "Abdul",
+    recordedBy: farmProfile.ownerName || "Abdulazeez Adam",
     date: new Date().toISOString().split("T")[0],
   });
 
@@ -170,6 +179,33 @@ const Index = () => {
   const [editProfile, setEditProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({ ...farmProfile });
 
+  // Rotate Loading messages simulating real initial boot
+  useEffect(() => {
+    if (isInitializingApp) {
+      const messages = [
+        "Preparing your farm...",
+        "Loading your animals...",
+        "Gathering your records...",
+        "Almost ready..."
+      ];
+      let msgIdx = 0;
+      const interval = setInterval(() => {
+        msgIdx = (msgIdx + 1) % messages.length;
+        setLoadingMessage(messages[msgIdx]);
+      }, 1000);
+
+      const timeout = setTimeout(() => {
+        setIsInitializingApp(false);
+        clearInterval(interval);
+      }, 4000);
+
+      return () => {
+        clearInterval(interval);
+        clearTimeout(timeout);
+      };
+    }
+  }, [isInitializingApp]);
+
   // Handle Photo File selection and Camera capture
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -199,10 +235,13 @@ const Index = () => {
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!authEmail || !authPassword) {
-      showError("Please fill out your operator credentials.");
+      showError("Please check your email and password and try again.");
       return;
     }
-    const success = login(authEmail, authFarmName || "Adam");
+    
+    // Simulate Preparing farm sequence
+    setIsInitializingApp(true);
+    const success = login(authEmail, authFarmName || farmProfile.name);
     if (success) {
       setAuthEmail("");
       setAuthPassword("");
@@ -212,16 +251,29 @@ const Index = () => {
   const handleSignupSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!authEmail || !authPassword || !authFarmName || !authOperatorName) {
-      showError("All principal fields are required for initial farm setup.");
+      showError("We couldn't create your account. All fields are required.");
       return;
     }
+    if (authPassword !== authConfirmPassword) {
+      showError("Passwords do not match.");
+      return;
+    }
+
+    // Simulate setup loader
+    setIsInitializingApp(true);
     signupAndSetup(authEmail, authOperatorName, authFarmName, authLocation || "Kano, Nigeria");
-    // reset form
     setAuthEmail("");
     setAuthPassword("");
+    setAuthConfirmPassword("");
     setAuthFarmName("");
     setAuthOperatorName("");
     setAuthLocation("");
+  };
+
+  const handleResetPasswordSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    showSuccess("Password reset link sent securely to your email address!");
+    setAuthScreen("login");
   };
 
   // Submit handlers
@@ -390,30 +442,226 @@ const Index = () => {
     return queryMatch && speciesMatch && statusMatch;
   });
 
+  // BACKGROUND IMAGES FOR ONBOARDING / AUTH
+  const AUTH_BG_URL = "https://images.unsplash.com/photo-1516467508483-a7212febe31a?w=1000&auto=format&fit=crop&q=80";
+
+  // GLOBAL INITIALIZING / LOADING SCREEN
+  if (isInitializingApp) {
+    return (
+      <div 
+        className="min-h-screen bg-cover bg-center flex flex-col justify-center items-center text-white p-6 relative transition-all duration-500"
+        style={{ backgroundImage: `linear-gradient(to bottom, rgba(4, 47, 31, 0.95), rgba(6, 78, 59, 0.92)), url(${AUTH_BG_URL})` }}
+      >
+        <div className="text-center space-y-8 max-w-sm">
+          {/* Logo Icon */}
+          <div className="w-20 h-20 bg-white/10 backdrop-blur-md rounded-3xl border border-white/20 mx-auto flex items-center justify-center text-4xl shadow-xl animate-bounce">
+            🚜
+          </div>
+          
+          <div className="space-y-2">
+            <h1 className="text-3xl font-black tracking-tight">FarmNest</h1>
+            <p className="text-emerald-200 text-xs font-semibold uppercase tracking-wider">Your farm, all in one place.</p>
+          </div>
+
+          <div className="space-y-2 bg-black/20 p-5 rounded-2xl border border-white/5 backdrop-blur-sm">
+            <div className="flex justify-center items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+              <span className="text-sm font-extrabold text-white">{loadingMessage}</span>
+            </div>
+            <p className="text-[10px] text-emerald-300">Just a moment while we configure database streams.</p>
+          </div>
+
+          <div className="pt-8 border-t border-emerald-800/40">
+            <p className="text-emerald-100/90 text-xs italic font-medium leading-relaxed">
+              "Good records. Healthy animals. Better farming."
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ONBOARDING SCREENS WRAPPER (4 Screens total)
+  if (!onboardingCompleted) {
+    return (
+      <div 
+        className="min-h-screen bg-cover bg-center flex flex-col justify-between text-white p-6 transition-all duration-700 relative"
+        style={{ 
+          backgroundImage: `linear-gradient(to bottom, rgba(15, 23, 42, 0.8), rgba(6, 78, 59, 0.95)), url(${AUTH_BG_URL})` 
+        }}
+      >
+        {/* Top skip header */}
+        <div className="flex justify-between items-center z-10">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">🚜</span>
+            <span className="font-black text-sm tracking-wide">FarmNest</span>
+          </div>
+          <button 
+            onClick={() => setOnboardingCompleted(true)}
+            className="text-xs font-black bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-full border border-white/10 backdrop-blur-sm transition"
+          >
+            Skip
+          </button>
+        </div>
+
+        {/* SCREEN 1: WELCOME SCREEN */}
+        {onboardingIndex === 0 && (
+          <div className="max-w-md mx-auto space-y-6 text-center my-auto z-10 py-12 animate-in fade-in zoom-in duration-500">
+            <h1 className="text-4xl md:text-5xl font-black leading-tight text-white">
+              FarmNest
+            </h1>
+            <p className="text-emerald-300 font-extrabold text-sm uppercase tracking-widest">
+              Your farm, all in one place.
+            </p>
+            <p className="text-slate-200 text-xs leading-relaxed max-w-xs mx-auto">
+              Manage your animals, records, health history, breeding logs and inventory — all from your pocket.
+            </p>
+
+            <button
+              onClick={() => setOnboardingIndex(1)}
+              className="px-8 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-xs rounded-xl shadow-lg transition"
+            >
+              Get Started
+            </button>
+          </div>
+        )}
+
+        {/* SCREEN 2: ANIMAL IDENTITY */}
+        {onboardingIndex === 1 && (
+          <div className="max-w-md mx-auto space-y-6 text-center my-auto z-10 py-12 animate-in slide-in-from-right duration-500">
+            {/* Visual Preview */}
+            <div className="bg-white/10 backdrop-blur-md p-4 rounded-3xl border border-white/20 text-left max-w-xs mx-auto shadow-xl">
+              <div className="relative h-24 bg-slate-100 rounded-xl overflow-hidden">
+                <img src={MOCK_IMAGES.goat1} className="w-full h-full object-cover" />
+                <span className="absolute top-2 right-2 bg-emerald-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full">
+                  Healthy
+                </span>
+              </div>
+              <p className="text-[9px] text-emerald-300 font-bold uppercase mt-2">Goat • Female</p>
+              <h3 className="font-black text-xs text-white">AISHA</h3>
+              <p className="text-[10px] font-mono text-slate-300">GOAT-0024</p>
+            </div>
+
+            <div className="space-y-2">
+              <h2 className="text-2xl font-black leading-tight">Every animal has a place</h2>
+              <p className="text-slate-200 text-xs leading-relaxed max-w-xs mx-auto">
+                Give each goat, ram, chicken and other animal its own digital identity, photos and complete pedigree lineage.
+              </p>
+            </div>
+
+            <button
+              onClick={() => setOnboardingIndex(2)}
+              className="px-8 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-xs rounded-xl shadow-lg transition"
+            >
+              Next
+            </button>
+          </div>
+        )}
+
+        {/* SCREEN 3: LIVING STORY */}
+        {onboardingIndex === 2 && (
+          <div className="max-w-md mx-auto space-y-6 text-center my-auto z-10 py-12 animate-in slide-in-from-right duration-500">
+            {/* Health timeline preview */}
+            <div className="bg-white/10 backdrop-blur-md p-4 rounded-3xl border border-white/20 text-left max-w-xs mx-auto shadow-xl space-y-3">
+              <div className="flex gap-3 text-xs items-center">
+                <span className="text-emerald-400">●</span>
+                <div>
+                  <p className="font-bold">PPR Vaccination booster</p>
+                  <p className="text-[9px] text-slate-300">Administered by Uncle • Last month</p>
+                </div>
+              </div>
+              <div className="flex gap-3 text-xs items-center opacity-70">
+                <span className="text-amber-400">●</span>
+                <div>
+                  <p className="font-bold">Minor Hoof decay watch</p>
+                  <p className="text-[9px] text-slate-300">Logged by Abdul • 2 months ago</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <h2 className="text-2xl font-black leading-tight">Keep their whole story</h2>
+              <p className="text-slate-200 text-xs leading-relaxed max-w-xs mx-auto">
+                Track health observations, active medical prescriptions, weighings, offspring counts, and audit logs permanently.
+              </p>
+            </div>
+
+            <button
+              onClick={() => setOnboardingIndex(3)}
+              className="px-8 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-xs rounded-xl shadow-lg transition"
+            >
+              Next
+            </button>
+          </div>
+        )}
+
+        {/* SCREEN 4: COMPLETE THE FARM HOME */}
+        {onboardingIndex === 3 && (
+          <div className="max-w-md mx-auto space-y-6 text-center my-auto z-10 py-12 animate-in slide-in-from-right duration-500">
+            <h2 className="text-3xl font-black leading-tight text-white">Your farm, all together</h2>
+            <p className="text-slate-200 text-xs leading-relaxed max-w-xs mx-auto">
+              Ready to give your livestock a real source of truth? Create your personal profile and configure your farm parameters in 1 minute.
+            </p>
+
+            <div className="space-y-2 pt-2">
+              <button
+                onClick={() => setOnboardingCompleted(true)}
+                className="w-full max-w-xs py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-xs rounded-xl shadow-lg transition"
+              >
+                Create My Farm
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Footer indicators and Skip controls */}
+        <div className="flex justify-between items-center z-10 py-4 max-w-md mx-auto w-full">
+          <div className="flex gap-2">
+            {[0, 1, 2, 3].map((idx) => (
+              <span 
+                key={idx}
+                onClick={() => setOnboardingIndex(idx)}
+                className={`w-2.5 h-2.5 rounded-full transition-all cursor-pointer ${onboardingIndex === idx ? "bg-emerald-400 w-6" : "bg-white/30"}`}
+              />
+            ))}
+          </div>
+          {onboardingIndex > 0 && (
+            <button 
+              onClick={() => setOnboardingIndex(prev => prev - 1)}
+              className="text-xs font-bold text-slate-300 hover:text-white transition"
+            >
+              Go Back
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   // IF NOT AUTHENTICATED: Present beautiful Welcome/Onboarding portal
   if (!session.isAuthenticated) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="w-full max-w-md bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-100">
+      <div 
+        className="min-h-screen bg-cover bg-center flex items-center justify-center p-4 relative"
+        style={{ backgroundImage: `linear-gradient(to bottom, rgba(15, 23, 42, 0.7), rgba(4, 47, 31, 0.95)), url(${AUTH_BG_URL})` }}
+      >
+        <div className="w-full max-w-md bg-white/10 backdrop-blur-md rounded-3xl shadow-2xl overflow-hidden border border-white/20 p-6 space-y-6">
           
-          {/* Cover Landscape */}
-          <div className="h-44 bg-gradient-to-tr from-emerald-800 to-emerald-600 p-6 flex flex-col justify-end text-white relative">
-            <div className="absolute top-4 right-4 w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center text-2xl font-bold border border-white/20">
+          {/* Brand header */}
+          <div className="text-center space-y-1">
+            <div className="w-12 h-12 bg-white/10 backdrop-blur-md rounded-2xl mx-auto flex items-center justify-center text-2xl shadow border border-white/20">
               🚜
             </div>
-            <span className="text-xs uppercase font-extrabold tracking-widest text-emerald-200">Livestock OS v1</span>
-            <h1 className="text-2xl font-black mt-1">Farm Management</h1>
+            <h1 className="text-2xl font-black text-white mt-2">FarmNest</h1>
+            <p className="text-emerald-300 text-[10px] font-extrabold uppercase tracking-widest">Your farm, all in one place.</p>
           </div>
 
           {/* WELCOME PORTAL */}
           {authScreen === "welcome" && (
-            <div className="p-6 space-y-6">
-              <div className="space-y-2">
-                <h2 className="text-lg font-bold text-slate-950">Digital identity and records on the go</h2>
-                <p className="text-slate-600 text-xs leading-relaxed">
-                  Easily register every animal, photograph ewes/sire studs on the field, manage vaccine charts, track treatment plans, and log storage inventory. Built primarily for family operator environments.
-                </p>
-              </div>
+            <div className="space-y-6 animate-in fade-in duration-300">
+              <p className="text-slate-200 text-xs text-center leading-relaxed">
+                Connect your team, map maternal/paternal lineage trees, trace vaccinations chronologically and control inventory levels efficiently.
+              </p>
 
               <div className="grid grid-cols-1 gap-3">
                 <button
@@ -425,89 +673,96 @@ const Index = () => {
                 </button>
                 <button
                   onClick={() => setAuthScreen("login")}
-                  className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl transition flex items-center justify-center gap-2"
+                  className="w-full py-3 bg-white/10 hover:bg-white/20 text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-2 border border-white/20"
                 >
                   <Compass size={16} />
                   Login to Existing Farm
                 </button>
-              </div>
-
-              <div className="text-center pt-2">
-                <span className="text-[10px] text-slate-400 font-medium">
-                  Green Valley Livestock OS &copy; {new Date().getFullYear()}
-                </span>
               </div>
             </div>
           )}
 
           {/* SIGNUP / SETUP FARM */}
           {authScreen === "signup" && (
-            <form onSubmit={handleSignupSubmit} className="p-6 space-y-4">
-              <div className="space-y-1">
-                <h2 className="text-lg font-black text-slate-900">Setup Your Farm Profile</h2>
-                <p className="text-xs text-slate-500">Create your operator credentials and farm identity.</p>
+            <form onSubmit={handleSignupSubmit} className="space-y-4 animate-in fade-in duration-300">
+              <div className="space-y-1 text-center">
+                <h2 className="text-lg font-black text-white">Create your FarmNest account</h2>
+                <p className="text-[10px] text-emerald-300">Let's set up your farm and operator credentials.</p>
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
                 <div>
-                  <label className="text-[10px] font-bold text-slate-500 block mb-1">Owner / Operator Name</label>
+                  <label className="text-[9px] font-bold text-emerald-200 uppercase block mb-1">Your Name</label>
                   <input
                     type="text"
                     placeholder="e.g. Abdulazeez Adam"
                     value={authOperatorName}
                     onChange={(e) => setAuthOperatorName(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-emerald-500"
+                    className="w-full p-2.5 bg-black/20 border border-white/10 rounded-xl text-xs text-white outline-none focus:ring-1 focus:ring-emerald-500"
                     required
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-[10px] font-bold text-slate-500 block mb-1">Farm Name</label>
+                    <label className="text-[9px] font-bold text-emerald-200 uppercase block mb-1">Farm Name</label>
                     <input
                       type="text"
                       placeholder="e.g. Adam Farms"
                       value={authFarmName}
                       onChange={(e) => setAuthFarmName(e.target.value)}
-                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-emerald-500"
+                      className="w-full p-2.5 bg-black/20 border border-white/10 rounded-xl text-xs text-white outline-none focus:ring-1 focus:ring-emerald-500"
                       required
                     />
                   </div>
 
                   <div>
-                    <label className="text-[10px] font-bold text-slate-500 block mb-1">Geographic Location</label>
+                    <label className="text-[9px] font-bold text-emerald-200 uppercase block mb-1">Geographic Location</label>
                     <input
                       type="text"
                       placeholder="e.g. Kano, Nigeria"
                       value={authLocation}
                       onChange={(e) => setAuthLocation(e.target.value)}
-                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-emerald-500"
+                      className="w-full p-2.5 bg-black/20 border border-white/10 rounded-xl text-xs text-white outline-none focus:ring-1 focus:ring-emerald-500"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="text-[10px] font-bold text-slate-500 block mb-1">Email Address</label>
+                  <label className="text-[9px] font-bold text-emerald-200 uppercase block mb-1">Email Address</label>
                   <input
                     type="email"
                     placeholder="operator@myfarm.com"
                     value={authEmail}
                     onChange={(e) => setAuthEmail(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-emerald-500"
+                    className="w-full p-2.5 bg-black/20 border border-white/10 rounded-xl text-xs text-white outline-none focus:ring-1 focus:ring-emerald-500"
                     required
                   />
                 </div>
 
-                <div>
-                  <label className="text-[10px] font-bold text-slate-500 block mb-1">Password</label>
-                  <input
-                    type="password"
-                    placeholder="••••••••"
-                    value={authPassword}
-                    onChange={(e) => setAuthPassword(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-emerald-500"
-                    required
-                  />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[9px] font-bold text-emerald-200 uppercase block mb-1">Password</label>
+                    <input
+                      type="password"
+                      placeholder="••••••••"
+                      value={authPassword}
+                      onChange={(e) => setAuthPassword(e.target.value)}
+                      className="w-full p-2.5 bg-black/20 border border-white/10 rounded-xl text-xs text-white outline-none focus:ring-1 focus:ring-emerald-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-bold text-emerald-200 uppercase block mb-1">Confirm</label>
+                    <input
+                      type="password"
+                      placeholder="••••••••"
+                      value={authConfirmPassword}
+                      onChange={(e) => setAuthConfirmPassword(e.target.value)}
+                      className="w-full p-2.5 bg-black/20 border border-white/10 rounded-xl text-xs text-white outline-none focus:ring-1 focus:ring-emerald-500"
+                      required
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -516,12 +771,12 @@ const Index = () => {
                   type="submit"
                   className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition"
                 >
-                  Create Account & Initialize Farm
+                  Create My Farm
                 </button>
                 <button
                   type="button"
                   onClick={() => setAuthScreen("welcome")}
-                  className="w-full py-2.5 text-slate-500 hover:text-slate-700 text-xs font-semibold"
+                  className="w-full py-2 text-slate-300 hover:text-white text-xs font-semibold text-center block"
                 >
                   Back to main portal
                 </button>
@@ -531,44 +786,42 @@ const Index = () => {
 
           {/* LOGIN PAGE */}
           {authScreen === "login" && (
-            <form onSubmit={handleLoginSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleLoginSubmit} className="space-y-4 animate-in fade-in duration-300">
               <div className="space-y-1 text-center">
-                <h2 className="text-lg font-black text-slate-900">Operator Log In</h2>
-                <p className="text-xs text-slate-500">Access your digital farm records securely.</p>
+                <h2 className="text-lg font-black text-white">Welcome back</h2>
+                <p className="text-[11px] text-emerald-300">Log in to your FarmNest dashboard.</p>
               </div>
 
               <div className="space-y-3">
                 <div>
-                  <label className="text-[10px] font-bold text-slate-500 block mb-1">Farm Name visually (Optional)</label>
+                  <label className="text-[9px] font-bold text-emerald-200 uppercase block mb-1">Farm Name or Email</label>
                   <input
                     type="text"
-                    placeholder="e.g. Adam"
-                    value={authFarmName}
-                    onChange={(e) => setAuthFarmName(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-emerald-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-bold text-slate-500 block mb-1">Email Address</label>
-                  <input
-                    type="email"
-                    placeholder="operator@myfarm.com"
+                    placeholder="e.g. Adam Farms / operator@myfarm.com"
                     value={authEmail}
                     onChange={(e) => setAuthEmail(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-emerald-500"
+                    className="w-full p-2.5 bg-black/20 border border-white/10 rounded-xl text-xs text-white outline-none focus:ring-1 focus:ring-emerald-500"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="text-[10px] font-bold text-slate-500 block mb-1">Password</label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-[9px] font-bold text-emerald-200 uppercase block">Password</label>
+                    <button 
+                      type="button" 
+                      onClick={() => setAuthScreen("forgot_password")}
+                      className="text-[9px] font-bold text-emerald-300 hover:underline"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
                   <input
                     type="password"
                     placeholder="••••••••"
                     value={authPassword}
                     onChange={(e) => setAuthPassword(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-emerald-500"
+                    className="w-full p-2.5 bg-black/20 border border-white/10 rounded-xl text-xs text-white outline-none focus:ring-1 focus:ring-emerald-500"
                     required
                   />
                 </div>
@@ -581,14 +834,52 @@ const Index = () => {
                 >
                   Log In to Farm Session
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setAuthScreen("welcome")}
-                  className="w-full py-2.5 text-slate-500 hover:text-slate-700 text-xs font-semibold"
-                >
-                  Back to main portal
-                </button>
+                <div className="text-center pt-2">
+                  <span className="text-xs text-slate-300">Don't have an account? </span>
+                  <button 
+                    type="button" 
+                    onClick={() => setAuthScreen("signup")}
+                    className="text-xs font-bold text-emerald-400 hover:underline"
+                  >
+                    Sign up
+                  </button>
+                </div>
               </div>
+            </form>
+          )}
+
+          {/* FORGOT PASSWORD */}
+          {authScreen === "forgot_password" && (
+            <form onSubmit={handleResetPasswordSubmit} className="space-y-4 animate-in fade-in duration-300">
+              <div className="space-y-1 text-center">
+                <h2 className="text-lg font-black text-white">Reset your password</h2>
+                <p className="text-xs text-slate-300">Enter your email and we'll send you a link to reset.</p>
+              </div>
+
+              <div>
+                <label className="text-[9px] font-bold text-emerald-200 uppercase block mb-1">Email Address</label>
+                <input
+                  type="email"
+                  placeholder="operator@myfarm.com"
+                  className="w-full p-2.5 bg-black/20 border border-white/10 rounded-xl text-xs text-white outline-none focus:ring-1 focus:ring-emerald-500"
+                  required
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition"
+              >
+                Send Reset Link
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setAuthScreen("login")}
+                className="w-full py-2 text-slate-300 hover:text-white text-xs font-semibold text-center block"
+              >
+                Back to Login
+              </button>
             </form>
           )}
 
@@ -655,7 +946,7 @@ const Index = () => {
             <button
               onClick={() => setActiveTab("inventory")}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                activeTab === "inventory" ? "text-emerald-600 text-white shadow-md scale-102" : "text-emerald-100/75 hover:bg-white/5 hover:text-white"
+                activeTab === "inventory" ? "bg-emerald-600 text-white shadow-md scale-102" : "text-emerald-100/75 hover:bg-white/5 hover:text-white"
               }`}
             >
               <Package size={16} />

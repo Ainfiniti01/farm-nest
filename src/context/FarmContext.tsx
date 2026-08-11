@@ -138,6 +138,7 @@ interface FarmContextType {
   activityLogs: ActivityLog[];
   farmProfile: FarmProfile;
   session: UserSession;
+  onboardingCompleted: boolean;
   aiUsage: {
     questionsUsed: number;
     questionsLimit: number;
@@ -162,6 +163,7 @@ interface FarmContextType {
   logActivity: (type: string, description: string, actor: string, targetId?: string) => void;
   updateFarmProfile: (profile: FarmProfile) => void;
   incrementAiUsage: (type: "text" | "image") => void;
+  setOnboardingCompleted: (val: boolean) => void;
   login: (email: string, farmName: string) => boolean;
   signupAndSetup: (email: string, name: string, farmName: string, location: string) => void;
   logout: () => void;
@@ -188,8 +190,9 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [onboardingCompleted, setOnboardingCompletedState] = useState<boolean>(false);
   const [farmProfile, setFarmProfile] = useState<FarmProfile>({
-    name: "Adam",
+    name: "Adam Farms",
     description: "Pedigree multi-species family livestock and feed supply unit.",
     ownerName: "Abdulazeez Adam",
     location: "Kano, Nigeria",
@@ -209,6 +212,32 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     imageLimit: 5,
   });
 
+  // Hoist utility functions to the top of the provider body so they are immediately available
+  const saveState = (key: string, data: any) => {
+    localStorage.setItem(key, JSON.stringify(data));
+  };
+
+  const logActivity = (type: string, description: string, actor: string, targetId?: string) => {
+    const log: ActivityLog = {
+      id: "l_" + Date.now(),
+      type,
+      description,
+      date: new Date().toISOString(),
+      actor,
+      targetId,
+    };
+    setActivityLogs(prev => {
+      const next = [log, ...prev].slice(0, 50);
+      saveState("farm_logs", next);
+      return next;
+    });
+  };
+
+  const setOnboardingCompleted = (val: boolean) => {
+    setOnboardingCompletedState(val);
+    saveState("farm_onboarding_completed", val);
+  };
+
   // Load state and mock session from local storage on startup
   useEffect(() => {
     const storedAnimals = localStorage.getItem("farm_animals");
@@ -224,6 +253,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const storedProfile = localStorage.getItem("farm_profile");
     const storedAi = localStorage.getItem("farm_ai_usage");
     const storedSession = localStorage.getItem("farm_user_session");
+    const storedOnboarding = localStorage.getItem("farm_onboarding_completed");
 
     if (storedAnimals) setAnimals(JSON.parse(storedAnimals));
     if (storedHealth) setHealthRecords(JSON.parse(storedHealth));
@@ -238,16 +268,13 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (storedProfile) setFarmProfile(JSON.parse(storedProfile));
     if (storedAi) setAiUsage(JSON.parse(storedAi));
     if (storedSession) setSession(JSON.parse(storedSession));
+    if (storedOnboarding) setOnboardingCompletedState(JSON.parse(storedOnboarding));
 
     // Seed defaults if totally brand new
     if (!storedAnimals) {
       seedSampleData();
     }
   }, []);
-
-  const saveState = (key: string, data: any) => {
-    localStorage.setItem(key, JSON.stringify(data));
-  };
 
   const seedSampleData = () => {
     const initialAnimals: Animal[] = [
@@ -500,8 +527,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const login = (email: string, farmName: string): boolean => {
-    // For local mockup/personal farm use, easily authorize standard logins
-    const currentProfile = { ...farmProfile, name: farmName || "Adam" };
+    const currentProfile = { ...farmProfile, name: farmName || "Adam Farms" };
     setFarmProfile(currentProfile);
     saveState("farm_profile", currentProfile);
 
@@ -518,7 +544,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signupAndSetup = (email: string, name: string, farmName: string, location: string) => {
     const updatedProfile: FarmProfile = {
-      name: farmName || "Adam",
+      name: farmName || "Adam Farms",
       description: `Premium agricultural production unit managed by ${name}.`,
       ownerName: name || "Y",
       location: location || "Kano, Nigeria",
@@ -535,7 +561,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setSession(userSession);
     saveState("farm_user_session", userSession);
 
-    // Re-seed to match newly created custom configurations
     seedSampleData();
     showSuccess(`Farm setup complete! Welcome to ${farmName}!`);
   };
@@ -788,18 +813,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     saveState("farm_reminders", updated);
   };
 
-  const incrementAiUsage = (type: "text" | "image") => {
-    setAiUsage(prev => {
-      const next = { ...prev };
-      if (type === "text") {
-        next.questionsUsed = Math.min(next.questionsLimit, next.questionsUsed + 1);
-      } else {
-        next.imageUsed = Math.min(next.imageLimit, next.imageUsed + 1);
-      }
-      saveState("farm_ai_usage", next);
-      return next;
-    });
-  };
 
   return (
     <FarmContext.Provider
@@ -816,6 +829,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         activityLogs,
         farmProfile,
         session,
+        onboardingCompleted,
         aiUsage,
         addAnimal,
         updateAnimal,
@@ -835,6 +849,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         logActivity,
         updateFarmProfile,
         incrementAiUsage,
+        setOnboardingCompleted,
         login,
         signupAndSetup,
         logout,
