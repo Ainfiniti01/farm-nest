@@ -14,7 +14,8 @@ import {
   X,
   Edit,
   Trash2,
-  ArrowRight
+  ArrowRight,
+  Loader2
 } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 
@@ -58,6 +59,11 @@ export const Dashboard: React.FC = () => {
   const [isEditingFarmNote, setIsEditingFarmNote] = useState(false);
   const [noteTitle, setNoteTitle] = useState("");
   const [noteContent, setNoteContent] = useState("");
+
+  // Loading States for Farm Note actions
+  const [isSubmittingNote, setIsSubmittingNote] = useState(false);
+  const [isSavingNoteEdit, setIsSavingNoteEdit] = useState(false);
+  const [isDeletingNote, setIsDeletingNote] = useState(false);
 
   // Fallback priority logic
   const farmHeaderImage = farmProfile.image || "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=1200&auto=format&fit=crop&q=80";
@@ -126,13 +132,22 @@ export const Dashboard: React.FC = () => {
       showError("Note content is required.");
       return;
     }
-    await addFarmNote({
-      title: noteTitle.trim() || undefined,
-      content: noteContent.trim(),
-    });
-    setShowAddFarmNote(false);
-    setNoteTitle("");
-    setNoteContent("");
+
+    setIsSubmittingNote(true);
+    try {
+      const success = await addFarmNote({
+        title: noteTitle.trim() || undefined,
+        content: noteContent.trim(),
+      });
+
+      if (success) {
+        setShowAddFarmNote(false);
+        setNoteTitle("");
+        setNoteContent("");
+      }
+    } finally {
+      setIsSubmittingNote(false);
+    }
   };
 
   const handleSelectNote = (note: FarmNote) => {
@@ -145,12 +160,23 @@ export const Dashboard: React.FC = () => {
   const handleUpdateFarmNote = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedFarmNote || !noteContent.trim()) return;
-    await updateFarmNote(selectedFarmNote.id, {
-      title: noteTitle.trim() || undefined,
-      content: noteContent.trim(),
-    });
-    setSelectedFarmNote(prev => prev ? { ...prev, title: noteTitle.trim() || undefined, content: noteContent.trim() } : null);
-    setIsEditingFarmNote(false);
+
+    setIsSavingNoteEdit(true);
+    try {
+      const success = await updateFarmNote(selectedFarmNote.id, {
+        title: noteTitle.trim() || undefined,
+        content: noteContent.trim(),
+      });
+
+      if (success) {
+        setSelectedFarmNote(null);
+        setIsEditingFarmNote(false);
+        setNoteTitle("");
+        setNoteContent("");
+      }
+    } finally {
+      setIsSavingNoteEdit(false);
+    }
   };
 
   const handleDeleteFarmNote = (noteId: string) => {
@@ -158,9 +184,16 @@ export const Dashboard: React.FC = () => {
       title: "Delete this note?",
       message: "This action cannot be undone.",
       onConfirm: async () => {
-        await deleteFarmNote(noteId);
-        setPendingConfirm(null);
-        setSelectedFarmNote(null);
+        setIsDeletingNote(true);
+        try {
+          const success = await deleteFarmNote(noteId);
+          if (success) {
+            setPendingConfirm(null);
+            setSelectedFarmNote(null);
+          }
+        } finally {
+          setIsDeletingNote(false);
+        }
       }
     });
   };
@@ -514,7 +547,14 @@ export const Dashboard: React.FC = () => {
           >
             <div className="flex items-center justify-between border-b pb-2">
               <h3 className="font-extrabold text-sm text-slate-900">Add Farm Note</h3>
-              <button type="button" onClick={() => setShowAddFarmNote(false)} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
+              <button 
+                type="button" 
+                onClick={() => !isSubmittingNote && setShowAddFarmNote(false)} 
+                disabled={isSubmittingNote}
+                className="text-slate-400 hover:text-slate-600 disabled:opacity-50"
+              >
+                <X size={16} />
+              </button>
             </div>
 
             <div>
@@ -526,7 +566,8 @@ export const Dashboard: React.FC = () => {
                 placeholder="e.g. Changed feeding schedule"
                 value={noteTitle}
                 onChange={(e) => setNoteTitle(e.target.value)}
-                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none focus:ring-1 focus:ring-emerald-500"
+                disabled={isSubmittingNote}
+                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-60"
               />
             </div>
 
@@ -538,8 +579,9 @@ export const Dashboard: React.FC = () => {
                 placeholder="Describe general farm activities or decisions..."
                 value={noteContent}
                 onChange={(e) => setNoteContent(e.target.value)}
+                disabled={isSubmittingNote}
                 rows={4}
-                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none focus:ring-1 focus:ring-emerald-500"
+                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-60"
                 required
               />
             </div>
@@ -548,15 +590,24 @@ export const Dashboard: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowAddFarmNote(false)}
-                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition"
+                disabled={isSubmittingNote}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow transition"
+                disabled={isSubmittingNote}
+                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow transition disabled:opacity-60 flex items-center justify-center gap-1.5"
               >
-                Save Note
+                {isSubmittingNote ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  "Save Note"
+                )}
               </button>
             </div>
           </form>
@@ -571,7 +622,14 @@ export const Dashboard: React.FC = () => {
               <h3 className="font-extrabold text-sm text-slate-900">
                 {isEditingFarmNote ? "Edit Farm Note" : "Farm Note"}
               </h3>
-              <button type="button" onClick={() => setSelectedFarmNote(null)} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
+              <button 
+                type="button" 
+                onClick={() => !isSavingNoteEdit && setSelectedFarmNote(null)} 
+                disabled={isSavingNoteEdit}
+                className="text-slate-400 hover:text-slate-600 disabled:opacity-50"
+              >
+                <X size={16} />
+              </button>
             </div>
 
             {!isEditingFarmNote ? (
@@ -613,7 +671,8 @@ export const Dashboard: React.FC = () => {
                     type="text"
                     value={noteTitle}
                     onChange={(e) => setNoteTitle(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none focus:ring-1 focus:ring-emerald-500"
+                    disabled={isSavingNoteEdit}
+                    className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-60"
                   />
                 </div>
                 <div>
@@ -621,8 +680,9 @@ export const Dashboard: React.FC = () => {
                   <textarea
                     value={noteContent}
                     onChange={(e) => setNoteContent(e.target.value)}
+                    disabled={isSavingNoteEdit}
                     rows={4}
-                    className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none focus:ring-1 focus:ring-emerald-500"
+                    className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-60"
                     required
                   />
                 </div>
@@ -630,15 +690,24 @@ export const Dashboard: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setIsEditingFarmNote(false)}
-                    className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition"
+                    disabled={isSavingNoteEdit}
+                    className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition disabled:opacity-50"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow transition"
+                    disabled={isSavingNoteEdit}
+                    className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow transition disabled:opacity-60 flex items-center justify-center gap-1.5"
                   >
-                    Save Changes
+                    {isSavingNoteEdit ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin" />
+                        <span>Saving...</span>
+                      </>
+                    ) : (
+                      "Save Changes"
+                    )}
                   </button>
                 </div>
               </form>
@@ -660,16 +729,25 @@ export const Dashboard: React.FC = () => {
             <p className="text-xs text-slate-500 leading-relaxed">{pendingConfirm.message}</p>
             <div className="pt-2 flex gap-2">
               <button
-                onClick={() => setPendingConfirm(null)}
-                className="flex-1 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold transition border"
+                onClick={() => !isDeletingNote && setPendingConfirm(null)}
+                disabled={isDeletingNote}
+                className="flex-1 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold transition border disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={pendingConfirm.onConfirm}
-                className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold transition shadow"
+                disabled={isDeletingNote}
+                className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold transition shadow disabled:opacity-60 flex items-center justify-center gap-1.5"
               >
-                Confirm Act
+                {isDeletingNote ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  "Confirm Act"
+                )}
               </button>
             </div>
           </div>

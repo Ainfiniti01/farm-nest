@@ -185,12 +185,12 @@ interface FarmContextType {
   deleteContact: (id: string) => Promise<void>;
   addReminder: (reminder: Omit<Reminder, "id" | "completed">) => Promise<void>;
   toggleReminder: (id: string) => Promise<void>;
-  addFarmNote: (note: { title?: string; content: string }) => Promise<void>;
-  updateFarmNote: (id: string, updates: { title?: string; content: string }) => Promise<void>;
-  deleteFarmNote: (id: string) => Promise<void>;
-  addAnimalNote: (note: { animal_id: string; content: string }) => Promise<void>;
-  updateAnimalNote: (id: string, content: string) => Promise<void>;
-  deleteAnimalNote: (id: string) => Promise<void>;
+  addFarmNote: (note: { title?: string; content: string }) => Promise<boolean>;
+  updateFarmNote: (id: string, updates: { title?: string; content: string }) => Promise<boolean>;
+  deleteFarmNote: (id: string) => Promise<boolean>;
+  addAnimalNote: (note: { animal_id: string; content: string }) => Promise<boolean>;
+  updateAnimalNote: (id: string, content: string) => Promise<boolean>;
+  deleteAnimalNote: (id: string) => Promise<boolean>;
   logActivity: (type: string, description: string, actor: string, targetId?: string) => Promise<void>;
   updateFarmProfile: (profile: FarmProfile) => Promise<void>;
   incrementAiUsage: (type: "text" | "image") => void;
@@ -1054,8 +1054,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await logActivity("Reminder Completed", `Completed task: ${target.title}`, farmProfile.ownerName, target.animal_id);
   };
 
-  // FARM NOTES ACTIONS
-  const addFarmNote = async (note: { title?: string; content: string }) => {
+  // FARM NOTES ACTIONS (Return boolean success indicator)
+  const addFarmNote = async (note: { title?: string; content: string }): Promise<boolean> => {
     const newId = "fn_" + Date.now();
     const newRecord: FarmNote = {
       id: newId,
@@ -1066,8 +1066,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       updated_at: new Date().toISOString()
     };
 
-    setFarmNotes(prev => [newRecord, ...prev]);
-
     try {
       const { error } = await supabase.from("farm_notes").insert([{
         id: newRecord.id,
@@ -1076,61 +1074,70 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         created_by: newRecord.created_by,
         user_id: session.userId || null
       }]);
-      if (error) {
-        console.warn("[FarmContext] farm_notes table insert warn", error);
-      }
-    } catch (e) {
-      console.warn("[FarmContext] farm_notes table write exception", e);
-    }
 
-    await reloadFarmData();
-    await logActivity("Farm Note Added", `Added farm note: "${(note.title || note.content).slice(0, 35)}..."`, farmProfile.ownerName);
-    showSuccess("Farm note recorded!");
+      if (error) {
+        showError("Couldn't save note: " + error.message);
+        return false;
+      }
+
+      setFarmNotes(prev => [newRecord, ...prev]);
+      await logActivity("Farm Note Added", `Added farm note: "${(note.title || note.content).slice(0, 35)}..."`, farmProfile.ownerName);
+      showSuccess("Farm note saved");
+      return true;
+    } catch (e: any) {
+      showError("Couldn't save note: " + (e?.message || "Unknown error"));
+      return false;
+    }
   };
 
-  const updateFarmNote = async (id: string, updates: { title?: string; content: string }) => {
+  const updateFarmNote = async (id: string, updates: { title?: string; content: string }): Promise<boolean> => {
     const payload = {
       title: updates.title?.trim() || null,
       content: updates.content.trim(),
       updated_at: new Date().toISOString()
     };
 
-    setFarmNotes(prev => prev.map(fn => fn.id === id ? { ...fn, title: updates.title, content: updates.content, updated_at: payload.updated_at } : fn));
-
     try {
       const { error } = await supabase.from("farm_notes").update(payload).eq("id", id);
-      if (error) {
-        console.warn("[FarmContext] farm_notes table update warn", error);
-      }
-    } catch (e) {
-      console.warn("[FarmContext] farm_notes table update exception", e);
-    }
 
-    await reloadFarmData();
-    await logActivity("Farm Note Updated", `Edited farm note "${(updates.title || updates.content).slice(0, 30)}..."`, farmProfile.ownerName);
-    showSuccess("Farm note updated!");
+      if (error) {
+        showError("Couldn't update note: " + error.message);
+        return false;
+      }
+
+      setFarmNotes(prev => prev.map(fn => fn.id === id ? { ...fn, title: updates.title, content: updates.content, updated_at: payload.updated_at } : fn));
+      await logActivity("Farm Note Updated", `Edited farm note "${(updates.title || updates.content).slice(0, 30)}..."`, farmProfile.ownerName);
+      showSuccess("Farm note updated");
+      return true;
+    } catch (e: any) {
+      showError("Couldn't update note: " + (e?.message || "Unknown error"));
+      return false;
+    }
   };
 
-  const deleteFarmNote = async (id: string) => {
+  const deleteFarmNote = async (id: string): Promise<boolean> => {
     const target = farmNotes.find(f => f.id === id);
-    setFarmNotes(prev => prev.filter(f => f.id !== id));
 
     try {
       const { error } = await supabase.from("farm_notes").delete().eq("id", id);
-      if (error) {
-        console.warn("[FarmContext] farm_notes delete warn", error);
-      }
-    } catch (e) {
-      console.warn("[FarmContext] farm_notes delete exception", e);
-    }
 
-    await reloadFarmData();
-    await logActivity("Farm Note Deleted", `Deleted farm note: "${(target?.title || target?.content || '').slice(0, 30)}"`, farmProfile.ownerName);
-    showSuccess("Farm note deleted!");
+      if (error) {
+        showError("Couldn't delete note: " + error.message);
+        return false;
+      }
+
+      setFarmNotes(prev => prev.filter(f => f.id !== id));
+      await logActivity("Farm Note Deleted", `Deleted farm note: "${(target?.title || target?.content || '').slice(0, 30)}"`, farmProfile.ownerName);
+      showSuccess("Farm note deleted");
+      return true;
+    } catch (e: any) {
+      showError("Couldn't delete note: " + (e?.message || "Unknown error"));
+      return false;
+    }
   };
 
-  // ANIMAL NOTES ACTIONS
-  const addAnimalNote = async (note: { animal_id: string; content: string }) => {
+  // ANIMAL NOTES ACTIONS (Return boolean success indicator)
+  const addAnimalNote = async (note: { animal_id: string; content: string }): Promise<boolean> => {
     const newId = "an_" + Date.now();
     const newRecord: AnimalNote = {
       id: newId,
@@ -1141,8 +1148,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       updated_at: new Date().toISOString()
     };
 
-    setAnimalNotes(prev => [newRecord, ...prev]);
-
     try {
       const { error } = await supabase.from("animal_notes").insert([{
         id: newRecord.id,
@@ -1151,57 +1156,66 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         created_by: newRecord.created_by,
         user_id: session.userId || null
       }]);
-      if (error) {
-        console.warn("[FarmContext] animal_notes table insert warn", error);
-      }
-    } catch (e) {
-      console.warn("[FarmContext] animal_notes table write exception", e);
-    }
 
-    await reloadFarmData();
-    const animalObj = animals.find(a => a.id === note.animal_id);
-    await logActivity("Animal Note Added", `Logged note for ${animalObj?.animal_code || 'livestock'}: "${note.content.slice(0, 30)}..."`, farmProfile.ownerName, note.animal_id);
-    showSuccess("Animal note recorded!");
+      if (error) {
+        showError("Couldn't save note: " + error.message);
+        return false;
+      }
+
+      setAnimalNotes(prev => [newRecord, ...prev]);
+      const animalObj = animals.find(a => a.id === note.animal_id);
+      await logActivity("Animal Note Added", `Logged note for ${animalObj?.animal_code || 'livestock'}: "${note.content.slice(0, 30)}..."`, farmProfile.ownerName, note.animal_id);
+      showSuccess("Animal note saved");
+      return true;
+    } catch (e: any) {
+      showError("Couldn't save note: " + (e?.message || "Unknown error"));
+      return false;
+    }
   };
 
-  const updateAnimalNote = async (id: string, content: string) => {
+  const updateAnimalNote = async (id: string, content: string): Promise<boolean> => {
     const payload = {
       content: content.trim(),
       updated_at: new Date().toISOString()
     };
 
-    setAnimalNotes(prev => prev.map(an => an.id === id ? { ...an, content: content.trim(), updated_at: payload.updated_at } : an));
-
     try {
       const { error } = await supabase.from("animal_notes").update(payload).eq("id", id);
-      if (error) {
-        console.warn("[FarmContext] animal_notes table update warn", error);
-      }
-    } catch (e) {
-      console.warn("[FarmContext] animal_notes table update exception", e);
-    }
 
-    await reloadFarmData();
-    await logActivity("Animal Note Updated", `Edited animal note: "${content.slice(0, 30)}..."`, farmProfile.ownerName);
-    showSuccess("Animal note updated!");
+      if (error) {
+        showError("Couldn't update note: " + error.message);
+        return false;
+      }
+
+      setAnimalNotes(prev => prev.map(an => an.id === id ? { ...an, content: content.trim(), updated_at: payload.updated_at } : an));
+      await logActivity("Animal Note Updated", `Edited animal note: "${content.slice(0, 30)}..."`, farmProfile.ownerName);
+      showSuccess("Animal note updated");
+      return true;
+    } catch (e: any) {
+      showError("Couldn't update note: " + (e?.message || "Unknown error"));
+      return false;
+    }
   };
 
-  const deleteAnimalNote = async (id: string) => {
+  const deleteAnimalNote = async (id: string): Promise<boolean> => {
     const target = animalNotes.find(a => a.id === id);
-    setAnimalNotes(prev => prev.filter(a => a.id !== id));
 
     try {
       const { error } = await supabase.from("animal_notes").delete().eq("id", id);
-      if (error) {
-        console.warn("[FarmContext] animal_notes delete warn", error);
-      }
-    } catch (e) {
-      console.warn("[FarmContext] animal_notes delete exception", e);
-    }
 
-    await reloadFarmData();
-    await logActivity("Animal Note Deleted", `Deleted animal note`, farmProfile.ownerName, target?.animal_id);
-    showSuccess("Animal note deleted!");
+      if (error) {
+        showError("Couldn't delete note: " + error.message);
+        return false;
+      }
+
+      setAnimalNotes(prev => prev.filter(a => a.id !== id));
+      await logActivity("Animal Note Deleted", `Deleted animal note`, farmProfile.ownerName, target?.animal_id);
+      showSuccess("Animal note deleted");
+      return true;
+    } catch (e: any) {
+      showError("Couldn't delete note: " + (e?.message || "Unknown error"));
+      return false;
+    }
   };
 
   const updateFarmProfile = async (profile: FarmProfile) => {
