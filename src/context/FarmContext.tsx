@@ -813,6 +813,24 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     saveState("farm_reminders", updated);
   };
 
+  const updateFarmProfile = (profile: FarmProfile) => {
+    setFarmProfile(profile);
+    saveState("farm_profile", profile);
+    showSuccess("Farm profile updated");
+  };
+
+  const incrementAiUsage = (type: "text" | "image") => {
+    setAiUsage(prev => {
+      const next = { ...prev };
+      if (type === "text") {
+        next.questionsUsed = Math.min(next.questionsLimit, next.questionsUsed + 1);
+      } else {
+        next.imageUsed = Math.min(next.imageLimit, next.imageUsed + 1);
+      }
+      saveState("farm_ai_usage", next);
+      return next;
+    });
+  };
 
   return (
     <FarmContext.Provider
