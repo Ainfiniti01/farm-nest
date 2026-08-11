@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useFarm, Animal, HealthRecord, Treatment, InventoryItem, Contact, Reminder } from "@/context/FarmContext";
 import { ReportDownloader } from "@/components/ReportDownloader";
 import { 
@@ -83,10 +84,12 @@ const Index = () => {
     setOnboardingCompleted
   } = useFarm();
 
+  const navigate = useNavigate();
+
   // Bottom Navigation tab: 'dashboard' | 'animals' | 'ai' | 'inventory' | 'settings'
   const [activeTab, setActiveTab] = useState<"dashboard" | "animals" | "ai" | "inventory" | "settings">("dashboard");
 
-  // Selected animal detail modal/drawer
+  // Selected animal detail modal/drawer (Now managed by dedicated full pages)
   const [selectedAnimal, setSelectedAnimal] = useState<Animal | null>(null);
 
   // Onboarding Active Screen: 0 | 1 | 2 | 3
@@ -525,7 +528,7 @@ const Index = () => {
             </p>
 
             <button
-              onClick={() => setNewAnimal(p => p), setOnboardingIndex(1)}
+              onClick={() => setOnboardingIndex(1)}
               className="px-8 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-xs rounded-xl shadow-lg transition"
             >
               Get Started
@@ -1017,15 +1020,17 @@ const Index = () => {
       {/* MAIN CONTENT AREA */}
       <main className="flex-1 p-4 md:p-8 overflow-y-auto max-w-5xl mx-auto w-full pb-28 md:pb-8">
 
-        {/* Welcome Banner */}
-        <div className="mb-6 p-6 bg-gradient-to-r from-emerald-800 to-emerald-700 text-white rounded-3xl relative overflow-hidden shadow-md">
-          <div className="absolute right-0 top-0 w-36 h-36 bg-emerald-600/20 rounded-full blur-2xl" />
-          <span className="text-xs font-black uppercase tracking-wider text-emerald-200">Session Activated</span>
-          <h2 className="text-xl md:text-2xl font-black mt-1">Welcome back to {farmProfile.name} 👋</h2>
-          <p className="text-emerald-100 text-xs mt-1 max-w-md">
-            Active operator session is signed into database. Photograph studs, trace mother lineages, and review veterinary logs securely.
-          </p>
-        </div>
+        {/* Welcome Banner - RESTRICTED strictly to the dashboard tab view */}
+        {activeTab === "dashboard" && (
+          <div className="mb-6 p-6 bg-gradient-to-r from-emerald-800 to-emerald-700 text-white rounded-3xl relative overflow-hidden shadow-md">
+            <div className="absolute right-0 top-0 w-36 h-36 bg-emerald-600/20 rounded-full blur-2xl" />
+            <span className="text-xs font-black uppercase tracking-wider text-emerald-200">Session Activated</span>
+            <h2 className="text-xl md:text-2xl font-black mt-1">Welcome back to {farmProfile.name} 👋</h2>
+            <p className="text-emerald-100 text-xs mt-1 max-w-md">
+              Active operator session is signed into database. Photograph studs, trace mother lineages, and review veterinary logs securely.
+            </p>
+          </div>
+        )}
 
         {/* TAB 1: DASHBOARD */}
         {activeTab === "dashboard" && (
@@ -1327,14 +1332,14 @@ const Index = () => {
               ))}
             </div>
 
-            {/* Animals Grid List (Scales up to 4 columns on large desktop screens!) */}
+            {/* Animals Grid List (Navigates directly to full animal profile page route!) */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-2">
               {filteredAnimals.map((animal) => {
                 return (
                   <div
                     key={animal.id}
-                    onClick={() => setSelectedAnimal(animal)}
-                    className="bg-white rounded-2xl overflow-hidden border border-slate-100 shadow-sm hover:border-emerald-300 transition cursor-pointer flex flex-col group"
+                    onClick={() => navigate(`/animals/${animal.id}`)}
+                    className="bg-white rounded-2xl overflow-hidden border border-slate-100 shadow-sm hover:border-emerald-300 transition cursor-pointer flex flex-col group animate-in fade-in"
                   >
                     {/* Animal Photo */}
                     <div className="relative h-32 bg-slate-100">
@@ -1384,7 +1389,7 @@ const Index = () => {
           </div>
         )}
 
-        {/* TAB 3: FARM AI (COMING SOON SIMULATED ARCHITECTURE) */}
+        {/* TAB 3: FARM AI */}
         {activeTab === "ai" && (
           <div className="space-y-6">
             
@@ -1696,164 +1701,6 @@ const Index = () => {
         )}
 
       </main>
-
-      {/* ANIMAL DETAIL MODAL / DIGITAL ANIMAL ID CARD */}
-      {selectedAnimal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
-            
-            {/* Animal Hero ID Card */}
-            <div className="relative h-48 bg-slate-100 shrink-0">
-              <img
-                src={selectedAnimal.primaryPhoto}
-                alt={selectedAnimal.name}
-                className="w-full h-full object-cover"
-              />
-              <button
-                onClick={() => setSelectedAnimal(null)}
-                className="absolute top-4 right-4 w-8 h-8 bg-black/40 hover:bg-black/60 text-white rounded-full flex items-center justify-center text-lg transition"
-              >
-                ✕
-              </button>
-
-              <div className="absolute bottom-4 left-4 right-4 text-white bg-gradient-to-t from-black/80 via-black/40 to-transparent p-3 rounded-xl">
-                <span className="text-[10px] uppercase font-black tracking-widest text-emerald-300">
-                  {selectedAnimal.species} • {selectedAnimal.breed}
-                </span>
-                <h3 className="text-lg font-black leading-tight mt-0.5">
-                  {selectedAnimal.name || "Unnamed"}
-                </h3>
-                <p className="text-xs font-mono text-slate-300">{selectedAnimal.animal_code}</p>
-              </div>
-            </div>
-
-            {/* Scrollable details wrapper */}
-            <div className="p-4 overflow-y-auto space-y-4">
-              
-              {/* Dynamic Health Badge state & Weight logs */}
-              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
-                <div>
-                  <span className="text-[9px] font-black text-slate-400 uppercase block">Current Vital Status</span>
-                  <span className={`inline-flex items-center gap-1 text-xs font-black px-2.5 py-1 rounded-full mt-1 ${
-                    selectedAnimal.healthStatus === "Healthy" ? "bg-emerald-100 text-emerald-800" :
-                    selectedAnimal.healthStatus === "Under Treatment" ? "bg-purple-100 text-purple-800" : "bg-amber-100 text-amber-800"
-                  }`}>
-                    ⬤ {selectedAnimal.status}
-                  </span>
-                </div>
-
-                <div>
-                  <span className="text-[9px] font-black text-slate-400 uppercase block">Recorded Mass</span>
-                  <span className="text-xs font-black text-slate-800 block mt-1">
-                    ⚖️ {weightRecords.filter(w => w.animal_id === selectedAnimal.id).slice(-1)[0]?.weight || "N/A"} kg
-                  </span>
-                </div>
-              </div>
-
-              {/* Breeding & Offspring timeline info */}
-              <div className="space-y-2">
-                <h4 className="text-xs font-black text-slate-900 border-b pb-1">Lineage & Kin</h4>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
-                    <span className="text-[9px] text-slate-400 block">Mother (Dam)</span>
-                    <span className="font-bold text-slate-700">
-                      {selectedAnimal.parents?.motherId 
-                        ? animals.find(a => a.id === selectedAnimal.parents?.motherId)?.animal_code || "Unknown"
-                        : "Born wild / Unrecorded"}
-                    </span>
-                  </div>
-
-                  <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
-                    <span className="text-[9px] text-slate-400 block">Father (Sire)</span>
-                    <span className="font-bold text-slate-700">
-                      {selectedAnimal.parents?.fatherId 
-                        ? animals.find(a => a.id === selectedAnimal.parents?.fatherId)?.animal_code || "Unknown"
-                        : "Unrecorded"}
-                    </span>
-                  </div>
-                </div>
-
-                {selectedAnimal.offspring && selectedAnimal.offspring.length > 0 && (
-                  <div className="p-2.5 bg-emerald-50/50 rounded-xl border border-emerald-100/40 text-xs">
-                    <span className="text-[9px] text-emerald-800 font-bold block">Registered Progeny ({selectedAnimal.offspring.length})</span>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {selectedAnimal.offspring.map((offId) => {
-                        const kid = animals.find(a => a.id === offId);
-                        return kid ? (
-                          <span 
-                            key={offId}
-                            onClick={() => {
-                              setSelectedAnimal(kid);
-                            }}
-                            className="bg-white border text-emerald-900 font-bold text-[10px] px-2 py-0.5 rounded cursor-pointer hover:bg-emerald-50"
-                          >
-                            🐐 {kid.animal_code} ({kid.name || "Kid"})
-                          </span>
-                        ) : null;
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Interactive Health Records & Timeline */}
-              <div className="space-y-2">
-                <h4 className="text-xs font-black text-slate-900 border-b pb-1">Medical & Observation Log</h4>
-                <div className="space-y-2 max-h-40 overflow-y-auto">
-                  {healthRecords.filter(h => h.animal_id === selectedAnimal.id).map((rec) => (
-                    <div key={rec.id} className="p-3 bg-slate-50 rounded-xl text-xs space-y-1">
-                      <div className="flex justify-between items-center">
-                        <span className="font-bold text-slate-800">{rec.type}</span>
-                        <span className="text-[9px] text-slate-400">{rec.date}</span>
-                      </div>
-                      <p className="text-slate-600">{rec.details}</p>
-                      {rec.medication && (
-                        <p className="text-[10px] text-purple-700 font-semibold bg-purple-50 p-1 rounded">Rx: {rec.medication}</p>
-                      )}
-                    </div>
-                  ))}
-                  {healthRecords.filter(h => h.animal_id === selectedAnimal.id).length === 0 && (
-                    <p className="text-xs text-slate-400 italic text-center py-4">No logged veterinary incidents. Animal exhibits standard wellness.</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Status Update & Destructive Actions */}
-              <div className="pt-2 border-t flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] text-slate-400 block mb-1">Update Status</span>
-                  <select
-                    value={selectedAnimal.status}
-                    onChange={(e) => {
-                      updateAnimal(selectedAnimal.id, { status: e.target.value as Animal["status"] });
-                      setSelectedAnimal(prev => prev ? { ...prev, status: e.target.value as Animal["status"] } : null);
-                    }}
-                    className="p-1.5 bg-slate-50 border rounded-lg text-xs"
-                  >
-                    {["Healthy", "Monitoring", "Sick", "Under Treatment", "Pregnant", "Sold", "Deceased", "Retired"].map((st) => (
-                      <option key={st} value={st}>{st}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <button
-                  onClick={() => {
-                    if (confirm(`Are you absolutely sure you want to remove ${selectedAnimal.animal_code} from database?`)) {
-                      deleteAnimal(selectedAnimal.id);
-                      setSelectedAnimal(null);
-                    }
-                  }}
-                  className="text-xs font-bold text-red-600 hover:underline flex items-center gap-1"
-                >
-                  <Trash2 size={12} />
-                  Delete Profile
-                </button>
-              </div>
-
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* DIALOG 1: REGISTER ANIMAL & PORTRAIT FILE INTAKE */}
       {showAddAnimal && (
