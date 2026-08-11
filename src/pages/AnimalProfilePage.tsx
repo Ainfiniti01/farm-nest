@@ -56,7 +56,7 @@ export const AnimalProfilePage: React.FC = () => {
 
   const animal = animals.find(a => a.id === id || a.animal_code === id);
 
-  // Modal / Confirm state machine
+  // ALL HOOK DECLARATIONS MUST BE AT THE TOP (BEFORE EARLY RETURNS)
   const [activeTab, setActiveTab] = useState<"overview" | "health" | "breeding" | "photos" | "notes" | "activity">("overview");
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAddHealth, setShowAddHealth] = useState(false);
@@ -87,24 +87,6 @@ export const AnimalProfilePage: React.FC = () => {
     notes: animal ? animal.notes : "",
     primaryPhoto: animal ? animal.primaryPhoto : "",
   });
-
-  if (!animal) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center p-6 text-center">
-        <AlertCircle size={48} className="text-amber-600 mb-2" />
-        <h2 className="text-xl font-black text-slate-900">Livestock Record Not Found</h2>
-        <p className="text-slate-500 text-xs mt-1 max-w-xs">
-          The animal profile with ID "{id}" does not exist or was deleted from the secure database records.
-        </p>
-        <button
-          onClick={() => navigate("/")}
-          className="mt-6 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow transition"
-        >
-          Return to Dashboard
-        </button>
-      </div>
-    );
-  }
 
   // Action modals states
   const [newHealth, setNewHealth] = useState({
@@ -139,13 +121,32 @@ export const AnimalProfilePage: React.FC = () => {
 
   const [newOffspring, setNewOffspring] = useState({
     name: "",
-    species: animal.species,
-    breed: animal.breed,
+    species: animal ? animal.species : "Goat",
+    breed: animal ? animal.breed : "",
     sex: "Female" as Animal["sex"],
     dob: new Date().toISOString().split("T")[0],
     notes: "",
     primaryPhoto: "",
   });
+
+  // CONDITIONAL RENDER CHECK AFTER ALL HOOKS
+  if (!animal) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center p-6 text-center">
+        <AlertCircle size={48} className="text-amber-600 mb-2" />
+        <h2 className="text-xl font-black text-slate-900">Livestock Record Not Found</h2>
+        <p className="text-slate-500 text-xs mt-1 max-w-xs">
+          The animal profile with ID "{id}" does not exist or was deleted from the secure database records.
+        </p>
+        <button
+          onClick={() => navigate("/")}
+          className="mt-6 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow transition"
+        >
+          Return to Dashboard
+        </button>
+      </div>
+    );
+  }
 
   // Handle Photo additions
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
