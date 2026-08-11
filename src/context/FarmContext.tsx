@@ -103,6 +103,25 @@ export interface Reminder {
   notes?: string;
 }
 
+export interface FarmNote {
+  id: string;
+  farm_id?: string;
+  title?: string;
+  content: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AnimalNote {
+  id: string;
+  animal_id: string;
+  content: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ActivityLog {
   id: string;
   type: string;
@@ -137,6 +156,8 @@ interface FarmContextType {
   inventoryTransactions: InventoryTransaction[];
   contacts: Contact[];
   reminders: Reminder[];
+  farmNotes: FarmNote[];
+  animalNotes: AnimalNote[];
   activityLogs: ActivityLog[];
   farmProfile: FarmProfile;
   session: UserSession;
@@ -163,6 +184,12 @@ interface FarmContextType {
   deleteContact: (id: string) => Promise<void>;
   addReminder: (reminder: Omit<Reminder, "id" | "completed">) => Promise<void>;
   toggleReminder: (id: string) => Promise<void>;
+  addFarmNote: (note: { title?: string; content: string }) => Promise<void>;
+  updateFarmNote: (id: string, updates: { title?: string; content: string }) => Promise<void>;
+  deleteFarmNote: (id: string) => Promise<void>;
+  addAnimalNote: (note: { animal_id: string; content: string }) => Promise<void>;
+  updateAnimalNote: (id: string, content: string) => Promise<void>;
+  deleteAnimalNote: (id: string) => Promise<void>;
   logActivity: (type: string, description: string, actor: string, targetId?: string) => Promise<void>;
   updateFarmProfile: (profile: FarmProfile) => Promise<void>;
   incrementAiUsage: (type: "text" | "image") => void;
@@ -187,6 +214,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [inventoryTransactions, setInventoryTransactions] = useState<InventoryTransaction[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [farmNotes, setFarmNotes] = useState<FarmNote[]>([]);
+  const [animalNotes, setAnimalNotes] = useState<AnimalNote[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [onboardingCompleted, setOnboardingCompletedState] = useState<boolean>(false);
   const [isLoadingData, setIsLoadingData] = useState<boolean>(true);
@@ -231,6 +260,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         { data: resInventory },
         { data: resContacts },
         { data: resReminders },
+        { data: resFarmNotes },
+        { data: resAnimalNotes },
         { data: resLogs }
       ] = await Promise.all([
         supabase.from("animals").select("*"),
@@ -241,6 +272,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         supabase.from("inventory").select("*"),
         supabase.from("contacts").select("*"),
         supabase.from("reminders").select("*"),
+        supabase.from("farm_notes").select("*").order("created_at", { ascending: false }),
+        supabase.from("animal_notes").select("*").order("created_at", { ascending: false }),
         supabase.from("activity_logs").select("*").order("date", { ascending: false }).limit(50)
       ]);
 
@@ -350,6 +383,29 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })));
       }
 
+      if (resFarmNotes) {
+        setFarmNotes(resFarmNotes.map((fn: any) => ({
+          id: fn.id,
+          farm_id: fn.farm_id,
+          title: fn.title,
+          content: fn.content,
+          created_by: fn.created_by,
+          created_at: fn.created_at,
+          updated_at: fn.updated_at
+        })));
+      }
+
+      if (resAnimalNotes) {
+        setAnimalNotes(resAnimalNotes.map((an: any) => ({
+          id: an.id,
+          animal_id: an.animal_id,
+          content: an.content,
+          created_by: an.created_by,
+          created_at: an.created_at,
+          updated_at: an.updated_at
+        })));
+      }
+
       if (resLogs) {
         setActivityLogs(resLogs.map((l: any) => ({
           id: l.id,
@@ -438,17 +494,28 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       target_id: targetId
     };
 
-    setActivityLogs(prev => [{
-      id: newLog.id,
-      type: newLog.type,
-      description: newLog.description,
-      date: newLog.date,
-      actor: newLog.actor,
-      targetId: newLog.target_id
-    }, ...prev].slice(0, 50));
+    setActivityLogs(prev => [
+      {
+        id: newLog.id,
+        type: newLog.type,
+        description: newLog.description,
+        date: newLog.date,
+        actor: newLog.actor,
+        targetId: newLog.target_id
+      },
+      ...prev
+    ].slice(0, 50));
 
     try {
-      await supabase.from("activity_logs").insert([newLog]);
+      await supabase.from("activity_logs").insert([{
+        id: newLog.id,
+        type: newLog.type,
+        description: newLog.description,
+        date: newLog.date,
+        actor: newLog.actor,
+        target_id: targetId,
+        user_id: session.userId || null
+      }]);
     } catch (e) {
       console.error("[FarmContext] Activity log insert error", e);
     }
@@ -565,6 +632,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setInventory([]);
     setContacts([]);
     setReminders([]);
+    setFarmNotes([]);
+    setAnimalNotes([]);
     showSuccess("Signed out successfully.");
   };
 
@@ -627,16 +696,19 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     await reloadFarmData();
+    await logActivity("Animal Updated", `Updated details for livestock record`, farmProfile.ownerName, id);
     showSuccess("Animal updated");
   };
 
   const deleteAnimal = async (id: string) => {
+    const target = animals.find(a => a.id === id);
     const { error } = await supabase.from("animals").delete().eq("id", id);
     if (error) {
       showError("Failed to delete animal: " + error.message);
       return;
     }
     await reloadFarmData();
+    await logActivity("Animal Removed", `Removed ${target?.animal_code || "livestock"} from registry`, farmProfile.ownerName, id);
     showSuccess("Animal record deleted");
   };
 
@@ -657,7 +729,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
-    // Update animal status
     let newStatus = "Healthy";
     let hStatus = "Healthy";
     if (record.type === "Diagnosis" || record.type === "Observation") {
@@ -670,6 +741,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     await supabase.from("animals").update({ status: newStatus, health_status: hStatus }).eq("id", record.animal_id);
     await reloadFarmData();
+    const animalObj = animals.find(a => a.id === record.animal_id);
+    await logActivity("Health Logged", `Logged ${record.type} for ${animalObj?.animal_code || 'animal'}: ${record.details.slice(0, 40)}`, record.recordedBy, record.animal_id);
     showSuccess("Health event recorded");
   };
 
@@ -694,6 +767,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     await supabase.from("animals").update({ status: "Under Treatment", health_status: "Under Treatment" }).eq("id", treatmentData.animal_id);
     await reloadFarmData();
+    const animalObj = animals.find(a => a.id === treatmentData.animal_id);
+    await logActivity("Treatment Started", `Started Rx (${treatmentData.medication}) for ${animalObj?.animal_code || 'animal'}`, farmProfile.ownerName, treatmentData.animal_id);
     showSuccess("Treatment started");
   };
 
@@ -704,14 +779,13 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
-    if (status === "Completed") {
-      const currentTx = treatments.find(t => t.id === id);
-      if (currentTx) {
-        await supabase.from("animals").update({ status: "Healthy", health_status: "Healthy" }).eq("id", currentTx.animal_id);
-      }
+    const currentTx = treatments.find(t => t.id === id);
+    if (status === "Completed" && currentTx) {
+      await supabase.from("animals").update({ status: "Healthy", health_status: "Healthy" }).eq("id", currentTx.animal_id);
     }
 
     await reloadFarmData();
+    await logActivity("Treatment Status", `Marked treatment for ${currentTx?.condition || 'condition'} as ${status}`, farmProfile.ownerName, currentTx?.animal_id);
     showSuccess(`Treatment status: ${status}`);
   };
 
@@ -730,6 +804,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     await reloadFarmData();
+    const animalObj = animals.find(a => a.id === record.animal_id);
+    await logActivity("Weight Logged", `Recorded ${record.weight} kg for ${animalObj?.animal_code || 'animal'}`, farmProfile.ownerName, record.animal_id);
     showSuccess("Weight logged");
   };
 
@@ -749,6 +825,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     await reloadFarmData();
+    await logActivity("Breeding Logged", `Logged mating cycle status (${record.status})`, farmProfile.ownerName, record.female_id);
     showSuccess("Breeding event logged");
   };
 
@@ -769,6 +846,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     await reloadFarmData();
+    await logActivity("Inventory Added", `Added supply item: ${item.name} (${item.quantity} ${item.unit})`, farmProfile.ownerName);
     showSuccess("Supply item added");
   };
 
@@ -793,6 +871,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     await reloadFarmData();
+    await logActivity("Stock Adjusted", `Adjusted stock for ${target.name}: now ${newQty} ${target.unit}`, recordedBy || farmProfile.ownerName);
     showSuccess("Stock quantity updated");
   };
 
@@ -814,6 +893,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     await reloadFarmData();
+    await logActivity("Contact Added", `Added ${contact.name} (${contact.role}) to contacts`, farmProfile.ownerName);
     showSuccess("Contact added");
   };
 
@@ -827,12 +907,14 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const deleteContact = async (id: string) => {
+    const target = contacts.find(c => c.id === id);
     const { error } = await supabase.from("contacts").delete().eq("id", id);
     if (error) {
       showError("Failed to delete contact: " + error.message);
       return;
     }
     await reloadFarmData();
+    await logActivity("Contact Deleted", `Removed contact ${target?.name || ''}`, farmProfile.ownerName);
     showSuccess("Contact removed");
   };
 
@@ -853,6 +935,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     await reloadFarmData();
+    await logActivity("Reminder Set", `Created calendar task: ${reminder.title}`, farmProfile.ownerName, reminder.animal_id);
     showSuccess("Reminder created");
   };
 
@@ -867,6 +950,139 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     await reloadFarmData();
+    await logActivity("Reminder Completed", `Completed task: ${target.title}`, farmProfile.ownerName, target.animal_id);
+  };
+
+  // FARM NOTES ACTIONS
+  const addFarmNote = async (note: { title?: string; content: string }) => {
+    const newId = "fn_" + Date.now();
+    const newRecord = {
+      id: newId,
+      title: note.title?.trim() || undefined,
+      content: note.content.trim(),
+      created_by: farmProfile.ownerName || "Operator",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    setFarmNotes(prev => [newRecord, ...prev]);
+
+    try {
+      await supabase.from("farm_notes").insert([{
+        id: newRecord.id,
+        title: newRecord.title,
+        content: newRecord.content,
+        created_by: newRecord.created_by,
+        user_id: session.userId || null
+      }]);
+    } catch (e) {
+      console.warn("[FarmContext] farm_notes table write fallback", e);
+    }
+
+    await reloadFarmData();
+    await logActivity("Farm Note", `Added farm note: "${(note.title || note.content).slice(0, 35)}..."`, farmProfile.ownerName);
+    showSuccess("Farm note recorded!");
+  };
+
+  const updateFarmNote = async (id: string, updates: { title?: string; content: string }) => {
+    const payload = {
+      title: updates.title?.trim() || null,
+      content: updates.content.trim(),
+      updated_at: new Date().toISOString()
+    };
+
+    setFarmNotes(prev => prev.map(fn => fn.id === id ? { ...fn, title: updates.title, content: updates.content, updated_at: payload.updated_at } : fn));
+
+    try {
+      await supabase.from("farm_notes").update(payload).eq("id", id);
+    } catch (e) {
+      console.warn("[FarmContext] farm_notes table update fallback", e);
+    }
+
+    await reloadFarmData();
+    await logActivity("Farm Note Updated", `Edited farm note "${(updates.title || updates.content).slice(0, 30)}..."`, farmProfile.ownerName);
+    showSuccess("Farm note updated!");
+  };
+
+  const deleteFarmNote = async (id: string) => {
+    const target = farmNotes.find(f => f.id === id);
+    setFarmNotes(prev => prev.filter(f => f.id !== id));
+
+    try {
+      await supabase.from("farm_notes").delete().eq("id", id);
+    } catch (e) {
+      console.warn("[FarmContext] farm_notes delete fallback", e);
+    }
+
+    await reloadFarmData();
+    await logActivity("Farm Note Deleted", `Deleted farm note: "${(target?.title || target?.content || '').slice(0, 30)}"`, farmProfile.ownerName);
+    showSuccess("Farm note deleted!");
+  };
+
+  // ANIMAL NOTES ACTIONS
+  const addAnimalNote = async (note: { animal_id: string; content: string }) => {
+    const newId = "an_" + Date.now();
+    const newRecord = {
+      id: newId,
+      animal_id: note.animal_id,
+      content: note.content.trim(),
+      created_by: farmProfile.ownerName || "Operator",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    setAnimalNotes(prev => [newRecord, ...prev]);
+
+    try {
+      await supabase.from("animal_notes").insert([{
+        id: newRecord.id,
+        animal_id: newRecord.animal_id,
+        content: newRecord.content,
+        created_by: newRecord.created_by,
+        user_id: session.userId || null
+      }]);
+    } catch (e) {
+      console.warn("[FarmContext] animal_notes table write fallback", e);
+    }
+
+    await reloadFarmData();
+    const animalObj = animals.find(a => a.id === note.animal_id);
+    await logActivity("Animal Note", `Logged note for ${animalObj?.animal_code || 'livestock'}: "${note.content.slice(0, 30)}..."`, farmProfile.ownerName, note.animal_id);
+    showSuccess("Animal note recorded!");
+  };
+
+  const updateAnimalNote = async (id: string, content: string) => {
+    const payload = {
+      content: content.trim(),
+      updated_at: new Date().toISOString()
+    };
+
+    setAnimalNotes(prev => prev.map(an => an.id === id ? { ...an, content: content.trim(), updated_at: payload.updated_at } : an));
+
+    try {
+      await supabase.from("animal_notes").update(payload).eq("id", id);
+    } catch (e) {
+      console.warn("[FarmContext] animal_notes table update fallback", e);
+    }
+
+    await reloadFarmData();
+    await logActivity("Animal Note Updated", `Edited animal note: "${content.slice(0, 30)}..."`, farmProfile.ownerName);
+    showSuccess("Animal note updated!");
+  };
+
+  const deleteAnimalNote = async (id: string) => {
+    const target = animalNotes.find(a => a.id === id);
+    setAnimalNotes(prev => prev.filter(a => a.id !== id));
+
+    try {
+      await supabase.from("animal_notes").delete().eq("id", id);
+    } catch (e) {
+      console.warn("[FarmContext] animal_notes delete fallback", e);
+    }
+
+    await reloadFarmData();
+    await logActivity("Animal Note Deleted", `Deleted animal note`, farmProfile.ownerName, target?.animal_id);
+    showSuccess("Animal note deleted!");
   };
 
   const updateFarmProfile = async (profile: FarmProfile) => {
@@ -878,6 +1094,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         location: profile.location
       }).eq("user_id", session.userId);
     }
+    await logActivity("Farm Profile Updated", `Updated farm details for ${profile.name}`, profile.ownerName);
     showSuccess("Farm profile updated");
   };
 
@@ -904,6 +1121,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         inventoryTransactions,
         contacts,
         reminders,
+        farmNotes,
+        animalNotes,
         activityLogs,
         farmProfile,
         session,
@@ -925,6 +1144,12 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         deleteContact,
         addReminder,
         toggleReminder,
+        addFarmNote,
+        updateFarmNote,
+        deleteFarmNote,
+        addAnimalNote,
+        updateAnimalNote,
+        deleteAnimalNote,
         logActivity,
         updateFarmProfile,
         incrementAiUsage,
