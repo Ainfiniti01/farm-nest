@@ -226,6 +226,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Guards against concurrent duplicate fetch streams
   const isFetchingRef = useRef<boolean>(false);
   const lastFetchedUserIdRef = useRef<string | null>(null);
+  const isLoggingOutRef = useRef<boolean>(false);
   
   const [farmProfile, setFarmProfile] = useState<FarmProfile>({
     name: "My Farm",
@@ -264,10 +265,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     lastFetchedUserIdRef.current = userId;
     setIsLoadingData(true);
 
-    const startTime = performance.now();
-
     try {
-      // Execute all 12 queries concurrently in a single HTTP batch
       const [
         acctRes,
         resAnimals,
@@ -313,7 +311,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }));
       }
 
-      // 2. Process Table Datasets
+      // 2. Process Table Datasets safely
       if (resAnimals.data) {
         setAnimals(resAnimals.data.map((a: any) => ({
           id: a.id,
@@ -420,7 +418,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })));
       }
 
-      if (resFarmNotes.data) {
+      // Handle Farm Notes gracefully if table exists or is empty
+      if (resFarmNotes.data && !resFarmNotes.error) {
         setFarmNotes(resFarmNotes.data.map((fn: any) => ({
           id: fn.id,
           farm_id: fn.farm_id,
@@ -432,7 +431,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })));
       }
 
-      if (resAnimalNotes.data) {
+      // Handle Animal Notes gracefully if table exists or is empty
+      if (resAnimalNotes.data && !resAnimalNotes.error) {
         setAnimalNotes(resAnimalNotes.data.map((an: any) => ({
           id: an.id,
           animal_id: an.animal_id,
@@ -453,9 +453,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
           targetId: l.target_id
         })));
       }
-
-      const totalTime = Math.round(performance.now() - startTime);
-      console.log(`[FarmContext] Consolidated initial load completed in ${totalTime} ms`);
 
     } catch (err) {
       console.error("[FarmContext] Data reload error from Supabase:", err);
@@ -491,7 +488,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
               name: sbSession.user.user_metadata?.name || "Operator",
               isAuthenticated: true
             });
-            // Unblock Auth Guard immediately so application routes render in < 20ms
             setIsAuthReady(true);
             loadUserProfileAndData(sbSession.user.id, sbSession.user.user_metadata);
           } else {
@@ -707,21 +703,31 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return false;
   };
 
+  // Safe local sign-out to prevent 403 Forbidden loops on global auth logout
   const logout = async () => {
-    await supabase.auth.signOut();
-    lastFetchedUserIdRef.current = null;
-    setSession({ userId: undefined, email: "", name: "", isAuthenticated: false });
-    setAnimals([]);
-    setHealthRecords([]);
-    setTreatments([]);
-    setWeightRecords([]);
-    setBreedingRecords([]);
-    setInventory([]);
-    setContacts([]);
-    setReminders([]);
-    setFarmNotes([]);
-    setAnimalNotes([]);
-    showSuccess("Signed out successfully.");
+    if (isLoggingOutRef.current) return;
+    isLoggingOutRef.current = true;
+
+    try {
+      await supabase.auth.signOut({ scope: "local" });
+    } catch (e) {
+      console.warn("[FarmContext] Local signout warning", e);
+    } finally {
+      isLoggingOutRef.current = false;
+      lastFetchedUserIdRef.current = null;
+      setSession({ userId: undefined, email: "", name: "", isAuthenticated: false });
+      setAnimals([]);
+      setHealthRecords([]);
+      setTreatments([]);
+      setWeightRecords([]);
+      setBreedingRecords([]);
+      setInventory([]);
+      setContacts([]);
+      setReminders([]);
+      setFarmNotes([]);
+      setAnimalNotes([]);
+      showSuccess("Signed out successfully.");
+    }
   };
 
   const addAnimal = async (animalData: Omit<Animal, "id" | "animal_code" | "created_at">) => {
