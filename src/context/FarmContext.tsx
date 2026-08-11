@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { showSuccess, showError } from "@/utils/toast";
+import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 
 export interface Animal {
   id: string;
@@ -212,12 +213,11 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     imageLimit: 5,
   });
 
-  // Hoist utility functions to the top of the provider body so they are immediately available
   const saveState = (key: string, data: any) => {
     localStorage.setItem(key, JSON.stringify(data));
   };
 
-  const logActivity = (type: string, description: string, actor: string, targetId?: string) => {
+  const logActivity = async (type: string, description: string, actor: string, targetId?: string) => {
     const log: ActivityLog = {
       id: "l_" + Date.now(),
       type,
@@ -231,6 +231,17 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       saveState("farm_logs", next);
       return next;
     });
+
+    if (isSupabaseConfigured()) {
+      await supabase.from("activity_logs").insert([{
+        id: log.id,
+        type: log.type,
+        description: log.description,
+        date: log.date,
+        actor: log.actor,
+        target_id: log.targetId
+      }]);
+    }
   };
 
   const setOnboardingCompleted = (val: boolean) => {
@@ -238,42 +249,192 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     saveState("farm_onboarding_completed", val);
   };
 
-  // Load state and mock session from local storage on startup
+  // Load and sync state on initial load
   useEffect(() => {
-    const storedAnimals = localStorage.getItem("farm_animals");
-    const storedHealth = localStorage.getItem("farm_health");
-    const storedTreatments = localStorage.getItem("farm_treatments");
-    const storedWeight = localStorage.getItem("farm_weights");
-    const storedBreeding = localStorage.getItem("farm_breeding");
-    const storedInventory = localStorage.getItem("farm_inventory");
-    const storedInvTx = localStorage.getItem("farm_inventory_tx");
-    const storedContacts = localStorage.getItem("farm_contacts");
-    const storedReminders = localStorage.getItem("farm_reminders");
-    const storedLogs = localStorage.getItem("farm_logs");
-    const storedProfile = localStorage.getItem("farm_profile");
-    const storedAi = localStorage.getItem("farm_ai_usage");
-    const storedSession = localStorage.getItem("farm_user_session");
-    const storedOnboarding = localStorage.getItem("farm_onboarding_completed");
+    const loadState = async () => {
+      // Load local cache as instant fallback
+      const storedAnimals = localStorage.getItem("farm_animals");
+      const storedHealth = localStorage.getItem("farm_health");
+      const storedTreatments = localStorage.getItem("farm_treatments");
+      const storedWeight = localStorage.getItem("farm_weights");
+      const storedBreeding = localStorage.getItem("farm_breeding");
+      const storedInventory = localStorage.getItem("farm_inventory");
+      const storedInvTx = localStorage.getItem("farm_inventory_tx");
+      const storedContacts = localStorage.getItem("farm_contacts");
+      const storedReminders = localStorage.getItem("farm_reminders");
+      const storedLogs = localStorage.getItem("farm_logs");
+      const storedProfile = localStorage.getItem("farm_profile");
+      const storedSession = localStorage.getItem("farm_user_session");
+      const storedOnboarding = localStorage.getItem("farm_onboarding_completed");
 
-    if (storedAnimals) setAnimals(JSON.parse(storedAnimals));
-    if (storedHealth) setHealthRecords(JSON.parse(storedHealth));
-    if (storedTreatments) setTreatments(JSON.parse(storedTreatments));
-    if (storedWeight) setWeightRecords(JSON.parse(storedWeight));
-    if (storedBreeding) setBreedingRecords(JSON.parse(storedBreeding));
-    if (storedInventory) setInventory(JSON.parse(storedInventory));
-    if (storedInvTx) setInventoryTransactions(JSON.parse(storedInvTx));
-    if (storedContacts) setContacts(JSON.parse(storedContacts));
-    if (storedReminders) setReminders(JSON.parse(storedReminders));
-    if (storedLogs) setActivityLogs(JSON.parse(storedLogs));
-    if (storedProfile) setFarmProfile(JSON.parse(storedProfile));
-    if (storedAi) setAiUsage(JSON.parse(storedAi));
-    if (storedSession) setSession(JSON.parse(storedSession));
-    if (storedOnboarding) setOnboardingCompletedState(JSON.parse(storedOnboarding));
+      if (storedAnimals) setAnimals(JSON.parse(storedAnimals));
+      if (storedHealth) setHealthRecords(JSON.parse(storedHealth));
+      if (storedTreatments) setTreatments(JSON.parse(storedTreatments));
+      if (storedWeight) setWeightRecords(JSON.parse(storedWeight));
+      if (storedBreeding) setBreedingRecords(JSON.parse(storedBreeding));
+      if (storedInventory) setInventory(JSON.parse(storedInventory));
+      if (storedInvTx) setInventoryTransactions(JSON.parse(storedInvTx));
+      if (storedContacts) setContacts(JSON.parse(storedContacts));
+      if (storedReminders) setReminders(JSON.parse(storedReminders));
+      if (storedLogs) setActivityLogs(JSON.parse(storedLogs));
+      if (storedProfile) setFarmProfile(JSON.parse(storedProfile));
+      if (storedSession) setSession(JSON.parse(storedSession));
+      if (storedOnboarding) setOnboardingCompletedState(JSON.parse(storedOnboarding));
 
-    // Seed defaults if totally brand new
-    if (!storedAnimals) {
-      seedSampleData();
-    }
+      // Attempt to load from Live Supabase if configured
+      if (isSupabaseConfigured()) {
+        try {
+          const [
+            { data: resAnimals },
+            { data: resHealth },
+            { data: resTreatments },
+            { data: resWeights },
+            { data: resBreeding },
+            { data: resInventory },
+            { data: resContacts },
+            { data: resReminders }
+          ] = await Promise.all([
+            supabase.from("animals").select("*"),
+            supabase.from("health_records").select("*"),
+            supabase.from("treatments").select("*"),
+            supabase.from("weight_records").select("*"),
+            supabase.from("breeding_records").select("*"),
+            supabase.from("inventory").select("*"),
+            supabase.from("contacts").select("*"),
+            supabase.from("reminders").select("*")
+          ]);
+
+          if (resAnimals) {
+            const mapped = resAnimals.map((a: any) => ({
+              id: a.id,
+              animal_code: a.animal_code,
+              name: a.name,
+              species: a.species,
+              breed: a.breed,
+              sex: a.sex,
+              dob: a.dob,
+              purchaseDate: a.purchase_date,
+              source: a.source,
+              status: a.status,
+              healthStatus: a.health_status,
+              primaryPhoto: a.primary_photo,
+              photos: a.photos || [],
+              notes: a.notes,
+              parents: { motherId: a.mother_id, fatherId: a.father_id },
+              created_at: a.created_at
+            }));
+            setAnimals(mapped);
+            saveState("farm_animals", mapped);
+          }
+
+          if (resHealth) {
+            const mapped = resHealth.map((h: any) => ({
+              id: h.id,
+              animal_id: h.animal_id,
+              type: h.type,
+              date: h.date,
+              details: h.details,
+              medication: h.medication,
+              recordedBy: h.recorded_by
+            }));
+            setHealthRecords(mapped);
+            saveState("farm_health", mapped);
+          }
+
+          if (resTreatments) {
+            const mapped = resTreatments.map((t: any) => ({
+              id: t.id,
+              animal_id: t.animal_id,
+              condition: t.condition,
+              medication: t.medication,
+              startDate: t.start_date,
+              endDate: t.end_date,
+              status: t.status,
+              notes: t.notes,
+              followUpDate: t.follow_up_date
+            }));
+            setTreatments(mapped);
+            saveState("farm_treatments", mapped);
+          }
+
+          if (resWeights) {
+            const mapped = resWeights.map((w: any) => ({
+              id: w.id,
+              animal_id: w.animal_id,
+              weight: parseFloat(w.weight),
+              date: w.date,
+              notes: w.notes
+            }));
+            setWeightRecords(mapped);
+            saveState("farm_weights", mapped);
+          }
+
+          if (resBreeding) {
+            const mapped = resBreeding.map((b: any) => ({
+              id: b.id,
+              female_id: b.female_id,
+              male_id: b.male_id,
+              date: b.date,
+              status: b.status,
+              notes: b.notes
+            }));
+            setBreedingRecords(mapped);
+            saveState("farm_breeding", mapped);
+          }
+
+          if (resInventory) {
+            const mapped = resInventory.map((i: any) => ({
+              id: i.id,
+              name: i.name,
+              category: i.category,
+              quantity: parseFloat(i.quantity),
+              unit: i.unit,
+              minStock: parseFloat(i.min_stock),
+              expiryDate: i.expiry_date,
+              notes: i.notes
+            }));
+            setInventory(mapped);
+            saveState("farm_inventory", mapped);
+          }
+
+          if (resContacts) {
+            const mapped = resContacts.map((c: any) => ({
+              id: c.id,
+              name: c.name,
+              role: c.role,
+              phone: c.phone,
+              whatsapp: c.whatsapp,
+              email: c.email,
+              address: c.address,
+              notes: c.notes
+            }));
+            setContacts(mapped);
+            saveState("farm_contacts", mapped);
+          }
+
+          if (resReminders) {
+            const mapped = resReminders.map((r: any) => ({
+              id: r.id,
+              title: r.title,
+              type: r.type,
+              dueDate: r.due_date,
+              animal_id: r.animal_id,
+              completed: r.completed,
+              notes: r.notes
+            }));
+            setReminders(mapped);
+            saveState("farm_reminders", mapped);
+          }
+
+        } catch (err) {
+          console.error("Supabase load error, using local fallback state", err);
+        }
+      } else if (!storedAnimals) {
+        seedSampleData();
+      }
+    };
+
+    loadState();
   }, []);
 
   const seedSampleData = () => {
@@ -328,92 +489,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         photos: [MOCK_IMAGES.goat2],
         notes: "Monitoring response to antiseptic hoof sprays daily.",
         created_at: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
-      },
-      {
-        id: "a4",
-        animal_code: "GOAT-0026",
-        name: "Toto",
-        species: "Goat",
-        breed: "West African Dwarf Cross",
-        sex: "Male",
-        dob: "2025-01-10",
-        source: "Born on farm",
-        status: "Healthy",
-        healthStatus: "Healthy",
-        primaryPhoto: "https://images.unsplash.com/photo-1533048324814-79b0a3173db9?w=500&auto=format&fit=crop&q=80",
-        photos: ["https://images.unsplash.com/photo-1533048324814-79b0a3173db9?w=500&auto=format&fit=crop&q=80"],
-        parents: { motherId: "a1", fatherId: "a2" },
-        notes: "Strong kid growing exceptionally well.",
-        created_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-      },
-      {
-        id: "a5",
-        animal_code: "CHICK-0001",
-        name: "Layer flock B",
-        species: "Chicken",
-        breed: "Noiler",
-        sex: "Female",
-        dob: "2024-09-10",
-        source: "Purchased",
-        status: "Monitoring",
-        healthStatus: "Monitoring",
-        primaryPhoto: MOCK_IMAGES.chicken,
-        photos: [MOCK_IMAGES.chicken],
-        notes: "Group observation.",
-        created_at: new Date(Date.now() - 50 * 24 * 60 * 60 * 1000).toISOString(),
-      }
-    ];
-
-    const initialHealth: HealthRecord[] = [
-      {
-        id: "h1",
-        animal_id: "a3",
-        type: "Diagnosis",
-        date: "2025-02-18",
-        details: "Hoof rot suspected due to wet pasture bedding.",
-        medication: "Copper Sulphate Wash & Penicillin spray",
-        recordedBy: "Abdulazeez Adam",
-      },
-      {
-        id: "h2",
-        animal_id: "a1",
-        type: "Vaccination",
-        date: "2024-12-05",
-        details: "PPR vaccine booster administered successfully.",
-        medication: "PPR vaccine",
-        recordedBy: "Y",
-      }
-    ];
-
-    const initialTreatments: Treatment[] = [
-      {
-        id: "t1",
-        animal_id: "a3",
-        condition: "Hoof decay",
-        medication: "Antiseptic spray",
-        startDate: "2025-02-18",
-        endDate: "2025-02-28",
-        status: "Ongoing",
-        notes: "Isolate in clean dry pen.",
-        followUpDate: "2025-02-25",
-      }
-    ];
-
-    const initialWeights: WeightRecord[] = [
-      { id: "w1", animal_id: "a1", weight: 18.5, date: "2024-10-01" },
-      { id: "w2", animal_id: "a1", weight: 22.1, date: "2025-01-10" },
-      { id: "w3", animal_id: "a2", weight: 65.0, date: "2024-12-01" },
-      { id: "w4", animal_id: "a2", weight: 70.2, date: "2025-02-05" }
-    ];
-
-    const initialBreeding: BreedingRecord[] = [
-      {
-        id: "b1",
-        female_id: "a1",
-        male_id: "a2",
-        date: "2024-08-12",
-        status: "Gave Birth",
-        notes: "Produced healthy male kid GOAT-0026.",
       }
     ];
 
@@ -435,40 +510,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         unit: "Bottles (100ml)",
         minStock: 3,
         notes: "Keep in cool storage. For veterinary treatment only.",
-      },
-      {
-        id: "i3",
-        name: "Gravity Chicken Feeder",
-        category: "Equipment",
-        quantity: 8,
-        unit: "Units",
-        minStock: 2,
-        notes: "Standard poultry yard feeders.",
-      }
-    ];
-
-    const initialInvTx: InventoryTransaction[] = [
-      {
-        id: "tx1",
-        item_id: "i1",
-        quantity: 15,
-        type: "add",
-        date: "2025-02-10",
-        notes: "Feed supply restock",
-        recordedBy: "Y",
-      }
-    ];
-
-    const initialContacts: Contact[] = [
-      {
-        id: "c1",
-        name: "Dr. Ibrahim Bello",
-        role: "Veterinarian",
-        phone: "+234 803 111 2222",
-        whatsapp: "+234 803 111 2222",
-        email: "bellovet@gmail.com",
-        address: "Zaria Road, Kano",
-        notes: "Chief livestock consultant.",
       }
     ];
 
@@ -481,49 +522,16 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         animal_id: "a3",
         completed: false,
         notes: "Inspect hoof moisture levels.",
-      },
-      {
-        id: "r2",
-        title: "PPR vaccine booster - Toto",
-        type: "Vaccination",
-        dueDate: "2025-03-10",
-        animal_id: "a4",
-        completed: false,
-      }
-    ];
-
-    const initialLogs: ActivityLog[] = [
-      {
-        id: "l1",
-        type: "Animal Added",
-        description: "Registered Toto (GOAT-0026) offspring of Aisha.",
-        date: "2025-01-10T08:30:00Z",
-        actor: "Y",
-        targetId: "a4",
       }
     ];
 
     setAnimals(initialAnimals);
-    setHealthRecords(initialHealth);
-    setTreatments(initialTreatments);
-    setWeightRecords(initialWeights);
-    setBreedingRecords(initialBreeding);
     setInventory(initialInventory);
-    setInventoryTransactions(initialInvTx);
-    setContacts(initialContacts);
     setReminders(initialReminders);
-    setActivityLogs(initialLogs);
 
     saveState("farm_animals", initialAnimals);
-    saveState("farm_health", initialHealth);
-    saveState("farm_treatments", initialTreatments);
-    saveState("farm_weights", initialWeights);
-    saveState("farm_breeding", initialBreeding);
     saveState("farm_inventory", initialInventory);
-    saveState("farm_inventory_tx", initialInvTx);
-    saveState("farm_contacts", initialContacts);
     saveState("farm_reminders", initialReminders);
-    saveState("farm_logs", initialLogs);
   };
 
   const login = (email: string, farmName: string): boolean => {
@@ -572,7 +580,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     showSuccess("Logged out of session.");
   };
 
-  const addAnimal = (animalData: Omit<Animal, "id" | "animal_code" | "created_at">) => {
+  const addAnimal = async (animalData: Omit<Animal, "id" | "animal_code" | "created_at">) => {
     const prefix = animalData.species.toUpperCase();
     const speciesAnimals = animals.filter(a => a.species === animalData.species);
     const nextSeq = speciesAnimals.length + 1;
@@ -590,50 +598,65 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAnimals(updated);
     saveState("farm_animals", updated);
 
-    // Establish lineage relationships
-    if (animalData.parents?.motherId) {
-      setAnimals(prev => {
-        const revised = prev.map(a => {
-          if (a.id === animalData.parents?.motherId) {
-            return {
-              ...a,
-              offspring: [...(a.offspring || []), newAnimal.id],
-            };
-          }
-          return a;
-        });
-        saveState("farm_animals", revised);
-        return revised;
-      });
-    }
-    if (animalData.parents?.fatherId) {
-      setAnimals(prev => {
-        const revised = prev.map(a => {
-          if (a.id === animalData.parents?.fatherId) {
-            return {
-              ...a,
-              offspring: [...(a.offspring || []), newAnimal.id],
-            };
-          }
-          return a;
-        });
-        saveState("farm_animals", revised);
-        return revised;
-      });
-    }
-
     logActivity("Animal Registered", `Registered ${animalData.species} named ${animalData.name || generatedCode}`, farmProfile.ownerName, newAnimal.id);
+
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase.from("animals").insert([{
+          id: newAnimal.id,
+          animal_code: newAnimal.animal_code,
+          name: newAnimal.name,
+          species: newAnimal.species,
+          breed: newAnimal.breed,
+          sex: newAnimal.sex,
+          dob: newAnimal.dob,
+          purchase_date: newAnimal.purchaseDate,
+          source: newAnimal.source,
+          status: newAnimal.status,
+          health_status: newAnimal.healthStatus,
+          primary_photo: newAnimal.primaryPhoto,
+          photos: newAnimal.photos,
+          notes: newAnimal.notes,
+          mother_id: newAnimal.parents?.motherId,
+          father_id: newAnimal.parents?.fatherId
+        }]);
+      } catch (err) {
+        console.error("Supabase insert error", err);
+      }
+    }
   };
 
-  const updateAnimal = (id: string, updates: Partial<Animal>) => {
+  const updateAnimal = async (id: string, updates: Partial<Animal>) => {
     const updated = animals.map(a => (a.id === id ? { ...a, ...updates } : a));
     setAnimals(updated);
     saveState("farm_animals", updated);
     logActivity("Animal Updated", `Updated details of ${animals.find(a => a.id === id)?.animal_code}`, farmProfile.ownerName, id);
     showSuccess("Animal updated");
+
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase.from("animals").update({
+          name: updates.name,
+          breed: updates.breed,
+          sex: updates.sex,
+          dob: updates.dob,
+          purchase_date: updates.purchaseDate,
+          source: updates.source,
+          status: updates.status,
+          health_status: updates.healthStatus,
+          primary_photo: updates.primaryPhoto,
+          photos: updates.photos,
+          notes: updates.notes,
+          mother_id: updates.parents?.motherId,
+          father_id: updates.parents?.fatherId
+        }).eq("id", id);
+      } catch (err) {
+        console.error("Supabase update error", err);
+      }
+    }
   };
 
-  const deleteAnimal = (id: string) => {
+  const deleteAnimal = async (id: string) => {
     const animal = animals.find(a => a.id === id);
     if (!animal) return;
     const updated = animals.filter(a => a.id !== id);
@@ -641,9 +664,17 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     saveState("farm_animals", updated);
     logActivity("Animal Removed", `Removed ${animal.animal_code}`, farmProfile.ownerName);
     showSuccess("Animal removed successfully");
+
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase.from("animals").delete().eq("id", id);
+      } catch (err) {
+        console.error("Supabase delete error", err);
+      }
+    }
   };
 
-  const addHealthRecord = (record: Omit<HealthRecord, "id">) => {
+  const addHealthRecord = async (record: Omit<HealthRecord, "id">) => {
     const newRecord: HealthRecord = { ...record, id: "h_" + Date.now() };
     const updated = [newRecord, ...healthRecords];
     setHealthRecords(updated);
@@ -672,9 +703,25 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     logActivity("Health Logged", `Logged ${record.type} for ${animals.find(a => a.id === record.animal_id)?.animal_code}`, record.recordedBy, record.animal_id);
     showSuccess("Health observation logged");
+
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase.from("health_records").insert([{
+          id: newRecord.id,
+          animal_id: newRecord.animal_id,
+          type: newRecord.type,
+          date: newRecord.date,
+          details: newRecord.details,
+          medication: newRecord.medication,
+          recorded_by: newRecord.recordedBy
+        }]);
+      } catch (err) {
+        console.error("Supabase health insert error", err);
+      }
+    }
   };
 
-  const addTreatment = (treatmentData: Omit<Treatment, "id">) => {
+  const addTreatment = async (treatmentData: Omit<Treatment, "id">) => {
     const newTx: Treatment = { ...treatmentData, id: "t_" + Date.now() };
     const updated = [newTx, ...treatments];
     setTreatments(updated);
@@ -693,9 +740,27 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     logActivity("Treatment Began", `Treatment started for ${treatmentData.condition}`, farmProfile.ownerName, treatmentData.animal_id);
     showSuccess("Treatment registered");
+
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase.from("treatments").insert([{
+          id: newTx.id,
+          animal_id: newTx.animal_id,
+          condition: newTx.condition,
+          medication: newTx.medication,
+          start_date: newTx.startDate,
+          end_date: newTx.endDate,
+          status: newTx.status,
+          notes: newTx.notes,
+          follow_up_date: newTx.followUpDate
+        }]);
+      } catch (err) {
+        console.error("Supabase treatment insert error", err);
+      }
+    }
   };
 
-  const updateTreatmentStatus = (id: string, status: "Ongoing" | "Completed" | "Stopped") => {
+  const updateTreatmentStatus = async (id: string, status: "Ongoing" | "Completed" | "Stopped") => {
     const currentTx = treatments.find(t => t.id === id);
     if (!currentTx) return;
 
@@ -718,33 +783,86 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     logActivity("Treatment Updated", `Marked treatment as ${status}`, farmProfile.ownerName, currentTx.animal_id);
     showSuccess(`Treatment status: ${status}`);
+
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase.from("treatments").update({ status }).eq("id", id);
+      } catch (err) {
+        console.error("Supabase treatment update error", err);
+      }
+    }
   };
 
-  const addWeightRecord = (record: Omit<WeightRecord, "id">) => {
+  const addWeightRecord = async (record: Omit<WeightRecord, "id">) => {
     const newWeight: WeightRecord = { ...record, id: "w_" + Date.now() };
     const updated = [...weightRecords, newWeight];
     setWeightRecords(updated);
     saveState("farm_weights", updated);
     showSuccess("Weight logged");
+
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase.from("weight_records").insert([{
+          id: newWeight.id,
+          animal_id: newWeight.animal_id,
+          weight: newWeight.weight,
+          date: newWeight.date,
+          notes: newWeight.notes
+        }]);
+      } catch (err) {
+        console.error("Supabase weight insert error", err);
+      }
+    }
   };
 
-  const addBreedingRecord = (record: Omit<BreedingRecord, "id">) => {
+  const addBreedingRecord = async (record: Omit<BreedingRecord, "id">) => {
     const newB: BreedingRecord = { ...record, id: "b_" + Date.now() };
     const updated = [newB, ...breedingRecords];
     setBreedingRecords(updated);
     saveState("farm_breeding", updated);
     showSuccess("Breeding registered");
+
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase.from("breeding_records").insert([{
+          id: newB.id,
+          female_id: newB.female_id,
+          male_id: newB.male_id,
+          date: newB.date,
+          status: newB.status,
+          notes: newB.notes
+        }]);
+      } catch (err) {
+        console.error("Supabase breeding insert error", err);
+      }
+    }
   };
 
-  const addInventoryItem = (item: Omit<InventoryItem, "id">) => {
+  const addInventoryItem = async (item: Omit<InventoryItem, "id">) => {
     const newItem: InventoryItem = { ...item, id: "i_" + Date.now() };
     const updated = [...inventory, newItem];
     setInventory(updated);
     saveState("farm_inventory", updated);
     showSuccess("Inventory item created");
+
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase.from("inventory").insert([{
+          id: newItem.id,
+          name: newItem.name,
+          category: newItem.category,
+          quantity: newItem.quantity,
+          unit: newItem.unit,
+          min_stock: newItem.minStock,
+          notes: newItem.notes
+        }]);
+      } catch (err) {
+        console.error("Supabase inventory insert error", err);
+      }
+    }
   };
 
-  const updateInventoryStock = (itemId: string, qtyChange: number, type: "add" | "remove" | "adjust", notes: string, recordedBy: string) => {
+  const updateInventoryStock = async (itemId: string, qtyChange: number, type: "add" | "remove" | "adjust", notes: string, recordedBy: string) => {
     const item = inventory.find(i => i.id === itemId);
     if (!item) return;
 
@@ -761,29 +879,40 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const updated = inventory.map(i => (i.id === itemId ? { ...i, quantity: nextQty } : i));
     setInventory(updated);
     saveState("farm_inventory", updated);
-
-    const newTx: InventoryTransaction = {
-      id: "tx_" + Date.now(),
-      item_id: itemId,
-      quantity: qtyChange,
-      type,
-      date: new Date().toISOString().split("T")[0],
-      notes,
-      recordedBy,
-    };
-    const nextTx = [newTx, ...inventoryTransactions];
-    setInventoryTransactions(nextTx);
-    saveState("farm_inventory_tx", nextTx);
-
     showSuccess("Storage stock adjusted");
+
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase.from("inventory").update({ quantity: nextQty }).eq("id", itemId);
+      } catch (err) {
+        console.error("Supabase inventory update error", err);
+      }
+    }
   };
 
-  const addContact = (contact: Omit<Contact, "id">) => {
+  const addContact = async (contact: Omit<Contact, "id">) => {
     const newC: Contact = { ...contact, id: "c_" + Date.now() };
     const updated = [...contacts, newC];
     setContacts(updated);
     saveState("farm_contacts", updated);
     showSuccess("Contact saved");
+
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase.from("contacts").insert([{
+          id: newC.id,
+          name: newC.name,
+          role: newC.role,
+          phone: newC.phone,
+          whatsapp: newC.whatsapp,
+          email: newC.email,
+          address: newC.address,
+          notes: newC.notes
+        }]);
+      } catch (err) {
+        console.error("Supabase contact insert error", err);
+      }
+    }
   };
 
   const updateContact = (id: string, updates: Partial<Contact>) => {
@@ -792,25 +921,61 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     saveState("farm_contacts", updated);
   };
 
-  const deleteContact = (id: string) => {
+  const deleteContact = async (id: string) => {
     const updated = contacts.filter(c => c.id !== id);
     setContacts(updated);
     saveState("farm_contacts", updated);
     showSuccess("Contact removed");
+
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase.from("contacts").delete().eq("id", id);
+      } catch (err) {
+        console.error("Supabase contact delete error", err);
+      }
+    }
   };
 
-  const addReminder = (reminder: Omit<Reminder, "id" | "completed">) => {
+  const addReminder = async (reminder: Omit<Reminder, "id" | "completed">) => {
     const newR: Reminder = { ...reminder, id: "r_" + Date.now(), completed: false };
     const updated = [newR, ...reminders];
     setReminders(updated);
     saveState("farm_reminders", updated);
     showSuccess("Reminder set");
+
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase.from("reminders").insert([{
+          id: newR.id,
+          title: newR.title,
+          type: newR.type,
+          due_date: newR.dueDate,
+          animal_id: newR.animal_id,
+          completed: newR.completed,
+          notes: newR.notes
+        }]);
+      } catch (err) {
+        console.error("Supabase reminder insert error", err);
+      }
+    }
   };
 
-  const toggleReminder = (id: string) => {
-    const updated = reminders.map(r => (r.id === id ? { ...r, completed: !r.completed } : r));
+  const toggleReminder = async (id: string) => {
+    const rItem = reminders.find(r => r.id === id);
+    if (!rItem) return;
+    const nextVal = !rItem.completed;
+
+    const updated = reminders.map(r => (r.id === id ? { ...r, completed: nextVal } : r));
     setReminders(updated);
     saveState("farm_reminders", updated);
+
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase.from("reminders").update({ completed: nextVal }).eq("id", id);
+      } catch (err) {
+        console.error("Supabase reminder toggle error", err);
+      }
+    }
   };
 
   const updateFarmProfile = (profile: FarmProfile) => {
