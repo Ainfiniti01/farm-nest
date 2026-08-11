@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useFarm } from "@/context/FarmContext";
-import { showSuccess, showError } from "@/utils/toast";
+import { showError } from "@/utils/toast";
 
 export const Register: React.FC = () => {
   const navigate = useNavigate();
@@ -16,9 +16,8 @@ export const Register: React.FC = () => {
   const [operatorName, setOperatorName] = useState("");
   const [location, setLocation] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [loadingMsg, setLoadingMessage] = useState("Preparing your farm...");
 
-  const handleSignupSubmit = (e: React.FormEvent) => {
+  const handleSignupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password || !farmName || !operatorName) {
       showError("Please fill out all required fields.");
@@ -30,36 +29,27 @@ export const Register: React.FC = () => {
     }
 
     setIsLoading(true);
-
-    const messages = [
-      "Generating secure registries...",
-      "Building paddock map databases...",
-      "Enrolling operator signature...",
-      "Almost ready..."
-    ];
-    let msgIdx = 0;
-    const interval = setInterval(() => {
-      msgIdx = (msgIdx + 1) % messages.length;
-      setLoadingMessage(messages[msgIdx]);
-    }, 900);
-
-    setTimeout(() => {
-      clearInterval(interval);
-      signupAndSetup(email, operatorName, farmName, location || "Kano, Nigeria");
+    try {
+      const success = await signupAndSetup(email, password, operatorName, farmName, location);
+      if (success) {
+        navigate("/dashboard");
+      }
+    } catch (err: any) {
+      showError(err.message || "Failed to create secure agricultural profile.");
+    } finally {
       setIsLoading(false);
-      navigate("/dashboard");
-    }, 2800);
+    }
   };
 
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center text-center p-6 text-white relative">
-        <div className="absolute inset-0 bg-cover bg-center opacity-0.7" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=800')" }} />
+        <div className="absolute inset-0 bg-cover bg-center opacity-20 filter blur-[1px]" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=800')" }} />
         <div className="z-10 space-y-6 max-w-sm">
           <div className="w-16 h-16 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
           <div>
-            <h2 className="text-xl font-black text-emerald-400 tracking-tight">{loadingMsg}</h2>
-            <p className="text-slate-400 text-xs mt-2 italic font-serif">"Good records. Healthy animals. Better farming."</p>
+            <h2 className="text-xl font-black text-emerald-400 tracking-tight">Deploying farm registry database...</h2>
+            <p className="text-slate-400 text-xs mt-2 italic font-serif">"Setting up cryptographic biosecurity keys."</p>
           </div>
         </div>
       </div>

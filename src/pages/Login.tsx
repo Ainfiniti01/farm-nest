@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useFarm } from "@/context/FarmContext";
-import { showSuccess, showError } from "@/utils/toast";
+import { showError } from "@/utils/toast";
 
 export const Login: React.FC = () => {
   const navigate = useNavigate();
@@ -11,11 +11,9 @@ export const Login: React.FC = () => {
   
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [farmName, setFarmName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [loadingMsg, setLoadingMessage] = useState("Preparing your farm...");
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) {
       showError("Please enter your email and password.");
@@ -23,39 +21,27 @@ export const Login: React.FC = () => {
     }
 
     setIsLoading(true);
-    
-    // Rotate messages
-    const messages = [
-      "Preparing your farm...",
-      "Loading your animals...",
-      "Gathering your records...",
-      "Almost ready..."
-    ];
-    let msgIdx = 0;
-    const interval = setInterval(() => {
-      msgIdx = (msgIdx + 1) % messages.length;
-      setLoadingMessage(messages[msgIdx]);
-    }, 900);
-
-    setTimeout(() => {
-      clearInterval(interval);
-      const success = login(email, farmName || "Adam Farms");
-      setIsLoading(false);
+    try {
+      const success = await login(email, password);
       if (success) {
         navigate("/dashboard");
       }
-    }, 2800);
+    } catch (err: any) {
+      showError(err.message || "Failed to establish secure operator session.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center text-center p-6 text-white relative">
-        <div className="absolute inset-0 bg-cover bg-center opacity-0.7" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=800')" }} />
+        <div className="absolute inset-0 bg-cover bg-center opacity-20 filter blur-[1px]" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=800')" }} />
         <div className="z-10 space-y-6 max-w-sm">
           <div className="w-16 h-16 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
           <div>
-            <h2 className="text-xl font-black text-emerald-400 tracking-tight">{loadingMsg}</h2>
-            <p className="text-slate-400 text-xs mt-2 italic font-serif">"Good records. Healthy animals. Better farming."</p>
+            <h2 className="text-xl font-black text-emerald-400 tracking-tight">Authenticating operator credentials...</h2>
+            <p className="text-slate-400 text-xs mt-2 italic font-serif">"Connecting to secure database vault."</p>
           </div>
         </div>
       </div>
@@ -95,17 +81,6 @@ export const Login: React.FC = () => {
               onChange={(e) => setPassword(e.target.value)}
               className="w-full p-3 bg-slate-700/60 border border-slate-600 rounded-xl text-xs text-white focus:ring-1 focus:ring-emerald-500 outline-none"
               required
-            />
-          </div>
-
-          <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Farm Name (Optional)</label>
-            <input
-              type="text"
-              placeholder="e.g. Adam Farms"
-              value={farmName}
-              onChange={(e) => setFarmName(e.target.value)}
-              className="w-full p-3 bg-slate-700/60 border border-slate-600 rounded-xl text-xs text-white focus:ring-1 focus:ring-emerald-500 outline-none"
             />
           </div>
 

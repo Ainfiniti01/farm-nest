@@ -165,8 +165,8 @@ interface FarmContextType {
   updateFarmProfile: (profile: FarmProfile) => void;
   incrementAiUsage: (type: "text" | "image") => void;
   setOnboardingCompleted: (val: boolean) => void;
-  login: (email: string, farmName: string) => boolean;
-  signupAndSetup: (email: string, name: string, farmName: string, location: string) => void;
+  login: (email: string, password: string) => Promise<boolean>;
+  signupAndSetup: (email: string, password: string, name: string, farmName: string, location: string) => Promise<boolean>;
   logout: () => void;
   seedSampleData: () => void;
 }
@@ -431,42 +431,153 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Left empty since user requested removing dummy seed datasets entirely
   };
 
-  const login = (email: string, farmName: string): boolean => {
-    const currentProfile = { ...farmProfile, name: farmName || "My Farm" };
-    setFarmProfile(currentProfile);
-    saveState("farm_profile", currentProfile);
+  const login = async (email: string, password: string): Promise<boolean> => {
+    if (isSupabaseConfigured()) {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-    const userSession = {
-      email: email,
-      name: farmProfile.ownerName,
-      isAuthenticated: true
-    };
-    setSession(userSession);
-    saveState("farm_user_session", userSession);
-    showSuccess(`Logged into your farm: ${currentProfile.name}`);
-    return true;
+      if (error) {
+        showError(error.message);
+        return false;
+      }
+
+      if (data?.user) {
+        const userSession = {
+          email: data.user.email || email,
+          name: data.user.user_metadata?.name || "Operator",
+          isAuthenticated: true
+        };
+        setSession(userSession);
+        saveState("farm_user_session", userSession);
+
+        if (data.user.user_metadata?.farmName) {
+          const profile = {
+            ...farmProfile,
+            name: data.user.user_metadata.farmName,
+            ownerName: data.user.user_metadata.name || "Operator",
+            location: data.user.user_metadata.location || "Kano, Nigeria",
+          };
+          setFarmProfile(profile);
+          saveState("farm_profile", profile);
+        }
+
+        showSuccess("Logged into your live farm database successfully!");
+        return true;
+      }
+    } else {
+      // Local authentication storage validation
+      const storedUsersRaw = localStorage.getItem("farm_registered_users");
+      const usersList = storedUsersRaw ? JSON.parse(storedUsersRaw) : [];
+
+      const foundUser = usersList.find((u: any) => u.email.toLowerCase() === email.toLowerCase());
+
+      if (!foundUser || foundUser.password !== password) {
+        showError("Invalid email or password combination. Access denied.");
+        return false;
+      }
+
+      const userSession = {
+        email: foundUser.email,
+        name: foundUser.name,
+        isAuthenticated: true
+      };
+      setSession(userSession);
+      saveState("farm_user_session", userSession);
+
+      const profile = {
+        ...farmProfile,
+        name: foundUser.farmName,
+        ownerName: foundUser.name,
+        location: foundUser.location,
+      };
+      setFarmProfile(profile);
+      saveState("farm_profile", profile);
+
+      showSuccess(`Logged in securely to local paddock: ${foundUser.farmName}`);
+      return true;
+    }
+    return false;
   };
 
-  const signupAndSetup = (email: string, name: string, farmName: string, location: string) => {
-    const updatedProfile: FarmProfile = {
-      name: farmName || "My Farm",
-      description: `Premium agricultural production unit managed by ${name}.`,
-      ownerName: name || "Operator",
-      location: location || "Kano, Nigeria",
-      image: "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=600&auto=format&fit=crop&q=80",
-    };
-    setFarmProfile(updatedProfile);
-    saveState("farm_profile", updatedProfile);
+  const signupAndSetup = async (email: string, password: string, name: string, farmName: string, location: string): Promise<boolean> => {
+    if (isSupabaseConfigured()) {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            name,
+            farmName,
+            location
+          }
+        }
+      });
 
-    const userSession = {
-      email,
-      name,
-      isAuthenticated: true
-    };
-    setSession(userSession);
-    saveState("farm_user_session", userSession);
+      if (error) {
+        showError(error.message);
+        return false;
+      }
 
-    showSuccess(`Farm setup complete! Welcome to ${farmName}!`);
+      if (data?.user) {
+        const userSession = {
+          email,
+          name,
+          isAuthenticated: true
+        };
+        setSession(userSession);
+        saveState("farm_user_session", userSession);
+
+        const updatedProfile = {
+          ...farmProfile,
+          name,
+          ownerName: name,
+          location
+        };
+        setFarmProfile(updatedProfile);
+        saveState("farm_profile", updatedProfile);
+
+        showSuccess(`Farm nested and database credentials mapped for: ${farmName}`);
+        return true;
+      }
+    } else {
+      // Local setup safe registry persistence
+      const storedUsersRaw = localStorage.getItem("farm_registered_users");
+      const usersList = storedUsersRaw ? JSON.parse(storedUsersRaw) : [];
+
+      const alreadyExists = usersList.some((u: any) => u.email.toLowerCase() === email.toLowerCase());
+      if (alreadyExists) {
+        showError("An account is already registered under this email.");
+        return false;
+      }
+
+      const newUserRecord = { email, password, name, farmName, location };
+      usersList.push(newUserRecord);
+      saveState("farm_registered_users", usersList);
+
+      const userSession = {
+        email,
+        name,
+        isAuthenticated: true
+      };
+      setSession(userSession);
+      saveState("farm_user_session", userSession);
+
+      const updatedProfile: FarmProfile = {
+        name: farmName || "My Farm",
+        description: `Premium agricultural production unit managed by ${name}.`,
+        ownerName: name || "Operator",
+        location: location || "Kano, Nigeria",
+        image: "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=600&auto=format&fit=crop&q=80",
+      };
+      setFarmProfile(updatedProfile);
+      saveState("farm_profile", updatedProfile);
+
+      showSuccess(`Local Secure Profile mapped for: ${farmName}!`);
+      return true;
+    }
+    return false;
   };
 
   const logout = () => {
