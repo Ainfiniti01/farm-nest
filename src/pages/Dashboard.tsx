@@ -48,11 +48,12 @@ export const Dashboard: React.FC = () => {
   // Fallback priority logic
   const farmHeaderImage = farmProfile.image || "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=1200&auto=format&fit=crop&q=80";
 
-  // Calculations
-  const totalAnimals = animals.length;
-  const healthyCount = animals.filter(a => a.healthStatus === "Healthy").length;
+  // Filter out Sold and Deceased livestock from active counts
+  const activeAnimals = animals.filter(a => a.status !== "Sold" && a.status !== "Deceased");
+  const totalAnimals = activeAnimals.length;
+  const healthyCount = activeAnimals.filter(a => a.healthStatus === "Healthy" || a.status === "Healthy").length;
   const ongoingTxCount = treatments.filter(t => t.status === "Ongoing").length;
-  const attentionCount = animals.filter(a => a.status === "Sick" || a.status === "Under Treatment" || a.status === "Monitoring").length;
+  const attentionCount = activeAnimals.filter(a => a.status === "Sick" || a.status === "Under Treatment" || a.status === "Monitoring").length;
   const lowStockCount = inventory.filter(item => item.quantity <= item.minStock).length;
   const upcomingCount = reminders.filter(r => !r.completed).length;
 
@@ -128,7 +129,7 @@ export const Dashboard: React.FC = () => {
           onClick={() => navigate("/animals")} 
           className="bg-emerald-50/60 p-4 rounded-2xl border border-emerald-100/60 cursor-pointer hover:border-emerald-300 transition"
         >
-          <p className="text-xs font-semibold text-emerald-800 uppercase tracking-wider">Total Livestock</p>
+          <p className="text-xs font-semibold text-emerald-800 uppercase tracking-wider">Total Active Livestock</p>
           <div className="flex items-baseline gap-2 mt-1">
             <span className="text-3xl font-black text-emerald-950">{totalAnimals}</span>
             <span className="text-xs text-emerald-700 font-medium">heads</span>

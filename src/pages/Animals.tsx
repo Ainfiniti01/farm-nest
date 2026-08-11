@@ -8,6 +8,7 @@ import {
   Plus, 
   ChevronRight, 
   Camera, 
+  Upload,
   HelpCircle,
   Eye,
   Download
@@ -19,6 +20,7 @@ export const Animals: React.FC = () => {
   const { animals, addAnimal } = useFarm();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const [showAddAnimal, setShowAddAnimal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -55,7 +57,7 @@ export const Animals: React.FC = () => {
       reader.onloadend = () => {
         if (typeof reader.result === "string") {
           setNewAnimal(prev => ({ ...prev, primaryPhoto: reader.result as string }));
-          showSuccess("Live portrait snapped successfully!");
+          showSuccess("Portrait attached successfully!");
         }
       };
       reader.readAsDataURL(file);
@@ -186,7 +188,7 @@ export const Animals: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap gap-1 pt-1 border-t border-slate-100">
-          {["All", "Healthy", "Monitoring", "Sick", "Under Treatment", "Pregnant"].map((st) => (
+          {["All", "Healthy", "Monitoring", "Sick", "Under Treatment", "Pregnant", "Sold", "Deceased"].map((st) => (
             <button
               key={st}
               onClick={() => setStatusFilter(st)}
@@ -218,6 +220,8 @@ export const Animals: React.FC = () => {
               />
               <div className="absolute top-2 right-2">
                 <span className={`text-[9px] font-black tracking-wide px-2 py-0.5 rounded-full shadow ${
+                  animal.status === "Sold" ? "bg-slate-200 text-slate-700" :
+                  animal.status === "Deceased" ? "bg-red-200 text-red-800" :
                   animal.healthStatus === "Healthy" ? "bg-emerald-100 text-emerald-800" :
                   animal.healthStatus === "Under Treatment" ? "bg-purple-100 text-purple-800" : "bg-amber-100 text-amber-800"
                 }`}>
@@ -298,18 +302,36 @@ export const Animals: React.FC = () => {
 
             <div className="space-y-2">
               <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block">Animal Portrait</label>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => cameraInputRef.current?.click()}
+                  className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 rounded-xl text-xs font-bold flex items-center gap-1.5 border border-emerald-200 transition"
+                >
+                  <Camera size={14} className="text-emerald-700" /> Snap Photo
+                </button>
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold flex items-center gap-2 border border-slate-200 transition"
+                  className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold flex items-center gap-1.5 border border-slate-200 transition"
                 >
-                  <Camera size={14} className="text-slate-600" /> Snap Photo
+                  <Upload size={14} className="text-slate-600" /> Upload Image
                 </button>
+
+                {/* Hidden input for camera capture */}
                 <input
                   type="file"
                   accept="image/*"
                   capture="environment"
+                  ref={cameraInputRef}
+                  onChange={handlePhotoUpload}
+                  className="hidden"
+                />
+
+                {/* Hidden input for device file upload */}
+                <input
+                  type="file"
+                  accept="image/*"
                   ref={fileInputRef}
                   onChange={handlePhotoUpload}
                   className="hidden"
@@ -317,9 +339,9 @@ export const Animals: React.FC = () => {
               </div>
 
               <div className="flex gap-1.5 mt-1">
-                <button type="button" onClick={() => handleSimulatePhoto("goat")} className="px-2.5 py-1 bg-emerald-50 text-emerald-800 text-[10px] font-bold rounded">Goat Portrait</button>
-                <button type="button" onClick={() => handleSimulatePhoto("ram")} className="px-2.5 py-1 bg-blue-50 text-blue-800 text-[10px] font-bold rounded">Ram Portrait</button>
-                <button type="button" onClick={() => handleSimulatePhoto("chicken")} className="px-2.5 py-1 bg-purple-50 text-purple-800 text-[10px] font-bold rounded">Hen Portrait</button>
+                <button type="button" onClick={() => handleSimulatePhoto("goat")} className="px-2.5 py-1 bg-emerald-50 text-emerald-800 text-[10px] font-bold rounded">Goat Preset</button>
+                <button type="button" onClick={() => handleSimulatePhoto("ram")} className="px-2.5 py-1 bg-blue-50 text-blue-800 text-[10px] font-bold rounded">Ram Preset</button>
+                <button type="button" onClick={() => handleSimulatePhoto("chicken")} className="px-2.5 py-1 bg-purple-50 text-purple-800 text-[10px] font-bold rounded">Hen Preset</button>
               </div>
 
               {newAnimal.primaryPhoto && (
