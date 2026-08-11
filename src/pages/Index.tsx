@@ -39,6 +39,13 @@ import {
 } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 
+const MOCK_IMAGES = {
+  goat1: "https://images.unsplash.com/photo-1524413840807-0c3cb6fa808d?w=500&auto=format&fit=crop&q=80",
+  goat2: "https://images.unsplash.com/photo-1516467508483-a7212febe31a?w=500&auto=format&fit=crop&q=80",
+  ram: "https://images.unsplash.com/photo-1484557985045-edf25e08da73?w=500&auto=format&fit=crop&q=80",
+  chicken: "https://images.unsplash.com/photo-1548550023-2bdb3c5beed7?w=500&auto=format&fit=crop&q=80",
+};
+
 const Index = () => {
   const {
     animals,
@@ -518,7 +525,7 @@ const Index = () => {
             </p>
 
             <button
-              onClick={() => setOnboardingIndex(1)}
+              onClick={() => setNewAnimal(p => p), setOnboardingIndex(1)}
               className="px-8 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-xs rounded-xl shadow-lg transition"
             >
               Get Started
