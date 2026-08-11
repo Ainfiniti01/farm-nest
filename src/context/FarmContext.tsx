@@ -119,6 +119,12 @@ export interface FarmProfile {
   image: string;
 }
 
+export interface UserSession {
+  email: string;
+  name: string;
+  isAuthenticated: boolean;
+}
+
 interface FarmContextType {
   animals: Animal[];
   healthRecords: HealthRecord[];
@@ -131,6 +137,7 @@ interface FarmContextType {
   reminders: Reminder[];
   activityLogs: ActivityLog[];
   farmProfile: FarmProfile;
+  session: UserSession;
   aiUsage: {
     questionsUsed: number;
     questionsLimit: number;
@@ -155,12 +162,14 @@ interface FarmContextType {
   logActivity: (type: string, description: string, actor: string, targetId?: string) => void;
   updateFarmProfile: (profile: FarmProfile) => void;
   incrementAiUsage: (type: "text" | "image") => void;
+  login: (email: string, farmName: string) => boolean;
+  signupAndSetup: (email: string, name: string, farmName: string, location: string) => void;
+  logout: () => void;
   seedSampleData: () => void;
 }
 
 const FarmContext = createContext<FarmContextType | undefined>(undefined);
 
-// Visual placeholder SVGs / mock images to look breathtaking
 const MOCK_IMAGES = {
   goat1: "https://images.unsplash.com/photo-1524413840807-0c3cb6fa808d?w=500&auto=format&fit=crop&q=80",
   goat2: "https://images.unsplash.com/photo-1516467508483-a7212febe31a?w=500&auto=format&fit=crop&q=80",
@@ -180,20 +189,27 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [farmProfile, setFarmProfile] = useState<FarmProfile>({
-    name: "Green Valley Livestock",
-    description: "Multi-species pedigree breeder and egg producer.",
-    ownerName: "Abdul & Family",
+    name: "Adam",
+    description: "Pedigree multi-species family livestock and feed supply unit.",
+    ownerName: "Abdulazeez Adam",
     location: "Kano, Nigeria",
     image: "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=600&auto=format&fit=crop&q=80",
   });
+
+  const [session, setSession] = useState<UserSession>({
+    email: "",
+    name: "",
+    isAuthenticated: false
+  });
+
   const [aiUsage, setAiUsage] = useState({
-    questionsUsed: 6,
+    questionsUsed: 3,
     questionsLimit: 10,
-    imageUsed: 2,
+    imageUsed: 1,
     imageLimit: 5,
   });
 
-  // Load from local storage
+  // Load state and mock session from local storage on startup
   useEffect(() => {
     const storedAnimals = localStorage.getItem("farm_animals");
     const storedHealth = localStorage.getItem("farm_health");
@@ -207,6 +223,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const storedLogs = localStorage.getItem("farm_logs");
     const storedProfile = localStorage.getItem("farm_profile");
     const storedAi = localStorage.getItem("farm_ai_usage");
+    const storedSession = localStorage.getItem("farm_user_session");
 
     if (storedAnimals) setAnimals(JSON.parse(storedAnimals));
     if (storedHealth) setHealthRecords(JSON.parse(storedHealth));
@@ -220,14 +237,14 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (storedLogs) setActivityLogs(JSON.parse(storedLogs));
     if (storedProfile) setFarmProfile(JSON.parse(storedProfile));
     if (storedAi) setAiUsage(JSON.parse(storedAi));
+    if (storedSession) setSession(JSON.parse(storedSession));
 
-    // Seed defaults if brand new
+    // Seed defaults if totally brand new
     if (!storedAnimals) {
       seedSampleData();
     }
   }, []);
 
-  // Sync to local storage
   const saveState = (key: string, data: any) => {
     localStorage.setItem(key, JSON.stringify(data));
   };
@@ -247,9 +264,9 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         healthStatus: "Healthy",
         primaryPhoto: MOCK_IMAGES.goat1,
         photos: [MOCK_IMAGES.goat1],
-        parents: { motherId: undefined, fatherId: undefined },
+        parents: {},
         offspring: ["a4"],
-        notes: "Excellent milker, very friendly. Stays near the eastern pen.",
+        notes: "Excellent milk yield, highly docile mother.",
         created_at: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
       },
       {
@@ -266,7 +283,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         healthStatus: "Healthy",
         primaryPhoto: MOCK_IMAGES.ram,
         photos: [MOCK_IMAGES.ram],
-        notes: "Strong breeding ram purchased from northern market. High mass, excellent health records.",
+        notes: "Heavyweight stud. Purchased for active ewe breeding runs.",
         created_at: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(),
       },
       {
@@ -282,7 +299,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         healthStatus: "Under Treatment",
         primaryPhoto: MOCK_IMAGES.goat2,
         photos: [MOCK_IMAGES.goat2],
-        notes: "Currently isolated due to minor hoof decay under veterinary watch.",
+        notes: "Monitoring response to antiseptic hoof sprays daily.",
         created_at: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
       },
       {
@@ -299,13 +316,13 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         primaryPhoto: "https://images.unsplash.com/photo-1533048324814-79b0a3173db9?w=500&auto=format&fit=crop&q=80",
         photos: ["https://images.unsplash.com/photo-1533048324814-79b0a3173db9?w=500&auto=format&fit=crop&q=80"],
         parents: { motherId: "a1", fatherId: "a2" },
-        notes: "Strong kid born during cold harmattan mornings. Growing exceptionally well.",
+        notes: "Strong kid growing exceptionally well.",
         created_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
       },
       {
         id: "a5",
         animal_code: "CHICK-0001",
-        name: "",
+        name: "Layer flock B",
         species: "Chicken",
         breed: "Noiler",
         sex: "Female",
@@ -315,7 +332,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         healthStatus: "Monitoring",
         primaryPhoto: MOCK_IMAGES.chicken,
         photos: [MOCK_IMAGES.chicken],
-        notes: "Part of flock B layer rotation. Showing slight sluggishness today.",
+        notes: "Group observation.",
         created_at: new Date(Date.now() - 50 * 24 * 60 * 60 * 1000).toISOString(),
       }
     ];
@@ -326,26 +343,18 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         animal_id: "a3",
         type: "Diagnosis",
         date: "2025-02-18",
-        details: "Hoof rot suspected due to mud build-up from heavy rainfall.",
+        details: "Hoof rot suspected due to wet pasture bedding.",
         medication: "Copper Sulphate Wash & Penicillin spray",
-        recordedBy: "Abdul",
+        recordedBy: "Abdulazeez Adam",
       },
       {
         id: "h2",
         animal_id: "a1",
         type: "Vaccination",
         date: "2024-12-05",
-        details: "Annual PPR vaccination booster administered.",
+        details: "PPR vaccine booster administered successfully.",
         medication: "PPR vaccine",
-        recordedBy: "Uncle",
-      },
-      {
-        id: "h3",
-        animal_id: "a5",
-        type: "Observation",
-        date: "2025-02-21",
-        details: "Lethargic behavior and isolated from the rest of flock B.",
-        recordedBy: "Uncle",
+        recordedBy: "Y",
       }
     ];
 
@@ -354,11 +363,11 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         id: "t1",
         animal_id: "a3",
         condition: "Hoof decay",
-        medication: "Antiseptic spray & clean dry stall bedding",
+        medication: "Antiseptic spray",
         startDate: "2025-02-18",
         endDate: "2025-02-28",
         status: "Ongoing",
-        notes: "Clean hoof daily and keep away from moisture.",
+        notes: "Isolate in clean dry pen.",
         followUpDate: "2025-02-25",
       }
     ];
@@ -367,8 +376,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       { id: "w1", animal_id: "a1", weight: 18.5, date: "2024-10-01" },
       { id: "w2", animal_id: "a1", weight: 22.1, date: "2025-01-10" },
       { id: "w3", animal_id: "a2", weight: 65.0, date: "2024-12-01" },
-      { id: "w4", animal_id: "a2", weight: 70.2, date: "2025-02-05" },
-      { id: "w5", animal_id: "a3", weight: 14.8, date: "2025-01-20" }
+      { id: "w4", animal_id: "a2", weight: 70.2, date: "2025-02-05" }
     ];
 
     const initialBreeding: BreedingRecord[] = [
@@ -378,7 +386,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         male_id: "a2",
         date: "2024-08-12",
         status: "Gave Birth",
-        notes: "Gave birth successfully to kid Toto (GOAT-0026) with zero complications.",
+        notes: "Produced healthy male kid GOAT-0026.",
       }
     ];
 
@@ -387,10 +395,10 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         id: "i1",
         name: "Maize Feed Bags",
         category: "Feed",
-        quantity: 14,
+        quantity: 12,
         unit: "Bags (50kg)",
         minStock: 5,
-        notes: "High quality energy booster feed for breeding stages.",
+        notes: "High quality energy booster feed.",
       },
       {
         id: "i2",
@@ -399,17 +407,16 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         quantity: 2,
         unit: "Bottles (100ml)",
         minStock: 3,
-        expiryDate: "2026-08-15",
-        notes: "Store under refrigeration. Crucial for open bacterial wounds.",
+        notes: "Keep in cool storage. For veterinary treatment only.",
       },
       {
         id: "i3",
-        name: "Automatic Poultry Feeder",
+        name: "Gravity Chicken Feeder",
         category: "Equipment",
-        quantity: 10,
+        quantity: 8,
         unit: "Units",
         minStock: 2,
-        notes: "Plastic gravity-assisted chicken feeders.",
+        notes: "Standard poultry yard feeders.",
       }
     ];
 
@@ -417,20 +424,11 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       {
         id: "tx1",
         item_id: "i1",
-        quantity: 20,
+        quantity: 15,
         type: "add",
         date: "2025-02-10",
-        notes: "Bulk buy from Kano Grain Feed Wholesaler",
-        recordedBy: "Abdul",
-      },
-      {
-        id: "tx2",
-        item_id: "i1",
-        quantity: 6,
-        type: "remove",
-        date: "2025-02-19",
-        notes: "Weekly feeding ration distributed among all goat units.",
-        recordedBy: "Uncle",
+        notes: "Feed supply restock",
+        recordedBy: "Y",
       }
     ];
 
@@ -443,15 +441,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         whatsapp: "+234 803 111 2222",
         email: "bellovet@gmail.com",
         address: "Zaria Road, Kano",
-        notes: "Excellent livestock consultant. Available on short notice.",
-      },
-      {
-        id: "c2",
-        name: "Kano Agro Allies Ltd",
-        role: "Medication Supplier",
-        phone: "+234 812 345 6789",
-        email: "orders@kanoagro.com",
-        notes: "Distributor of veterinary medicines, vaccines, and high-quality livestock supplies.",
+        notes: "Chief livestock consultant.",
       }
     ];
 
@@ -463,7 +453,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         dueDate: "2025-02-25",
         animal_id: "a3",
         completed: false,
-        notes: "Inspect hoof moisture levels and apply healing dust wash.",
+        notes: "Inspect hoof moisture levels.",
       },
       {
         id: "r2",
@@ -472,15 +462,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         dueDate: "2025-03-10",
         animal_id: "a4",
         completed: false,
-        notes: "First booster scheduled for young kid Toto.",
-      },
-      {
-        id: "r3",
-        title: "Stock up on Penicillin spray",
-        type: "Other",
-        dueDate: "2025-02-28",
-        completed: false,
-        notes: "Penicillin level dropped below threshold limit.",
       }
     ];
 
@@ -488,26 +469,10 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       {
         id: "l1",
         type: "Animal Added",
-        description: "Registered Toto (GOAT-0026) under parent Aisha.",
+        description: "Registered Toto (GOAT-0026) offspring of Aisha.",
         date: "2025-01-10T08:30:00Z",
-        actor: "Uncle",
+        actor: "Y",
         targetId: "a4",
-      },
-      {
-        id: "l2",
-        type: "Treatment Started",
-        description: "Started hoof rot plan for Nala (GOAT-0025).",
-        date: "2025-02-18T10:15:00Z",
-        actor: "Abdul",
-        targetId: "a3",
-      },
-      {
-        id: "l3",
-        type: "Inventory Used",
-        description: "Disbursed 6 bags of Maize Feed Bags.",
-        date: "2025-02-19T16:00:00Z",
-        actor: "Uncle",
-        targetId: "i1",
       }
     ];
 
@@ -534,8 +499,55 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     saveState("farm_logs", initialLogs);
   };
 
+  const login = (email: string, farmName: string): boolean => {
+    // For local mockup/personal farm use, easily authorize standard logins
+    const currentProfile = { ...farmProfile, name: farmName || "Adam" };
+    setFarmProfile(currentProfile);
+    saveState("farm_profile", currentProfile);
+
+    const userSession = {
+      email: email,
+      name: farmProfile.ownerName,
+      isAuthenticated: true
+    };
+    setSession(userSession);
+    saveState("farm_user_session", userSession);
+    showSuccess(`Logged into your farm: ${currentProfile.name}`);
+    return true;
+  };
+
+  const signupAndSetup = (email: string, name: string, farmName: string, location: string) => {
+    const updatedProfile: FarmProfile = {
+      name: farmName || "Adam",
+      description: `Premium agricultural production unit managed by ${name}.`,
+      ownerName: name || "Y",
+      location: location || "Kano, Nigeria",
+      image: "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=600&auto=format&fit=crop&q=80",
+    };
+    setFarmProfile(updatedProfile);
+    saveState("farm_profile", updatedProfile);
+
+    const userSession = {
+      email,
+      name,
+      isAuthenticated: true
+    };
+    setSession(userSession);
+    saveState("farm_user_session", userSession);
+
+    // Re-seed to match newly created custom configurations
+    seedSampleData();
+    showSuccess(`Farm setup complete! Welcome to ${farmName}!`);
+  };
+
+  const logout = () => {
+    const userSession = { email: "", name: "", isAuthenticated: false };
+    setSession(userSession);
+    saveState("farm_user_session", userSession);
+    showSuccess("Logged out of session.");
+  };
+
   const addAnimal = (animalData: Omit<Animal, "id" | "animal_code" | "created_at">) => {
-    // Determine last sequence code for prefixing
     const prefix = animalData.species.toUpperCase();
     const speciesAnimals = animals.filter(a => a.species === animalData.species);
     const nextSeq = speciesAnimals.length + 1;
@@ -553,7 +565,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAnimals(updated);
     saveState("farm_animals", updated);
 
-    // If parents exist, map relationships
+    // Establish lineage relationships
     if (animalData.parents?.motherId) {
       setAnimals(prev => {
         const revised = prev.map(a => {
@@ -585,16 +597,15 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
     }
 
-    logActivity("Animal Registered", `Registered new ${animalData.species} named ${animalData.name || generatedCode}`, "You", newAnimal.id);
-    showSuccess(`${animalData.species} ${generatedCode} successfully registered!`);
+    logActivity("Animal Registered", `Registered ${animalData.species} named ${animalData.name || generatedCode}`, farmProfile.ownerName, newAnimal.id);
   };
 
   const updateAnimal = (id: string, updates: Partial<Animal>) => {
     const updated = animals.map(a => (a.id === id ? { ...a, ...updates } : a));
     setAnimals(updated);
     saveState("farm_animals", updated);
-    logActivity("Animal Updated", `Updated details of ${animals.find(a => a.id === id)?.animal_code}`, "You", id);
-    showSuccess("Animal records updated successfully");
+    logActivity("Animal Updated", `Updated details of ${animals.find(a => a.id === id)?.animal_code}`, farmProfile.ownerName, id);
+    showSuccess("Animal updated");
   };
 
   const deleteAnimal = (id: string) => {
@@ -603,20 +614,16 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const updated = animals.filter(a => a.id !== id);
     setAnimals(updated);
     saveState("farm_animals", updated);
-    logActivity("Animal Removed", `Archived/Removed livestock ${animal.animal_code}`, "You");
+    logActivity("Animal Removed", `Removed ${animal.animal_code}`, farmProfile.ownerName);
     showSuccess("Animal removed successfully");
   };
 
   const addHealthRecord = (record: Omit<HealthRecord, "id">) => {
-    const newRecord: HealthRecord = {
-      ...record,
-      id: "h_" + Date.now(),
-    };
+    const newRecord: HealthRecord = { ...record, id: "h_" + Date.now() };
     const updated = [newRecord, ...healthRecords];
     setHealthRecords(updated);
     saveState("farm_health", updated);
 
-    // Update animal status dynamically based on record
     let newStatus: Animal["status"] = "Healthy";
     let hStatus: Animal["healthStatus"] = "Healthy";
     if (record.type === "Diagnosis" || record.type === "Observation") {
@@ -638,21 +645,16 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return next;
     });
 
-    const animalName = animals.find(a => a.id === record.animal_id)?.animal_code || "animal";
-    logActivity("Health Logged", `Logged ${record.type} for ${animalName}`, record.recordedBy, record.animal_id);
-    showSuccess(`Health observation recorded for ${animalName}`);
+    logActivity("Health Logged", `Logged ${record.type} for ${animals.find(a => a.id === record.animal_id)?.animal_code}`, record.recordedBy, record.animal_id);
+    showSuccess("Health observation logged");
   };
 
   const addTreatment = (treatmentData: Omit<Treatment, "id">) => {
-    const newTx: Treatment = {
-      ...treatmentData,
-      id: "t_" + Date.now(),
-    };
+    const newTx: Treatment = { ...treatmentData, id: "t_" + Date.now() };
     const updated = [newTx, ...treatments];
     setTreatments(updated);
     saveState("farm_treatments", updated);
 
-    // Force animal status to Under Treatment
     setAnimals(prev => {
       const next = prev.map(a => {
         if (a.id === treatmentData.animal_id) {
@@ -664,20 +666,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return next;
     });
 
-    const animalName = animals.find(a => a.id === treatmentData.animal_id)?.animal_code || "animal";
-    logActivity("Treatment Began", `Initiated treatment plan for ${treatmentData.condition} on ${animalName}`, "You", treatmentData.animal_id);
-    showSuccess(`Treatment scheduled for ${animalName}`);
-
-    // Create automatic follow-up reminder
-    if (treatmentData.followUpDate) {
-      addReminder({
-        title: `Follow up: ${treatmentData.condition} treatment`,
-        type: "Treatment",
-        dueDate: treatmentData.followUpDate,
-        animal_id: treatmentData.animal_id,
-        notes: `Check progress of: ${treatmentData.medication}`,
-      });
-    }
+    logActivity("Treatment Began", `Treatment started for ${treatmentData.condition}`, farmProfile.ownerName, treatmentData.animal_id);
+    showSuccess("Treatment registered");
   };
 
   const updateTreatmentStatus = (id: string, status: "Ongoing" | "Completed" | "Stopped") => {
@@ -688,7 +678,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setTreatments(updated);
     saveState("farm_treatments", updated);
 
-    // If completed or stopped, revert animal health status back to Healthy or Active
     if (status === "Completed") {
       setAnimals(prev => {
         const next = prev.map(a => {
@@ -700,20 +689,10 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         saveState("farm_animals", next);
         return next;
       });
-
-      // Log a quick healthy health log
-      addHealthRecord({
-        animal_id: currentTx.animal_id,
-        type: "Observation",
-        date: new Date().toISOString().split("T")[0],
-        details: `Successfully completed treatment plan for ${currentTx.condition}. Animal showing normal vitality.`,
-        recordedBy: "System",
-      });
     }
 
-    const animalName = animals.find(a => a.id === currentTx.animal_id)?.animal_code || "animal";
-    logActivity("Treatment Closed", `Marked treatment ${currentTx.condition} as ${status} for ${animalName}`, "You", currentTx.animal_id);
-    showSuccess(`Treatment plan updated to: ${status}`);
+    logActivity("Treatment Updated", `Marked treatment as ${status}`, farmProfile.ownerName, currentTx.animal_id);
+    showSuccess(`Treatment status: ${status}`);
   };
 
   const addWeightRecord = (record: Omit<WeightRecord, "id">) => {
@@ -721,10 +700,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const updated = [...weightRecords, newWeight];
     setWeightRecords(updated);
     saveState("farm_weights", updated);
-
-    const animalName = animals.find(a => a.id === record.animal_id)?.animal_code || "animal";
-    logActivity("Weight Recorded", `Logged new weight ${record.weight}kg for ${animalName}`, "You", record.animal_id);
-    showSuccess(`Weight logged for ${animalName}`);
+    showSuccess("Weight logged");
   };
 
   const addBreedingRecord = (record: Omit<BreedingRecord, "id">) => {
@@ -732,22 +708,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const updated = [newB, ...breedingRecords];
     setBreedingRecords(updated);
     saveState("farm_breeding", updated);
-
-    // Set breeding status of female animal
-    setAnimals(prev => {
-      const next = prev.map(a => {
-        if (a.id === record.female_id) {
-          return { ...a, status: record.status === "Pregnant" ? "Pregnant" : a.status };
-        }
-        return a;
-      });
-      saveState("farm_animals", next);
-      return next;
-    });
-
-    const femaleName = animals.find(a => a.id === record.female_id)?.animal_code || "female";
-    logActivity("Breeding Registered", `Logged mating record for dam ${femaleName}`, "You", record.female_id);
-    showSuccess(`Breeding session recorded for ${femaleName}`);
+    showSuccess("Breeding registered");
   };
 
   const addInventoryItem = (item: Omit<InventoryItem, "id">) => {
@@ -755,8 +716,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const updated = [...inventory, newItem];
     setInventory(updated);
     saveState("farm_inventory", updated);
-    logActivity("Inventory Added", `Added stock item ${item.name} to storage`, "You");
-    showSuccess(`${item.name} added to inventory`);
+    showSuccess("Inventory item created");
   };
 
   const updateInventoryStock = (itemId: string, qtyChange: number, type: "add" | "remove" | "adjust", notes: string, recordedBy: string) => {
@@ -777,7 +737,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setInventory(updated);
     saveState("farm_inventory", updated);
 
-    // Create a transaction log
     const newTx: InventoryTransaction = {
       id: "tx_" + Date.now(),
       item_id: itemId,
@@ -791,8 +750,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setInventoryTransactions(nextTx);
     saveState("farm_inventory_tx", nextTx);
 
-    logActivity("Inventory Stock Changed", `${type === "add" ? "Added" : "Removed"} stock of ${item.name} (${qtyChange} units)`, recordedBy);
-    showSuccess(`Inventory updated for ${item.name}`);
+    showSuccess("Storage stock adjusted");
   };
 
   const addContact = (contact: Omit<Contact, "id">) => {
@@ -800,22 +758,20 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const updated = [...contacts, newC];
     setContacts(updated);
     saveState("farm_contacts", updated);
-    logActivity("Contact Added", `Created contact ${contact.name}`, "You");
-    showSuccess(`Contact ${contact.name} saved successfully`);
+    showSuccess("Contact saved");
   };
 
   const updateContact = (id: string, updates: Partial<Contact>) => {
     const updated = contacts.map(c => (c.id === id ? { ...c, ...updates } : c));
     setContacts(updated);
     saveState("farm_contacts", updated);
-    showSuccess("Contact updated");
   };
 
   const deleteContact = (id: string) => {
     const updated = contacts.filter(c => c.id !== id);
     setContacts(updated);
     saveState("farm_contacts", updated);
-    showSuccess("Contact deleted");
+    showSuccess("Contact removed");
   };
 
   const addReminder = (reminder: Omit<Reminder, "id" | "completed">) => {
@@ -823,36 +779,13 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const updated = [newR, ...reminders];
     setReminders(updated);
     saveState("farm_reminders", updated);
-    showSuccess(`Reminder scheduled: ${reminder.title}`);
+    showSuccess("Reminder set");
   };
 
   const toggleReminder = (id: string) => {
     const updated = reminders.map(r => (r.id === id ? { ...r, completed: !r.completed } : r));
     setReminders(updated);
     saveState("farm_reminders", updated);
-    showSuccess("Reminder status updated");
-  };
-
-  const logActivity = (type: string, description: string, actor: string, targetId?: string) => {
-    const log: ActivityLog = {
-      id: "l_" + Date.now(),
-      type,
-      description,
-      date: new Date().toISOString(),
-      actor,
-      targetId,
-    };
-    setActivityLogs(prev => {
-      const next = [log, ...prev].slice(0, 50); // limit to last 50 activities
-      saveState("farm_logs", next);
-      return next;
-    });
-  };
-
-  const updateFarmProfile = (profile: FarmProfile) => {
-    setFarmProfile(profile);
-    saveState("farm_profile", profile);
-    showSuccess("Farm profile updated successfully");
   };
 
   const incrementAiUsage = (type: "text" | "image") => {
@@ -882,6 +815,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         reminders,
         activityLogs,
         farmProfile,
+        session,
         aiUsage,
         addAnimal,
         updateAnimal,
@@ -901,6 +835,9 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         logActivity,
         updateFarmProfile,
         incrementAiUsage,
+        login,
+        signupAndSetup,
+        logout,
         seedSampleData,
       }}
     >

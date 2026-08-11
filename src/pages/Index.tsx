@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { useFarm, Animal, HealthRecord, Treatment, InventoryItem, Contact, Reminder } from "@/context/FarmContext";
 import { ReportDownloader } from "@/components/ReportDownloader";
 import { 
@@ -30,7 +30,12 @@ import {
   Sparkles,
   Info,
   Layers,
-  Sparkle
+  Sparkle,
+  LogOut,
+  Upload,
+  UserPlus,
+  Compass,
+  Briefcase
 } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 
@@ -47,6 +52,7 @@ const Index = () => {
     reminders,
     activityLogs,
     farmProfile,
+    session,
     aiUsage,
     addAnimal,
     updateAnimal,
@@ -62,14 +68,27 @@ const Index = () => {
     deleteContact,
     addReminder,
     toggleReminder,
-    updateFarmProfile
+    updateFarmProfile,
+    login,
+    signupAndSetup,
+    logout
   } = useFarm();
 
-  // Selected bottom navigation tab: 'dashboard' | 'animals' | 'ai' | 'inventory' | 'settings'
+  // Active Bottom Navigation Tab: 'dashboard' | 'animals' | 'ai' | 'inventory' | 'settings'
   const [activeTab, setActiveTab] = useState<"dashboard" | "animals" | "ai" | "inventory" | "settings">("dashboard");
 
   // Selected animal detail modal/drawer
   const [selectedAnimal, setSelectedAnimal] = useState<Animal | null>(null);
+
+  // Authentication Flow States: 'welcome' | 'login' | 'signup' | 'app'
+  const [authScreen, setAuthScreen] = useState<"welcome" | "login" | "signup">("welcome");
+
+  // Authentication credentials forms
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authFarmName, setAuthFarmName] = useState("");
+  const [authOperatorName, setAuthOperatorName] = useState("");
+  const [authLocation, setAuthLocation] = useState("");
 
   // New animal form state
   const [showAddAnimal, setShowAddAnimal] = useState(false);
@@ -87,6 +106,9 @@ const Index = () => {
     fatherId: "",
   });
 
+  // Photo uploads
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   // Health record form state
   const [showAddHealth, setShowAddHealth] = useState(false);
   const [selectedAnimalForHealth, setSelectedAnimalForHealth] = useState("");
@@ -94,7 +116,7 @@ const Index = () => {
     type: "Observation" as HealthRecord["type"],
     details: "",
     medication: "",
-    recordedBy: "Abdul",
+    recordedBy: farmProfile.ownerName || "Abdul",
     date: new Date().toISOString().split("T")[0],
   });
 
@@ -127,15 +149,6 @@ const Index = () => {
   const [adjustType, setAdjustType] = useState<"add" | "remove">("add");
   const [adjustNotes, setAdjustNotes] = useState("");
 
-  // Weight entry state
-  const [showAddWeight, setShowAddWeight] = useState(false);
-  const [selectedAnimalForWeight, setSelectedAnimalForWeight] = useState("");
-  const [newWeight, setNewWeight] = useState({
-    weight: 20,
-    date: new Date().toISOString().split("T")[0],
-    notes: "",
-  });
-
   // Contact State
   const [showAddContact, setShowAddContact] = useState(false);
   const [newContact, setNewContact] = useState({
@@ -157,14 +170,58 @@ const Index = () => {
   const [editProfile, setEditProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({ ...farmProfile });
 
-  // Camera upload simulator helper
+  // Handle Photo File selection and Camera capture
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (typeof reader.result === "string") {
+          setNewAnimal(prev => ({ ...prev, primaryPhoto: reader.result as string }));
+          showSuccess("Live livestock portrait attached!");
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Preset portrait helper
   const handleSimulatePhoto = (type: "goat" | "ram" | "chicken") => {
     let url = "";
     if (type === "goat") url = "https://images.unsplash.com/photo-1524413840807-0c3cb6fa808d?w=500&auto=format&fit=crop&q=80";
     if (type === "ram") url = "https://images.unsplash.com/photo-1484557985045-edf25e08da73?w=500&auto=format&fit=crop&q=80";
     if (type === "chicken") url = "https://images.unsplash.com/photo-1548550023-2bdb3c5beed7?w=500&auto=format&fit=crop&q=80";
     setNewAnimal(prev => ({ ...prev, primaryPhoto: url }));
-    showSuccess("Simulated camera snapshot attached!");
+    showSuccess("Preset animal portrait selected!");
+  };
+
+  // Auth operations
+  const handleLoginSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!authEmail || !authPassword) {
+      showError("Please fill out your operator credentials.");
+      return;
+    }
+    const success = login(authEmail, authFarmName || "Adam");
+    if (success) {
+      setAuthEmail("");
+      setAuthPassword("");
+    }
+  };
+
+  const handleSignupSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!authEmail || !authPassword || !authFarmName || !authOperatorName) {
+      showError("All principal fields are required for initial farm setup.");
+      return;
+    }
+    signupAndSetup(authEmail, authOperatorName, authFarmName, authLocation || "Kano, Nigeria");
+    // reset form
+    setAuthEmail("");
+    setAuthPassword("");
+    setAuthFarmName("");
+    setAuthOperatorName("");
+    setAuthLocation("");
   };
 
   // Submit handlers
@@ -173,7 +230,7 @@ const Index = () => {
     addAnimal({
       name: newAnimal.name,
       species: newAnimal.species,
-      breed: newAnimal.breed || "Local Mix",
+      breed: newAnimal.breed || "Local Breed",
       sex: newAnimal.sex,
       dob: newAnimal.dob,
       source: newAnimal.source,
@@ -206,7 +263,7 @@ const Index = () => {
   const handleCreateHealth = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedAnimalForHealth) {
-      showError("Please pick an animal");
+      showError("Please select the target animal.");
       return;
     }
     addHealthRecord({
@@ -222,7 +279,7 @@ const Index = () => {
       type: "Observation",
       details: "",
       medication: "",
-      recordedBy: "Abdul",
+      recordedBy: farmProfile.ownerName || "Abdul",
       date: new Date().toISOString().split("T")[0],
     });
   };
@@ -275,18 +332,6 @@ const Index = () => {
     });
   };
 
-  const handleCreateWeight = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedAnimalForWeight) return;
-    addWeightRecord({
-      animal_id: selectedAnimalForWeight,
-      weight: Number(newWeight.weight),
-      date: newWeight.date,
-      notes: newWeight.notes,
-    });
-    setShowAddWeight(false);
-  };
-
   const handleCreateContact = (e: React.FormEvent) => {
     e.preventDefault();
     addContact({
@@ -318,20 +363,21 @@ const Index = () => {
       adjustQty,
       adjustType === "add" ? "add" : "remove",
       adjustNotes || "Manual stock correction",
-      "Abdul"
+      farmProfile.ownerName || "Abdul"
     );
     setAdjustingItem(null);
     setAdjustNotes("");
   };
 
-  // Helper selectors
+  // Counts & metrics for farm profile
   const totalAnimals = animals.length;
   const goatsCount = animals.filter(a => a.species === "Goat").length;
   const ramsCount = animals.filter(a => a.species === "Ram").length;
   const chickensCount = animals.filter(a => a.species === "Chicken").length;
-  const healthIssuesCount = animals.filter(a => a.healthStatus === "Sick" || a.healthStatus === "Under Treatment" || a.healthStatus === "Monitoring").length;
+  const otherCount = animals.filter(a => a.species === "Other").length;
+  const activeCount = animals.filter(a => a.status !== "Sold" && a.status !== "Deceased").length;
+  const attentionCount = animals.filter(a => a.status === "Sick" || a.status === "Under Treatment" || a.status === "Monitoring").length;
 
-  // Filter animals roster
   const filteredAnimals = animals.filter(animal => {
     const codeMatch = animal.animal_code.toLowerCase().includes(searchQuery.toLowerCase());
     const nameMatch = animal.name?.toLowerCase().includes(searchQuery.toLowerCase());
@@ -344,41 +390,351 @@ const Index = () => {
     return queryMatch && speciesMatch && statusMatch;
   });
 
+  // IF NOT AUTHENTICATED: Present beautiful Welcome/Onboarding portal
+  if (!session.isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <div className="w-full max-w-md bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-100">
+          
+          {/* Cover Landscape */}
+          <div className="h-44 bg-gradient-to-tr from-emerald-800 to-emerald-600 p-6 flex flex-col justify-end text-white relative">
+            <div className="absolute top-4 right-4 w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center text-2xl font-bold border border-white/20">
+              🚜
+            </div>
+            <span className="text-xs uppercase font-extrabold tracking-widest text-emerald-200">Livestock OS v1</span>
+            <h1 className="text-2xl font-black mt-1">Farm Management</h1>
+          </div>
+
+          {/* WELCOME PORTAL */}
+          {authScreen === "welcome" && (
+            <div className="p-6 space-y-6">
+              <div className="space-y-2">
+                <h2 className="text-lg font-bold text-slate-950">Digital identity and records on the go</h2>
+                <p className="text-slate-600 text-xs leading-relaxed">
+                  Easily register every animal, photograph ewes/sire studs on the field, manage vaccine charts, track treatment plans, and log storage inventory. Built primarily for family operator environments.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3">
+                <button
+                  onClick={() => setAuthScreen("signup")}
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2"
+                >
+                  <UserPlus size={16} />
+                  Setup New Farm Account
+                </button>
+                <button
+                  onClick={() => setAuthScreen("login")}
+                  className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl transition flex items-center justify-center gap-2"
+                >
+                  <Compass size={16} />
+                  Login to Existing Farm
+                </button>
+              </div>
+
+              <div className="text-center pt-2">
+                <span className="text-[10px] text-slate-400 font-medium">
+                  Green Valley Livestock OS &copy; {new Date().getFullYear()}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* SIGNUP / SETUP FARM */}
+          {authScreen === "signup" && (
+            <form onSubmit={handleSignupSubmit} className="p-6 space-y-4">
+              <div className="space-y-1">
+                <h2 className="text-lg font-black text-slate-900">Setup Your Farm Profile</h2>
+                <p className="text-xs text-slate-500">Create your operator credentials and farm identity.</p>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 block mb-1">Owner / Operator Name</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Abdulazeez Adam"
+                    value={authOperatorName}
+                    onChange={(e) => setAuthOperatorName(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-emerald-500"
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 block mb-1">Farm Name</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Adam Farms"
+                      value={authFarmName}
+                      onChange={(e) => setAuthFarmName(e.target.value)}
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-emerald-500"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 block mb-1">Geographic Location</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Kano, Nigeria"
+                      value={authLocation}
+                      onChange={(e) => setAuthLocation(e.target.value)}
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 block mb-1">Email Address</label>
+                  <input
+                    type="email"
+                    placeholder="operator@myfarm.com"
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-emerald-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 block mb-1">Password</label>
+                  <input
+                    type="password"
+                    placeholder="••••••••"
+                    value={authPassword}
+                    onChange={(e) => setAuthPassword(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-emerald-500"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2 space-y-2">
+                <button
+                  type="submit"
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition"
+                >
+                  Create Account & Initialize Farm
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAuthScreen("welcome")}
+                  className="w-full py-2.5 text-slate-500 hover:text-slate-700 text-xs font-semibold"
+                >
+                  Back to main portal
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* LOGIN PAGE */}
+          {authScreen === "login" && (
+            <form onSubmit={handleLoginSubmit} className="p-6 space-y-4">
+              <div className="space-y-1 text-center">
+                <h2 className="text-lg font-black text-slate-900">Operator Log In</h2>
+                <p className="text-xs text-slate-500">Access your digital farm records securely.</p>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 block mb-1">Farm Name visually (Optional)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Adam"
+                    value={authFarmName}
+                    onChange={(e) => setAuthFarmName(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 block mb-1">Email Address</label>
+                  <input
+                    type="email"
+                    placeholder="operator@myfarm.com"
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-emerald-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 block mb-1">Password</label>
+                  <input
+                    type="password"
+                    placeholder="••••••••"
+                    value={authPassword}
+                    onChange={(e) => setAuthPassword(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-emerald-500"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2 space-y-2">
+                <button
+                  type="submit"
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition"
+                >
+                  Log In to Farm Session
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAuthScreen("welcome")}
+                  className="w-full py-2.5 text-slate-500 hover:text-slate-700 text-xs font-semibold"
+                >
+                  Back to main portal
+                </button>
+              </div>
+            </form>
+          )}
+
+        </div>
+      </div>
+    );
+  }
+
+  // IF AUTHENTICATED: Display the responsive Desktop-ready main application UI
   return (
-    <div className="min-h-screen bg-[#FDFEFC] text-slate-800 pb-28 font-sans">
+    <div className="min-h-screen bg-[#FBFDF9] text-slate-800 font-sans flex flex-col md:flex-row">
       
-      {/* Top Brand Header */}
-      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-emerald-100 shadow-sm px-4 py-3">
-        <div className="max-w-md mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-9 h-9 bg-emerald-600 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-md">
+      {/* DESKTOP SIDEBAR NAVIGATION PANEL (Visible on MD screens and above) */}
+      <aside className="hidden md:flex flex-col w-64 bg-emerald-950 text-white shrink-0 justify-between p-6 sticky top-0 h-screen border-r border-emerald-900">
+        <div className="space-y-8">
+          
+          {/* Brand header */}
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-white/10 rounded-2xl flex items-center justify-center text-xl shadow border border-white/20">
               🚜
             </div>
             <div>
-              <h1 className="font-extrabold text-emerald-950 text-base leading-none">
-                {farmProfile.name}
-              </h1>
-              <p className="text-[10px] text-emerald-700 font-semibold tracking-wide uppercase">
-                {farmProfile.location} • {farmProfile.ownerName}
+              <h2 className="font-extrabold text-base leading-none text-white tracking-wide">{farmProfile.name}</h2>
+              <p className="text-[10px] text-emerald-300 font-bold uppercase mt-1 tracking-wider">
+                {farmProfile.location}
               </p>
             </div>
           </div>
+
+          {/* Navigation Links */}
+          <div className="space-y-1">
+            <p className="text-[10px] font-extrabold text-emerald-300 uppercase tracking-widest px-2 mb-2">Main Menu</p>
+            
+            <button
+              onClick={() => setActiveTab("dashboard")}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === "dashboard" ? "bg-emerald-600 text-white shadow-md scale-102" : "text-emerald-100/75 hover:bg-white/5 hover:text-white"
+              }`}
+            >
+              <Home size={16} />
+              Dashboard
+            </button>
+
+            <button
+              onClick={() => setActiveTab("animals")}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === "animals" ? "bg-emerald-600 text-white shadow-md scale-102" : "text-emerald-100/75 hover:bg-white/5 hover:text-white"
+              }`}
+            >
+              <span className="text-xs">🐐</span>
+              Animals Directory
+            </button>
+
+            <button
+              onClick={() => setActiveTab("ai")}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === "ai" ? "bg-emerald-600 text-white shadow-md scale-102" : "text-emerald-100/75 hover:bg-white/5 hover:text-white"
+              }`}
+            >
+              <span className="text-xs">🤖</span>
+              Farm AI
+            </button>
+
+            <button
+              onClick={() => setActiveTab("inventory")}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === "inventory" ? "text-emerald-600 text-white shadow-md scale-102" : "text-emerald-100/75 hover:bg-white/5 hover:text-white"
+              }`}
+            >
+              <Package size={16} />
+              Feed & Inventory
+            </button>
+
+            <button
+              onClick={() => setActiveTab("settings")}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === "settings" ? "bg-emerald-600 text-white shadow-md scale-102" : "text-emerald-100/75 hover:bg-white/5 hover:text-white"
+              }`}
+            >
+              <SettingsIcon size={16} />
+              Farm Settings
+            </button>
+          </div>
+
+        </div>
+
+        {/* Operator Profile and Signout */}
+        <div className="pt-4 border-t border-emerald-900/60 space-y-4">
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse" />
-            <span className="text-xs text-emerald-800 font-medium">Live Server</span>
+            <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-xs font-black">
+              {farmProfile.ownerName.charAt(0)}
+            </div>
+            <div>
+              <span className="text-xs font-bold text-white block">{farmProfile.ownerName}</span>
+              <span className="text-[9px] text-emerald-300 block">Operator Account</span>
+            </div>
+          </div>
+          <button
+            onClick={logout}
+            className="w-full py-2 bg-emerald-900/40 hover:bg-emerald-950 text-emerald-300 hover:text-white rounded-xl text-[11px] font-black transition flex items-center justify-center gap-1.5"
+          >
+            <LogOut size={12} />
+            Sign Out Session
+          </button>
+        </div>
+      </aside>
+
+      {/* MOBILE HEADER (Visible on mobile/tablet) */}
+      <header className="md:hidden sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-emerald-100 shadow-sm px-4 py-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-9 h-9 bg-emerald-600 rounded-xl flex items-center justify-center text-white font-bold text-lg">
+              🚜
+            </div>
+            <div>
+              <h1 className="font-extrabold text-emerald-950 text-sm leading-none">{farmProfile.name}</h1>
+              <p className="text-[10px] text-emerald-700 font-semibold uppercase">{farmProfile.location}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold bg-emerald-50 text-emerald-800 px-2.5 py-1 rounded-full">
+              Live OS
+            </span>
           </div>
         </div>
       </header>
 
-      {/* Main Container */}
-      <main className="max-w-md mx-auto px-4 pt-4">
+      {/* MAIN CONTENT AREA */}
+      <main className="flex-1 p-4 md:p-8 overflow-y-auto max-w-5xl mx-auto w-full pb-28 md:pb-8">
+
+        {/* Welcome Banner */}
+        <div className="mb-6 p-6 bg-gradient-to-r from-emerald-800 to-emerald-700 text-white rounded-3xl relative overflow-hidden shadow-md">
+          <div className="absolute right-0 top-0 w-36 h-36 bg-emerald-600/20 rounded-full blur-2xl" />
+          <span className="text-xs font-black uppercase tracking-wider text-emerald-200">Session Activated</span>
+          <h2 className="text-xl md:text-2xl font-black mt-1">Welcome back to {farmProfile.name} 👋</h2>
+          <p className="text-emerald-100 text-xs mt-1 max-w-md">
+            Active operator session is signed into database. Photograph studs, trace mother lineages, and review veterinary logs securely.
+          </p>
+        </div>
 
         {/* TAB 1: DASHBOARD */}
         {activeTab === "dashboard" && (
           <div className="space-y-6">
             
             {/* Quick Summary Cards Grid */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="bg-emerald-50/60 p-4 rounded-2xl border border-emerald-100/60">
                 <p className="text-xs font-semibold text-emerald-800 uppercase tracking-wider">Total Livestock</p>
                 <div className="flex items-baseline gap-2 mt-1">
@@ -395,175 +751,209 @@ const Index = () => {
               <div className="bg-amber-50/60 p-4 rounded-2xl border border-amber-100/60">
                 <p className="text-xs font-semibold text-amber-800 uppercase tracking-wider">Alerts & Attention</p>
                 <div className="flex items-baseline gap-2 mt-1">
-                  <span className="text-3xl font-black text-amber-950">{healthIssuesCount}</span>
+                  <span className="text-3xl font-black text-amber-950">{attentionCount}</span>
                   <span className="text-xs text-amber-700 font-medium">animals</span>
                 </div>
                 <p className="text-[10px] text-amber-800 mt-2">
                   {treatments.filter(t => t.status === "Ongoing").length} active treatments ongoing.
                 </p>
               </div>
-            </div>
 
-            {/* Quick Action Hub */}
-            <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
-              <h3 className="font-bold text-slate-900 text-sm mb-3 flex items-center gap-1.5">
-                <Plus size={16} className="text-emerald-600" />
-                Quick Action Farm Hand
-              </h3>
-              <div className="grid grid-cols-3 gap-2">
-                <button 
-                  onClick={() => { setShowAddAnimal(true); }}
-                  className="p-3 bg-emerald-50/70 hover:bg-emerald-100/70 rounded-xl text-center border border-emerald-100/40 transition"
-                >
-                  <span className="block text-xl mb-1">🐐</span>
-                  <span className="text-[11px] font-bold text-emerald-900 block leading-tight">Add Animal</span>
-                </button>
-                <button 
-                  onClick={() => { setShowAddHealth(true); }}
-                  className="p-3 bg-blue-50/70 hover:bg-blue-100/70 rounded-xl text-center border border-blue-100/40 transition"
-                >
-                  <span className="block text-xl mb-1">🩺</span>
-                  <span className="text-[11px] font-bold text-blue-900 block leading-tight">Log Health</span>
-                </button>
-                <button 
-                  onClick={() => { setShowAddTreatment(true); }}
-                  className="p-3 bg-purple-50/70 hover:bg-purple-100/70 rounded-xl text-center border border-purple-100/40 transition"
-                >
-                  <span className="block text-xl mb-1">💊</span>
-                  <span className="text-[11px] font-bold text-purple-900 block leading-tight">Add Rx</span>
-                </button>
+              <div className="bg-blue-50/60 p-4 rounded-2xl border border-blue-100/60">
+                <p className="text-xs font-semibold text-blue-800 uppercase tracking-wider">Active Inventory</p>
+                <div className="flex items-baseline gap-2 mt-1">
+                  <span className="text-3xl font-black text-blue-950">{inventory.length}</span>
+                  <span className="text-xs text-blue-700 font-medium">items</span>
+                </div>
+                <p className="text-[10px] text-blue-800 mt-2">
+                  {inventory.filter(i => i.quantity <= i.minStock).length} low stock alerts.
+                </p>
+              </div>
+
+              <div className="bg-purple-50/60 p-4 rounded-2xl border border-purple-100/60">
+                <p className="text-xs font-semibold text-purple-800 uppercase tracking-wider">Upcoming Tasks</p>
+                <div className="flex items-baseline gap-2 mt-1">
+                  <span className="text-3xl font-black text-purple-950">
+                    {reminders.filter(r => !r.completed).length}
+                  </span>
+                  <span className="text-xs text-purple-700 font-medium">reminders</span>
+                </div>
+                <p className="text-[10px] text-purple-800 mt-2">
+                  Vax & breeding followups.
+                </p>
               </div>
             </div>
 
-            {/* Today's Reminders & Vaccination Tracker */}
-            <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                  <Calendar size={16} className="text-emerald-600" />
-                  Due Today / Soon ({reminders.filter(r => !r.completed).length})
+            {/* Quick Action Hub & Reminders dual columns */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              
+              {/* Quick Actions Card */}
+              <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm space-y-4">
+                <h3 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                  <Plus size={16} className="text-emerald-600" />
+                  Quick Actions Farm Hand
                 </h3>
-                <button 
-                  onClick={() => {
-                    const title = prompt("Enter a brief title for your custom reminder:");
-                    if (title) {
-                      addReminder({
-                        title,
-                        type: "Other",
-                        dueDate: new Date().toISOString().split("T")[0],
-                        notes: "Manually registered reminder"
-                      });
-                    }
-                  }}
-                  className="text-xs font-bold text-emerald-600 hover:underline"
-                >
-                  + Add Reminder
-                </button>
+                <div className="grid grid-cols-3 gap-2.5">
+                  <button 
+                    onClick={() => setShowAddAnimal(true)}
+                    className="p-4 bg-emerald-50/70 hover:bg-emerald-100/70 rounded-2xl text-center border border-emerald-100/40 transition"
+                  >
+                    <span className="block text-2xl mb-1">🐐</span>
+                    <span className="text-[11px] font-bold text-emerald-900 block leading-tight">Add Animal</span>
+                  </button>
+                  <button 
+                    onClick={() => setShowAddHealth(true)}
+                    className="p-4 bg-blue-50/70 hover:bg-blue-100/70 rounded-2xl text-center border border-blue-100/40 transition"
+                  >
+                    <span className="block text-2xl mb-1">🩺</span>
+                    <span className="text-[11px] font-bold text-blue-900 block leading-tight">Log Health</span>
+                  </button>
+                  <button 
+                    onClick={() => setShowAddTreatment(true)}
+                    className="p-4 bg-purple-50/70 hover:bg-purple-100/70 rounded-2xl text-center border border-purple-100/40 transition"
+                  >
+                    <span className="block text-2xl mb-1">💊</span>
+                    <span className="text-[11px] font-bold text-purple-900 block leading-tight">Add Rx</span>
+                  </button>
+                </div>
               </div>
 
-              <div className="space-y-2">
-                {reminders.filter(r => !r.completed).map((rem) => {
-                  const targetAnimal = animals.find(a => a.id === rem.animal_id);
-                  return (
-                    <div 
-                      key={rem.id}
-                      onClick={() => toggleReminder(rem.id)}
-                      className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl flex items-center justify-between cursor-pointer transition border border-slate-100"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={`w-2 h-2 rounded-full ${
-                          rem.type === "Treatment" ? "bg-purple-500" :
-                          rem.type === "Vaccination" ? "bg-emerald-500" : "bg-blue-500"
-                        }`} />
-                        <div>
-                          <p className="text-xs font-bold text-slate-800">{rem.title}</p>
-                          {targetAnimal && (
-                            <p className="text-[10px] text-slate-500 font-semibold">
-                              Assigned to: {targetAnimal.animal_code} {targetAnimal.name && `(${targetAnimal.name})`}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold text-slate-500 bg-white px-2 py-0.5 rounded border">
-                          {rem.dueDate}
-                        </span>
-                        <div className="w-5 h-5 border rounded-md flex items-center justify-center text-slate-400 bg-white">
-                          <Check size={12} className="opacity-20 hover:opacity-100 transition" />
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-                {reminders.filter(r => !r.completed).length === 0 && (
-                  <div className="text-center p-6 text-slate-400 text-xs">
-                    🎉 Excellent! All scheduled livestock procedures and reminders completed.
-                  </div>
-                )}
-              </div>
-            </div>
+              {/* Due Reminders Card */}
+              <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                    <Calendar size={16} className="text-emerald-600" />
+                    Due Today / Soon ({reminders.filter(r => !r.completed).length})
+                  </h3>
+                  <button 
+                    onClick={() => {
+                      const title = prompt("Enter a brief title for your custom reminder:");
+                      if (title) {
+                        addReminder({
+                          title,
+                          type: "Other",
+                          dueDate: new Date().toISOString().split("T")[0],
+                          notes: "Manually registered reminder"
+                        });
+                      }
+                    }}
+                    className="text-xs font-bold text-emerald-600 hover:underline"
+                  >
+                    + Add Reminder
+                  </button>
+                </div>
 
-            {/* Inventory Alerts (Low stock feed or drugs) */}
-            <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
-              <h3 className="font-bold text-slate-900 text-sm mb-3 flex items-center gap-2">
-                <Boxes size={16} className="text-amber-500" />
-                Critical Stock Alerts
-              </h3>
-              <div className="space-y-2">
-                {inventory.map((item) => {
-                  const isLow = item.quantity <= item.minStock;
-                  if (!isLow) return null;
-                  return (
-                    <div key={item.id} className="p-3 bg-red-50/50 rounded-xl border border-red-100 flex items-center justify-between">
-                      <div>
-                        <p className="text-xs font-bold text-red-950">{item.name}</p>
-                        <p className="text-[10px] text-red-800">Only {item.quantity} {item.unit} left (Minimum threshold: {item.minStock})</p>
-                      </div>
-                      <button 
-                        onClick={() => {
-                          setAdjustingItem(item);
-                          setAdjustType("add");
-                          setAdjustQty(5);
-                        }}
-                        className="bg-white text-red-700 hover:bg-red-100 border border-red-200 text-xs font-bold px-2.5 py-1 rounded-lg"
+                <div className="space-y-2">
+                  {reminders.filter(r => !r.completed).map((rem) => {
+                    const targetAnimal = animals.find(a => a.id === rem.animal_id);
+                    return (
+                      <div 
+                        key={rem.id}
+                        onClick={() => toggleReminder(rem.id)}
+                        className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl flex items-center justify-between cursor-pointer transition border border-slate-100"
                       >
-                        Restock
-                      </button>
+                        <div className="flex items-center gap-3">
+                          <div className={`w-2 h-2 rounded-full ${
+                            rem.type === "Treatment" ? "bg-purple-500" :
+                            rem.type === "Vaccination" ? "bg-emerald-500" : "bg-blue-500"
+                          }`} />
+                          <div>
+                            <p className="text-xs font-bold text-slate-800">{rem.title}</p>
+                            {targetAnimal && (
+                              <p className="text-[10px] text-slate-500 font-semibold">
+                                Assigned to: {targetAnimal.animal_code} {targetAnimal.name && `(${targetAnimal.name})`}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold text-slate-500 bg-white px-2 py-0.5 rounded border">
+                            {rem.dueDate}
+                          </span>
+                          <div className="w-5 h-5 border rounded-md flex items-center justify-center text-slate-400 bg-white">
+                            <Check size={12} className="opacity-20 hover:opacity-100 transition" />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {reminders.filter(r => !r.completed).length === 0 && (
+                    <div className="text-center p-6 text-slate-400 text-xs">
+                      🎉 Excellent! All scheduled livestock procedures and reminders completed.
                     </div>
-                  );
-                })}
-                {inventory.every(item => item.quantity > item.minStock) && (
-                  <p className="text-center py-4 text-xs text-emerald-800 bg-emerald-50/20 rounded-xl border border-dashed border-emerald-100">
-                    👍 Feeding stock and medical dispensaries are currently optimal.
-                  </p>
-                )}
+                  )}
+                </div>
               </div>
+
             </div>
 
-            {/* Recent Live Activity Logs */}
-            <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
-              <h3 className="font-bold text-slate-900 text-sm mb-3 flex items-center gap-2">
-                <Activity size={16} className="text-emerald-600" />
-                Live Farm Operations Stream
-              </h3>
-              <div className="space-y-3 relative before:absolute before:inset-y-1 before:left-3 before:w-[1px] before:bg-slate-100">
-                {activityLogs.slice(0, 5).map((log) => (
-                  <div key={log.id} className="flex gap-3 text-xs relative pl-6">
-                    <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center text-[10px] absolute left-0 top-0.5 border border-emerald-200">
-                      📝
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-black text-slate-800">{log.type}</span>
-                        <span className="text-[9px] text-slate-400">by {log.actor}</span>
+            {/* Critical Stock Alerts & Recent Activities split */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              
+              {/* Stock Alerts */}
+              <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm space-y-4">
+                <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                  <Boxes size={16} className="text-amber-500" />
+                  Critical Stock Alerts
+                </h3>
+                <div className="space-y-2">
+                  {inventory.map((item) => {
+                    const isLow = item.quantity <= item.minStock;
+                    if (!isLow) return null;
+                    return (
+                      <div key={item.id} className="p-3 bg-red-50/50 rounded-xl border border-red-100 flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-bold text-red-950">{item.name}</p>
+                          <p className="text-[10px] text-red-800">Only {item.quantity} {item.unit} left (Minimum: {item.minStock})</p>
+                        </div>
+                        <button 
+                          onClick={() => {
+                            setAdjustingItem(item);
+                            setAdjustType("add");
+                            setAdjustQty(5);
+                          }}
+                          className="bg-white text-red-700 hover:bg-red-100 border border-red-200 text-xs font-bold px-2.5 py-1 rounded-lg"
+                        >
+                          Restock
+                        </button>
                       </div>
-                      <p className="text-slate-600 mt-0.5">{log.description}</p>
-                      <span className="text-[9px] text-slate-400 block mt-1">
-                        {new Date(log.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                    );
+                  })}
+                  {inventory.every(item => item.quantity > item.minStock) && (
+                    <p className="text-center py-4 text-xs text-emerald-800 bg-emerald-50/20 rounded-xl border border-dashed border-emerald-100">
+                      👍 Feeding stock and medical dispensaries are currently optimal.
+                    </p>
+                  )}
+                </div>
               </div>
+
+              {/* Operational Log */}
+              <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm space-y-4">
+                <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                  <Activity size={16} className="text-emerald-600" />
+                  Live Farm Operations Stream
+                </h3>
+                <div className="space-y-3 relative before:absolute before:inset-y-1 before:left-3 before:w-[1px] before:bg-slate-100">
+                  {activityLogs.slice(0, 5).map((log) => (
+                    <div key={log.id} className="flex gap-3 text-xs relative pl-6">
+                      <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center text-[10px] absolute left-0 top-0.5 border border-emerald-200">
+                        📝
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-black text-slate-800">{log.type}</span>
+                          <span className="text-[9px] text-slate-400">by {log.actor}</span>
+                        </div>
+                        <p className="text-slate-600 mt-0.5">{log.description}</p>
+                        <span className="text-[9px] text-slate-400 block mt-1">
+                          {new Date(log.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
             </div>
 
           </div>
@@ -597,7 +987,7 @@ const Index = () => {
                   placeholder="Search tag (e.g. GOAT-0024, Aisha)..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-1 focus:ring-emerald-500 outline-none transition"
+                  className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-1 focus:ring-emerald-500 outline-none transition"
                 />
               </div>
             </div>
@@ -639,10 +1029,9 @@ const Index = () => {
               ))}
             </div>
 
-            {/* Animals Grid List */}
-            <div className="grid grid-cols-2 gap-3 mt-2">
+            {/* Animals Grid List (Scales up to 4 columns on large desktop screens!) */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-2">
               {filteredAnimals.map((animal) => {
-                const isUrgent = animal.healthStatus === "Sick" || animal.healthStatus === "Under Treatment";
                 return (
                   <div
                     key={animal.id}
@@ -650,7 +1039,7 @@ const Index = () => {
                     className="bg-white rounded-2xl overflow-hidden border border-slate-100 shadow-sm hover:border-emerald-300 transition cursor-pointer flex flex-col group"
                   >
                     {/* Animal Photo */}
-                    <div className="relative h-28 bg-slate-100">
+                    <div className="relative h-32 bg-slate-100">
                       <img
                         src={animal.primaryPhoto}
                         alt={animal.name}
@@ -688,8 +1077,8 @@ const Index = () => {
                 );
               })}
               {filteredAnimals.length === 0 && (
-                <div className="col-span-2 text-center py-12 text-slate-400 text-xs">
-                  No matching livestock registered. Register a new kid/chick/ram to begin records!
+                <div className="col-span-full text-center py-12 text-slate-400 text-xs">
+                  No matching livestock registered. Register a new animal to build records!
                 </div>
               )}
             </div>
@@ -702,7 +1091,7 @@ const Index = () => {
           <div className="space-y-6">
             
             {/* Header */}
-            <div className="text-center p-4 bg-emerald-950 text-white rounded-3xl relative overflow-hidden shadow-xl">
+            <div className="text-center p-6 bg-emerald-950 text-white rounded-3xl relative overflow-hidden shadow-xl">
               <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-800/30 rounded-full blur-2xl" />
               <div className="absolute -bottom-8 -left-8 w-24 h-24 bg-emerald-600/30 rounded-full blur-2xl" />
               
@@ -792,17 +1181,6 @@ const Index = () => {
               </div>
             </div>
 
-            {/* Architecture Explainer */}
-            <div className="bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100 text-xs space-y-2">
-              <h4 className="font-bold text-emerald-950 flex items-center gap-1">
-                <Sparkle size={14} className="text-emerald-700" />
-                How the AI Context Architecture Works
-              </h4>
-              <p className="text-emerald-900 leading-relaxed">
-                Our database registers live relationships. When AI is fully enabled (via flag <code>AI_ENABLED</code>), it automatically gains direct read-only query access to the animal's exact parentage, medical treatment timeline, and medication log. This prevents the AI from halluncinating veterinary guidelines!
-              </p>
-            </div>
-
           </div>
         )}
 
@@ -825,8 +1203,8 @@ const Index = () => {
               </button>
             </div>
 
-            {/* Inventory Roster List */}
-            <div className="space-y-3">
+            {/* Inventory Roster Grid List (Adapts on big screens) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {inventory.map((item) => {
                 const isLow = item.quantity <= item.minStock;
                 return (
@@ -851,9 +1229,6 @@ const Index = () => {
                         <p className="text-xs text-slate-500 mt-1">
                           Current Stock: <span className="font-black text-slate-800">{item.quantity}</span> {item.unit}
                         </p>
-                        {item.expiryDate && (
-                          <p className="text-[10px] text-slate-400 mt-0.5">Expires: {item.expiryDate}</p>
-                        )}
                       </div>
                     </div>
 
@@ -876,36 +1251,6 @@ const Index = () => {
                   </div>
                 );
               })}
-            </div>
-
-            {/* Inventory Transaction Logs */}
-            <div className="bg-slate-50/50 rounded-2xl p-4 border border-slate-100/60 mt-6">
-              <h3 className="font-bold text-slate-800 text-xs mb-3 flex items-center gap-1.5">
-                <Boxes size={14} className="text-slate-600" />
-                Storage Logs (Audit Stream)
-              </h3>
-              <div className="space-y-2">
-                {inventoryTransactions.map((tx) => {
-                  const item = inventory.find(i => i.id === tx.item_id);
-                  return (
-                    <div key={tx.id} className="p-3 bg-white rounded-xl text-xs flex justify-between items-center border border-slate-100">
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <span className={`w-1.5 h-1.5 rounded-full ${tx.type === "add" ? "bg-emerald-500" : "bg-red-500"}`} />
-                          <span className="font-bold text-slate-800">{item?.name || "Deleted Item"}</span>
-                        </div>
-                        <p className="text-[10px] text-slate-500 mt-0.5">{tx.notes}</p>
-                      </div>
-                      <div className="text-right">
-                        <span className={`font-black ${tx.type === "add" ? "text-emerald-700" : "text-red-700"}`}>
-                          {tx.type === "add" ? "+" : "-"}{tx.quantity}
-                        </span>
-                        <span className="text-[9px] text-slate-400 block">{tx.date}</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
             </div>
 
           </div>
@@ -933,7 +1278,7 @@ const Index = () => {
                 </button>
               </div>
 
-              <div className="space-y-2.5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {contacts.map((c) => (
                   <div key={c.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100">
                     <div className="flex items-center justify-between">
@@ -947,14 +1292,6 @@ const Index = () => {
                           className="w-7 h-7 bg-white hover:bg-slate-100 border rounded-lg flex items-center justify-center text-slate-600 shadow-sm"
                         >
                           📞
-                        </a>
-                        <a
-                          href={`https://wa.me/${c.whatsapp || c.phone}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="w-7 h-7 bg-white hover:bg-emerald-50 border border-emerald-100 rounded-lg flex items-center justify-center text-emerald-600 shadow-sm"
-                        >
-                          💬
                         </a>
                         <button
                           onClick={() => deleteContact(c.id)}
@@ -1046,12 +1383,15 @@ const Index = () => {
               )}
             </div>
 
-            {/* V1 MVP System Status */}
-            <div className="bg-slate-50 rounded-2xl p-4 text-center">
-              <span className="text-xs font-black text-slate-700">🚜 Farm Management System V1.0</span>
-              <p className="text-[10px] text-slate-400 mt-1">
-                Optimized for local offline persistence, live reports and livestock tracking.
-              </p>
+            {/* Mobile-only Logout button helper */}
+            <div className="md:hidden">
+              <button
+                onClick={logout}
+                className="w-full py-3 bg-red-50 hover:bg-red-100 text-red-600 font-extrabold text-xs rounded-2xl transition flex items-center justify-center gap-2"
+              >
+                <LogOut size={14} />
+                Sign Out Operator Session
+              </button>
             </div>
 
           </div>
@@ -1180,32 +1520,6 @@ const Index = () => {
                 </div>
               </div>
 
-              {/* Weight Record Quick Log */}
-              <div className="p-3 bg-emerald-50/50 rounded-2xl border border-emerald-100 text-xs">
-                <h5 className="font-black text-emerald-950 mb-1.5">Add Weight Log</h5>
-                <form 
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    const w = prompt("Enter weight in kg (numbers only):");
-                    if (w && !isNaN(Number(w))) {
-                      addWeightRecord({
-                        animal_id: selectedAnimal.id,
-                        weight: Number(w),
-                        date: new Date().toISOString().split("T")[0]
-                      });
-                    }
-                  }}
-                  className="flex gap-2"
-                >
-                  <button
-                    type="submit"
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg"
-                  >
-                    + Add Weight (kg)
-                  </button>
-                </form>
-              </div>
-
               {/* Status Update & Destructive Actions */}
               <div className="pt-2 border-t flex items-center justify-between">
                 <div>
@@ -1231,7 +1545,7 @@ const Index = () => {
                       setSelectedAnimal(null);
                     }
                   }}
-                  className="text-xs font-bold text-red-600 hover:underline flex items-center gap-1 mt-4"
+                  className="text-xs font-bold text-red-600 hover:underline flex items-center gap-1"
                 >
                   <Trash2 size={12} />
                   Delete Profile
@@ -1243,7 +1557,7 @@ const Index = () => {
         </div>
       )}
 
-      {/* DIALOG 1: REGISTER ANIMAL */}
+      {/* DIALOG 1: REGISTER ANIMAL & PORTRAIT FILE INTAKE */}
       {showAddAnimal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
           <form 
@@ -1255,38 +1569,61 @@ const Index = () => {
               <button type="button" onClick={() => setShowAddAnimal(false)} className="text-slate-400 hover:text-slate-600">✕</button>
             </div>
 
-            {/* Simulated Photo attachment */}
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block">Animal Portrait</label>
-              <div className="flex gap-2">
+            {/* Photo upload + Portrait file selector */}
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block">Take/Upload Animal Portrait</label>
+              
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold flex items-center gap-2 border border-slate-200 transition"
+                >
+                  <Camera size={14} className="text-slate-600" />
+                  Use Device Camera / Files
+                </button>
+
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  ref={fileInputRef}
+                  onChange={handlePhotoUpload}
+                  className="hidden"
+                />
+              </div>
+
+              {/* Or use quick preset portraits */}
+              <div className="flex gap-1.5 mt-2">
                 <button
                   type="button"
                   onClick={() => handleSimulatePhoto("goat")}
-                  className="px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-bold flex items-center gap-1 text-emerald-800"
+                  className="px-2 py-1 bg-emerald-50 text-emerald-800 text-[10px] font-extrabold rounded-lg"
                 >
-                  <Camera size={12} />
-                  Goat Photo
+                  Preset Goat
                 </button>
                 <button
                   type="button"
                   onClick={() => handleSimulatePhoto("ram")}
-                  className="px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-xs font-bold flex items-center gap-1 text-blue-800"
+                  className="px-2 py-1 bg-blue-50 text-blue-800 text-[10px] font-extrabold rounded-lg"
                 >
-                  <Camera size={12} />
-                  Ram Photo
+                  Preset Ram
                 </button>
                 <button
                   type="button"
                   onClick={() => handleSimulatePhoto("chicken")}
-                  className="px-3 py-2 bg-purple-50 border border-purple-200 rounded-xl text-xs font-bold flex items-center gap-1 text-purple-800"
+                  className="px-2 py-1 bg-purple-50 text-purple-800 text-[10px] font-extrabold rounded-lg"
                 >
-                  <Camera size={12} />
-                  Hen Photo
+                  Preset Hen
                 </button>
               </div>
+
               {newAnimal.primaryPhoto && (
-                <div className="h-20 w-24 rounded-lg overflow-hidden border mt-2">
+                <div className="relative h-28 w-full rounded-2xl overflow-hidden border border-emerald-100 mt-2">
                   <img src={newAnimal.primaryPhoto} alt="Snapshot preview" className="w-full h-full object-cover" />
+                  <span className="absolute bottom-2 right-2 bg-black/50 text-white text-[9px] px-2 py-0.5 rounded-full font-bold">
+                    Portrait Ready
+                  </span>
                 </div>
               )}
             </div>
@@ -1297,7 +1634,7 @@ const Index = () => {
                 <select
                   value={newAnimal.species}
                   onChange={(e) => setNewAnimal({ ...newAnimal, species: e.target.value as Animal["species"] })}
-                  className="w-full p-2 border rounded-xl text-xs mt-1"
+                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
                 >
                   <option value="Goat">Goat 🐐</option>
                   <option value="Ram">Ram 🐏</option>
@@ -1311,7 +1648,7 @@ const Index = () => {
                 <select
                   value={newAnimal.sex}
                   onChange={(e) => setNewAnimal({ ...newAnimal, sex: e.target.value as Animal["sex"] })}
-                  className="w-full p-2 border rounded-xl text-xs mt-1"
+                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
                 >
                   <option value="Female">Female (Dam/Ewe/Hen)</option>
                   <option value="Male">Male (Sire/Ram/Rooster)</option>
@@ -1327,7 +1664,7 @@ const Index = () => {
                   placeholder="e.g. West African Dwarf"
                   value={newAnimal.breed}
                   onChange={(e) => setNewAnimal({ ...newAnimal, breed: e.target.value })}
-                  className="w-full p-2 border rounded-xl text-xs mt-1"
+                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
                   required
                 />
               </div>
@@ -1339,7 +1676,7 @@ const Index = () => {
                   placeholder="e.g. Aisha"
                   value={newAnimal.name}
                   onChange={(e) => setNewAnimal({ ...newAnimal, name: e.target.value })}
-                  className="w-full p-2 border rounded-xl text-xs mt-1"
+                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
                 />
               </div>
             </div>
@@ -1351,7 +1688,7 @@ const Index = () => {
                   type="date"
                   value={newAnimal.dob}
                   onChange={(e) => setNewAnimal({ ...newAnimal, dob: e.target.value })}
-                  className="w-full p-2 border rounded-xl text-xs mt-1"
+                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
                 />
               </div>
 
@@ -1360,7 +1697,7 @@ const Index = () => {
                 <select
                   value={newAnimal.source}
                   onChange={(e) => setNewAnimal({ ...newAnimal, source: e.target.value as Animal["source"] })}
-                  className="w-full p-2 border rounded-xl text-xs mt-1"
+                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
                 >
                   <option value="Born on farm">Born on farm</option>
                   <option value="Purchased">Purchased</option>
@@ -1369,14 +1706,14 @@ const Index = () => {
               </div>
             </div>
 
-            {/* Lineage input */}
+            {/* Lineage parentage selection */}
             <div className="grid grid-cols-2 gap-3 bg-slate-50 p-2.5 rounded-xl border border-dashed">
               <div>
                 <label className="text-[9px] font-bold text-slate-500 block">Mother (Optional)</label>
                 <select
                   value={newAnimal.motherId}
                   onChange={(e) => setNewAnimal({ ...newAnimal, motherId: e.target.value })}
-                  className="w-full p-1 border rounded text-[10px]"
+                  className="w-full p-1.5 bg-white border rounded text-[10px]"
                 >
                   <option value="">-- No Record --</option>
                   {animals.filter(a => a.sex === "Female").map(a => (
@@ -1390,7 +1727,7 @@ const Index = () => {
                 <select
                   value={newAnimal.fatherId}
                   onChange={(e) => setNewAnimal({ ...newAnimal, fatherId: e.target.value })}
-                  className="w-full p-1 border rounded text-[10px]"
+                  className="w-full p-1.5 bg-white border rounded text-[10px]"
                 >
                   <option value="">-- No Record --</option>
                   {animals.filter(a => a.sex === "Male").map(a => (
@@ -1398,17 +1735,6 @@ const Index = () => {
                   ))}
                 </select>
               </div>
-            </div>
-
-            <div>
-              <label className="text-[10px] font-bold text-slate-500 block">Distinguishing Marks / Notes</label>
-              <textarea
-                rows={2}
-                placeholder="White spot on left knee..."
-                value={newAnimal.notes}
-                onChange={(e) => setNewAnimal({ ...newAnimal, notes: e.target.value })}
-                className="w-full p-2 border rounded-xl text-xs mt-1"
-              />
             </div>
 
             <button
@@ -1426,7 +1752,7 @@ const Index = () => {
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
           <form 
             onSubmit={handleCreateHealth}
-            className="bg-white w-full max-w-md rounded-2xl p-6 space-y-4"
+            className="bg-white w-full max-w-md rounded-2xl p-6 space-y-4 animate-in fade-in"
           >
             <div className="flex items-center justify-between border-b pb-2">
               <h3 className="font-extrabold text-sm text-slate-900">Log Health Event</h3>
@@ -1438,7 +1764,7 @@ const Index = () => {
               <select
                 value={selectedAnimalForHealth}
                 onChange={(e) => setSelectedAnimalForHealth(e.target.value)}
-                className="w-full p-2 border rounded-xl text-xs mt-1"
+                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
                 required
               >
                 <option value="">-- Select Animal --</option>
@@ -1456,7 +1782,7 @@ const Index = () => {
                 <select
                   value={newHealth.type}
                   onChange={(e) => setNewHealth({ ...newHealth, type: e.target.value as HealthRecord["type"] })}
-                  className="w-full p-2 border rounded-xl text-xs mt-1"
+                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
                 >
                   <option value="Observation">Observation</option>
                   <option value="Diagnosis">Diagnosis</option>
@@ -1471,7 +1797,7 @@ const Index = () => {
                   type="text"
                   value={newHealth.recordedBy}
                   onChange={(e) => setNewHealth({ ...newHealth, recordedBy: e.target.value })}
-                  className="w-full p-2 border rounded-xl text-xs mt-1"
+                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
                   required
                 />
               </div>
@@ -1484,7 +1810,7 @@ const Index = () => {
                 placeholder="Reduced feed consumption, clear nasal discharge noticed in afternoon."
                 value={newHealth.details}
                 onChange={(e) => setNewHealth({ ...newHealth, details: e.target.value })}
-                className="w-full p-2 border rounded-xl text-xs mt-1"
+                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
                 required
               />
             </div>
@@ -1496,7 +1822,7 @@ const Index = () => {
                 placeholder="Dewormer / Penicillin spray"
                 value={newHealth.medication}
                 onChange={(e) => setNewHealth({ ...newHealth, medication: e.target.value })}
-                className="w-full p-2 border rounded-xl text-xs mt-1"
+                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
               />
             </div>
 
@@ -1510,7 +1836,7 @@ const Index = () => {
         </div>
       )}
 
-      {/* DIALOG 3: LOG RX / TREATMENT */}
+      {/* DIALOG 3: LOG TREATMENT */}
       {showAddTreatment && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
           <form 
@@ -1527,7 +1853,7 @@ const Index = () => {
               <select
                 value={selectedAnimalForTreatment}
                 onChange={(e) => setSelectedAnimalForTreatment(e.target.value)}
-                className="w-full p-2 border rounded-xl text-xs mt-1"
+                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
                 required
               >
                 <option value="">-- Pick Profile --</option>
@@ -1545,42 +1871,20 @@ const Index = () => {
                   placeholder="e.g. Hoof Rot"
                   value={newTreatment.condition}
                   onChange={(e) => setNewTreatment({ ...newTreatment, condition: e.target.value })}
-                  className="w-full p-2 border rounded-xl text-xs mt-1"
+                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
                   required
                 />
               </div>
 
               <div>
-                <label className="text-[10px] font-bold text-slate-500 block">Prescribed Drug & Dosage</label>
+                <label className="text-[10px] font-bold text-slate-500 block">Prescribed Drug</label>
                 <input
                   type="text"
-                  placeholder="e.g. Penicillin spray daily"
+                  placeholder="e.g. Penicillin spray"
                   value={newTreatment.medication}
                   onChange={(e) => setNewTreatment({ ...newTreatment, medication: e.target.value })}
-                  className="w-full p-2 border rounded-xl text-xs mt-1"
+                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
                   required
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 block">Start Date</label>
-                <input
-                  type="date"
-                  value={newTreatment.startDate}
-                  onChange={(e) => setNewTreatment({ ...newTreatment, startDate: e.target.value })}
-                  className="w-full p-2 border rounded-xl text-xs mt-1"
-                />
-              </div>
-
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 block">Expected End Date</label>
-                <input
-                  type="date"
-                  value={newTreatment.endDate}
-                  onChange={(e) => setNewTreatment({ ...newTreatment, endDate: e.target.value })}
-                  className="w-full p-2 border rounded-xl text-xs mt-1"
                 />
               </div>
             </div>
@@ -1614,7 +1918,7 @@ const Index = () => {
                 placeholder="e.g. Maize feed sacks 50kg"
                 value={newInventory.name}
                 onChange={(e) => setNewInventory({ ...newInventory, name: e.target.value })}
-                className="w-full p-2 border rounded-xl text-xs mt-1"
+                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
                 required
               />
             </div>
@@ -1625,7 +1929,7 @@ const Index = () => {
                 <select
                   value={newInventory.category}
                   onChange={(e) => setNewInventory({ ...newInventory, category: e.target.value as InventoryItem["category"] })}
-                  className="w-full p-2 border rounded-xl text-xs mt-1"
+                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
                 >
                   <option value="Feed">Feed 🌾</option>
                   <option value="Medication">Medication 💊</option>
@@ -1641,7 +1945,7 @@ const Index = () => {
                   placeholder="e.g. Bags / Bottles"
                   value={newInventory.unit}
                   onChange={(e) => setNewInventory({ ...newInventory, unit: e.target.value })}
-                  className="w-full p-2 border rounded-xl text-xs mt-1"
+                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
                   required
                 />
               </div>
@@ -1654,7 +1958,7 @@ const Index = () => {
                   type="number"
                   value={newInventory.quantity}
                   onChange={(e) => setNewInventory({ ...newInventory, quantity: Number(e.target.value) })}
-                  className="w-full p-2 border rounded-xl text-xs mt-1"
+                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
                   required
                 />
               </div>
@@ -1665,7 +1969,7 @@ const Index = () => {
                   type="number"
                   value={newInventory.minStock}
                   onChange={(e) => setNewInventory({ ...newInventory, minStock: Number(e.target.value) })}
-                  className="w-full p-2 border rounded-xl text-xs mt-1"
+                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
                   required
                 />
               </div>
@@ -1699,7 +2003,7 @@ const Index = () => {
                 <select
                   value={adjustType}
                   onChange={(e) => setAdjustType(e.target.value as "add" | "remove")}
-                  className="w-full p-2 border rounded-xl text-xs mt-1"
+                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
                 >
                   <option value="add">Add Stock (+)</option>
                   <option value="remove">Disburse Stock (-)</option>
@@ -1712,7 +2016,7 @@ const Index = () => {
                   type="number"
                   value={adjustQty}
                   onChange={(e) => setAdjustQty(Math.max(1, Number(e.target.value)))}
-                  className="w-full p-2 border rounded-xl text-xs mt-1"
+                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
                   required
                 />
               </div>
@@ -1725,7 +2029,7 @@ const Index = () => {
                 placeholder="Weekly feeding schedule..."
                 value={adjustNotes}
                 onChange={(e) => setAdjustNotes(e.target.value)}
-                className="w-full p-2 border rounded-xl text-xs mt-1"
+                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
                 required
               />
             </div>
@@ -1758,7 +2062,7 @@ const Index = () => {
                 type="text"
                 value={newContact.name}
                 onChange={(e) => setNewContact({ ...newContact, name: e.target.value })}
-                className="w-full p-2 border rounded-xl text-xs mt-1"
+                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
                 required
               />
             </div>
@@ -1769,7 +2073,7 @@ const Index = () => {
                 <select
                   value={newContact.role}
                   onChange={(e) => setNewContact({ ...newContact, role: e.target.value as Contact["role"] })}
-                  className="w-full p-2 border rounded-xl text-xs mt-1"
+                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
                 >
                   <option value="Veterinarian">Veterinarian 🩺</option>
                   <option value="Farm Manager">Farm Manager 🌾</option>
@@ -1785,7 +2089,7 @@ const Index = () => {
                   type="text"
                   value={newContact.phone}
                   onChange={(e) => setNewContact({ ...newContact, phone: e.target.value })}
-                  className="w-full p-2 border rounded-xl text-xs mt-1"
+                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
                   required
                 />
               </div>
@@ -1801,13 +2105,13 @@ const Index = () => {
         </div>
       )}
 
-      {/* MOBILE BOTTOM NAVIGATION BAR (MAX 5 ITEMS ONLY as per prompt requirement) */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-100 px-4 py-2 shadow-lg">
+      {/* MOBILE BOTTOM NAVIGATION BAR (MAX 5 ITEMS ONLY, visible on small screens only) */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-100 px-4 py-2 shadow-lg">
         <div className="max-w-md mx-auto flex items-center justify-between">
           <button
             onClick={() => setActiveTab("dashboard")}
             className={`flex flex-col items-center justify-center py-1.5 flex-1 transition-all ${
-              activeTab === "dashboard" ? "text-emerald-600 font-extrabold scale-105" : "text-slate-400 hover:text-slate-600"
+              activeTab === "dashboard" ? "text-emerald-600 font-extrabold scale-105" : "text-slate-400"
             }`}
           >
             <Home size={18} />
@@ -1817,7 +2121,7 @@ const Index = () => {
           <button
             onClick={() => setActiveTab("animals")}
             className={`flex flex-col items-center justify-center py-1.5 flex-1 transition-all ${
-              activeTab === "animals" ? "text-emerald-600 font-extrabold scale-105" : "text-slate-400 hover:text-slate-600"
+              activeTab === "animals" ? "text-emerald-600 font-extrabold scale-105" : "text-slate-400"
             }`}
           >
             <span className="text-sm">🐐</span>
@@ -1827,7 +2131,7 @@ const Index = () => {
           <button
             onClick={() => setActiveTab("ai")}
             className={`flex flex-col items-center justify-center py-1.5 flex-1 transition-all ${
-              activeTab === "ai" ? "text-emerald-600 font-extrabold scale-105" : "text-slate-400 hover:text-slate-600"
+              activeTab === "ai" ? "text-emerald-600 font-extrabold scale-105" : "text-slate-400"
             }`}
           >
             <span className="text-sm">🤖</span>
@@ -1837,7 +2141,7 @@ const Index = () => {
           <button
             onClick={() => setActiveTab("inventory")}
             className={`flex flex-col items-center justify-center py-1.5 flex-1 transition-all ${
-              activeTab === "inventory" ? "text-emerald-600 font-extrabold scale-105" : "text-slate-400 hover:text-slate-600"
+              activeTab === "inventory" ? "text-emerald-600 font-extrabold scale-105" : "text-slate-400"
             }`}
           >
             <Package size={18} />
@@ -1847,7 +2151,7 @@ const Index = () => {
           <button
             onClick={() => setActiveTab("settings")}
             className={`flex flex-col items-center justify-center py-1.5 flex-1 transition-all ${
-              activeTab === "settings" ? "text-emerald-600 font-extrabold scale-105" : "text-slate-400 hover:text-slate-600"
+              activeTab === "settings" ? "text-emerald-600 font-extrabold scale-105" : "text-slate-400"
             }`}
           >
             <SettingsIcon size={18} />
