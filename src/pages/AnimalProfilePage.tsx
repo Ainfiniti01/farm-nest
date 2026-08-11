@@ -5,26 +5,10 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { useFarm, Animal, HealthRecord, Treatment, WeightRecord, BreedingRecord } from "@/context/FarmContext";
 import { 
   ArrowLeft, 
-  Settings, 
   Trash2, 
-  Plus, 
-  Calendar, 
-  Activity, 
-  Heart, 
-  Camera, 
-  FileText, 
-  TrendingUp, 
-  Clipboard, 
-  Users, 
-  Clock, 
-  Sparkles,
-  Info,
-  CheckCircle2,
-  XCircle,
+  Download, 
   Eye,
   AlertCircle,
-  Download,
-  Check,
   HelpCircle
 } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
@@ -44,7 +28,6 @@ export const AnimalProfilePage: React.FC = () => {
     reminders,
     activityLogs,
     farmProfile,
-    addAnimal,
     updateAnimal,
     deleteAnimal,
     addHealthRecord,
@@ -197,21 +180,15 @@ export const AnimalProfilePage: React.FC = () => {
     });
   };
 
-  // PDF passport helper
+  // PDF passport helper (Popup-blocker Proof hidden iframe print technique)
   const handlePdfSingleReport = () => {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      showSuccess("Allow popups to trigger passport generation.");
-      return;
-    }
-
     const html = `
       <html>
         <head>
           <title>Passport: ${animal.animal_code}</title>
           <style>
             body { font-family: system-ui, sans-serif; padding: 30px; color: #1a202c; }
-            .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #047857; pb: 10px; }
+            .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #047857; padding-bottom: 10px; }
             .badge { padding: 4px 10px; border-radius: 9999px; font-weight: bold; background: #e6fffa; color: #047857; font-size: 14px; }
             .photo { width: 100%; max-height: 350px; object-fit: cover; border-radius: 12px; margin-top: 20px; }
             table { width: 100%; border-collapse: collapse; margin-top: 20px; }
@@ -239,23 +216,42 @@ export const AnimalProfilePage: React.FC = () => {
             <tr><th>Vitals History Count</th><td>${animalHealth.length} items logged</td></tr>
             <tr><th>Current notes</th><td>${animal.notes || "No extra bio."}</td></tr>
           </table>
-          <script>window.print();</script>
         </body>
       </html>
     `;
-    printWindow.document.write(html);
-    printWindow.document.close();
-    showSuccess("Printed Individual Animal Report!");
+
+    // Create custom, hidden temporary print iframe
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document || iframe.contentDocument;
+    if (doc) {
+      doc.open();
+      doc.write(html);
+      doc.close();
+
+      setTimeout(() => {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+        document.body.removeChild(iframe);
+        showSuccess("Print passport opened successfully!");
+      }, 500);
+    } else {
+      showError("Could not initialize printing passport frame.");
+    }
   };
 
   const MOCK_IMAGES = {
     goat1: "https://images.unsplash.com/photo-1524413840807-0c3cb6fa808d?w=500&auto=format&fit=crop&q=80",
-    ram: "https://images.unsplash.com/photo-1484557985045-edf25e08da73?w=500&auto=format&fit=crop&q=80",
-    chicken: "https://images.unsplash.com/photo-1548550023-2bdb3c5beed7?w=500&auto=format&fit=crop&q=80",
   };
 
   // Derived arrays
-  const animalReminders = reminders.filter(r => r.animal_id === animal.id && !r.completed);
   const animalHealth = healthRecords.filter(h => h.animal_id === animal.id);
   const animalTreatments = treatments.filter(t => t.animal_id === animal.id);
   const animalWeights = weightRecords.filter(w => w.animal_id === animal.id);
@@ -693,7 +689,7 @@ export const AnimalProfilePage: React.FC = () => {
                 {/* Parentage Lineage Hierarchy tree */}
                 <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm space-y-4">
                   <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wider text-slate-400 flex items-center gap-2">
-                    <Users size={14} className="text-emerald-600" />
+                    <span className="text-emerald-600 text-base">🧬</span>
                     Lineage & Line Tree
                   </h3>
                   

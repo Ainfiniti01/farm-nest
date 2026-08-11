@@ -1,10 +1,10 @@
 import React from "react";
 import { useFarm } from "@/context/FarmContext";
-import { Download, FileText, CheckCircle2, TableProperties } from "lucide-react";
+import { Download, FileText, TableProperties } from "lucide-react";
 import { showSuccess } from "@/utils/toast";
 
 export const ReportDownloader: React.FC = () => {
-  const { animals, healthRecords, treatments, inventory, contacts } = useFarm();
+  const { animals, treatments, inventory } = useFarm();
 
   const handleExcelExport = () => {
     // Generate simulated CSV file of animals and inventory
@@ -34,13 +34,6 @@ export const ReportDownloader: React.FC = () => {
   };
 
   const handlePdfExport = () => {
-    // Create printable window
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      showSuccess("Please allow popups to download PDF / Printable Report");
-      return;
-    }
-
     const htmlContent = `
       <html>
         <head>
@@ -115,14 +108,35 @@ export const ReportDownloader: React.FC = () => {
                 .join("")}
             </tbody>
           </table>
-          <script>window.print();</script>
         </body>
       </html>
     `;
 
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
-    showSuccess("Printable PDF report triggered!");
+    // Popup-blocker proof printing technique using a hidden iframe
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document || iframe.contentDocument;
+    if (doc) {
+      doc.open();
+      doc.write(htmlContent);
+      doc.close();
+
+      setTimeout(() => {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+        document.body.removeChild(iframe);
+        showSuccess("Printable report opened successfully!");
+      }, 500);
+    } else {
+      showError("Could not generate report window.");
+    }
   };
 
   return (
