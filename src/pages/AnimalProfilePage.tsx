@@ -22,7 +22,10 @@ import {
   CheckCircle2,
   XCircle,
   Eye,
-  AlertCircle
+  AlertCircle,
+  Download,
+  Check,
+  HelpCircle
 } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
@@ -51,8 +54,39 @@ export const AnimalProfilePage: React.FC = () => {
     addBreedingRecord,
   } = useFarm();
 
-  // Find animal by either uuid id or human readable animal_code
   const animal = animals.find(a => a.id === id || a.animal_code === id);
+
+  // Modal / Confirm state machine
+  const [activeTab, setActiveTab] = useState<"overview" | "health" | "breeding" | "photos" | "notes" | "activity">("overview");
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showAddHealth, setShowAddHealth] = useState(false);
+  const [showAddTreatment, setShowAddTreatment] = useState(false);
+  const [showAddWeight, setShowAddWeight] = useState(false);
+  const [showAddBreeding, setShowAddBreeding] = useState(false);
+  const [showAddOffspring, setShowAddOffspring] = useState(false);
+
+  // CONFIRMATION POPUP STATES
+  const [pendingConfirm, setPendingConfirm] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  } | null>(null);
+
+  // Full Screen Photo State
+  const [fullscreenPhoto, setFullscreenPhoto] = useState<string | null>(null);
+
+  // Edit Animal form state
+  const [editForm, setEditForm] = useState({
+    name: animal ? animal.name : "",
+    breed: animal ? animal.breed : "",
+    sex: animal ? animal.sex : "Female" as Animal["sex"],
+    dob: animal ? animal.dob : "",
+    purchaseDate: animal?.purchaseDate || "",
+    source: animal ? animal.source : "Born on farm" as Animal["source"],
+    status: animal ? animal.status : "Healthy" as Animal["status"],
+    notes: animal ? animal.notes : "",
+    primaryPhoto: animal ? animal.primaryPhoto : "",
+  });
 
   if (!animal) {
     return (
@@ -72,25 +106,7 @@ export const AnimalProfilePage: React.FC = () => {
     );
   }
 
-  // Active Tab state
-  const [activeTab, setActiveTab] = useState<"overview" | "health" | "breeding" | "photos" | "notes" | "activity">("overview");
-
-  // Edit Animal form state
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editForm, setEditForm] = useState({
-    name: animal.name,
-    breed: animal.breed,
-    sex: animal.sex,
-    dob: animal.dob,
-    purchaseDate: animal.purchaseDate || "",
-    source: animal.source,
-    status: animal.status,
-    notes: animal.notes,
-    primaryPhoto: animal.primaryPhoto,
-  });
-
   // Action modals states
-  const [showAddHealth, setShowAddHealth] = useState(false);
   const [newHealth, setNewHealth] = useState({
     type: "Observation" as HealthRecord["type"],
     details: "",
@@ -99,7 +115,6 @@ export const AnimalProfilePage: React.FC = () => {
     date: new Date().toISOString().split("T")[0],
   });
 
-  const [showAddTreatment, setShowAddTreatment] = useState(false);
   const [newTreatment, setNewTreatment] = useState({
     condition: "",
     medication: "",
@@ -109,14 +124,12 @@ export const AnimalProfilePage: React.FC = () => {
     followUpDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
   });
 
-  const [showAddWeight, setShowAddWeight] = useState(false);
   const [newWeight, setNewWeight] = useState({
     weight: "",
     date: new Date().toISOString().split("T")[0],
     notes: "",
   });
 
-  const [showAddBreeding, setShowAddBreeding] = useState(false);
   const [newBreeding, setNewBreeding] = useState({
     partnerId: "",
     date: new Date().toISOString().split("T")[0],
@@ -124,7 +137,6 @@ export const AnimalProfilePage: React.FC = () => {
     notes: "",
   });
 
-  const [showAddOffspring, setShowAddOffspring] = useState(false);
   const [newOffspring, setNewOffspring] = useState({
     name: "",
     species: animal.species,
@@ -152,8 +164,15 @@ export const AnimalProfilePage: React.FC = () => {
   };
 
   const setPhotoAsPrimary = (photoUrl: string) => {
-    updateAnimal(animal.id, { primaryPhoto: photoUrl });
-    showSuccess("Primary identification portrait updated!");
+    setPendingConfirm({
+      title: "Set Primary Portrait?",
+      message: "Are you sure you want to designate this photo as the main ID card face?",
+      onConfirm: () => {
+        updateAnimal(animal.id, { primaryPhoto: photoUrl });
+        setPendingConfirm(null);
+        showSuccess("Primary identification portrait updated!");
+      }
+    });
   };
 
   const deletePhoto = (photoUrl: string) => {
@@ -161,13 +180,20 @@ export const AnimalProfilePage: React.FC = () => {
       showError("At least one profile identifier portrait must remain.");
       return;
     }
-    const updated = animal.photos.filter(p => p !== photoUrl);
-    const updates: Partial<Animal> = { photos: updated };
-    if (animal.primaryPhoto === photoUrl) {
-      updates.primaryPhoto = updated[0];
-    }
-    updateAnimal(animal.id, updates);
-    showSuccess("Photograph removed successfully.");
+    setPendingConfirm({
+      title: "Delete Photo?",
+      message: "Are you sure you want to permanently remove this photograph from the pedigree album?",
+      onConfirm: () => {
+        const updated = animal.photos.filter(p => p !== photoUrl);
+        const updates: Partial<Animal> = { photos: updated };
+        if (animal.primaryPhoto === photoUrl) {
+          updates.primaryPhoto = updated[0];
+        }
+        updateAnimal(animal.id, updates);
+        setPendingConfirm(null);
+        showSuccess("Photograph removed successfully.");
+      }
+    });
   };
 
   // Derived arrays
@@ -178,12 +204,10 @@ export const AnimalProfilePage: React.FC = () => {
   const animalBreeding = breedingRecords.filter(b => b.female_id === animal.id || b.male_id === animal.id);
   const animalLogs = activityLogs.filter(l => l.targetId === animal.id);
 
-  // Lineage calculation
   const mother = animals.find(a => a.id === animal.parents?.motherId);
   const father = animals.find(a => a.id === animal.parents?.fatherId);
   const offspringList = animals.filter(a => a.parents?.motherId === animal.id || a.parents?.fatherId === animal.id);
 
-  // Growth Trend Chart Data
   const chartData = animalWeights
     .map(w => ({
       date: new Date(w.date).toLocaleDateString([], { month: "short", day: "numeric" }),
@@ -191,194 +215,186 @@ export const AnimalProfilePage: React.FC = () => {
     }))
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-  // Edit Submit
-  const handleEditSubmit = (e: React.FormEvent) => {
+  // Submit methods under safe confirmations
+  const triggerEditConfirm = (e: React.FormEvent) => {
     e.preventDefault();
-    updateAnimal(animal.id, {
-      name: editForm.name,
-      breed: editForm.breed,
-      sex: editForm.sex,
-      dob: editForm.dob,
-      purchaseDate: editForm.purchaseDate || undefined,
-      source: editForm.source,
-      status: editForm.status,
-      notes: editForm.notes,
-      primaryPhoto: editForm.primaryPhoto,
-    });
-    setShowEditModal(false);
-  };
-
-  // Add Health submit
-  const handleAddHealthSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    addHealthRecord({
-      animal_id: animal.id,
-      type: newHealth.type,
-      date: newHealth.date,
-      details: newHealth.details,
-      medication: newHealth.medication || undefined,
-      recordedBy: newHealth.recordedBy,
-    });
-    setShowAddHealth(false);
-    setNewHealth({
-      type: "Observation",
-      details: "",
-      medication: "",
-      recordedBy: farmProfile.ownerName || "Abdul",
-      date: new Date().toISOString().split("T")[0],
+    setPendingConfirm({
+      title: "Save Profile Changes?",
+      message: "Verify information parameters before overwriting database logs.",
+      onConfirm: () => {
+        updateAnimal(animal.id, {
+          name: editForm.name,
+          breed: editForm.breed,
+          sex: editForm.sex,
+          dob: editForm.dob,
+          purchaseDate: editForm.purchaseDate || undefined,
+          source: editForm.source,
+          status: editForm.status,
+          notes: editForm.notes,
+          primaryPhoto: editForm.primaryPhoto,
+        });
+        setShowEditModal(false);
+        setPendingConfirm(null);
+      }
     });
   };
 
-  // Add Treatment submit
-  const handleAddTreatmentSubmit = (e: React.FormEvent) => {
+  const triggerHealthConfirm = (e: React.FormEvent) => {
     e.preventDefault();
-    addTreatment({
-      animal_id: animal.id,
-      condition: newTreatment.condition,
-      medication: newTreatment.medication,
-      startDate: newTreatment.startDate,
-      endDate: newTreatment.endDate,
-      status: "Ongoing",
-      notes: newTreatment.notes,
-      followUpDate: newTreatment.followUpDate || undefined,
-    });
-    setShowAddTreatment(false);
-    setNewTreatment({
-      condition: "",
-      medication: "",
-      startDate: new Date().toISOString().split("T")[0],
-      endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-      notes: "",
-      followUpDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+    setPendingConfirm({
+      title: "Submit Clinical Event?",
+      message: "Are you sure you want to write this observation to the animal's permanent health timeline?",
+      onConfirm: () => {
+        addHealthRecord({
+          animal_id: animal.id,
+          type: newHealth.type,
+          date: newHealth.date,
+          details: newHealth.details,
+          medication: newHealth.medication || undefined,
+          recordedBy: newHealth.recordedBy,
+        });
+        setShowAddHealth(false);
+        setPendingConfirm(null);
+        setNewHealth({
+          type: "Observation",
+          details: "",
+          medication: "",
+          recordedBy: farmProfile.ownerName || "Abdul",
+          date: new Date().toISOString().split("T")[0],
+        });
+      }
     });
   };
 
-  // Add Weight submit
-  const handleAddWeightSubmit = (e: React.FormEvent) => {
+  const triggerTreatmentConfirm = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPendingConfirm({
+      title: "Activate Medical Treatment?",
+      message: "This records an active prescription, changing status to 'Under Treatment'. Confirm?",
+      onConfirm: () => {
+        addTreatment({
+          animal_id: animal.id,
+          condition: newTreatment.condition,
+          medication: newTreatment.medication,
+          startDate: newTreatment.startDate,
+          endDate: newTreatment.endDate,
+          status: "Ongoing",
+          notes: newTreatment.notes,
+          followUpDate: newTreatment.followUpDate || undefined,
+        });
+        setShowAddTreatment(false);
+        setPendingConfirm(null);
+        setNewTreatment({
+          condition: "",
+          medication: "",
+          startDate: new Date().toISOString().split("T")[0],
+          endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+          notes: "",
+          followUpDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+        });
+      }
+    });
+  };
+
+  const triggerWeightConfirm = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newWeight.weight || isNaN(Number(newWeight.weight))) {
       showError("Please enter a valid numeric weight.");
       return;
     }
-    addWeightRecord({
-      animal_id: animal.id,
-      weight: Number(newWeight.weight),
-      date: newWeight.date,
-      notes: newWeight.notes || undefined,
-    });
-    setShowAddWeight(false);
-    setNewWeight({
-      weight: "",
-      date: new Date().toISOString().split("T")[0],
-      notes: "",
-    });
-  };
-
-  // Add Breeding submit
-  const handleAddBreedingSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    addBreedingRecord({
-      female_id: animal.sex === "Female" ? animal.id : newBreeding.partnerId,
-      male_id: animal.sex === "Male" ? animal.id : newBreeding.partnerId,
-      date: newBreeding.date,
-      status: newBreeding.status,
-      notes: newBreeding.notes,
-    });
-    setShowAddBreeding(false);
-    setNewBreeding({
-      partnerId: "",
-      date: new Date().toISOString().split("T")[0],
-      status: "Bred",
-      notes: "",
-    });
-  };
-
-  // Add Offspring submit
-  const handleAddOffspringSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    addAnimal({
-      name: newOffspring.name,
-      species: newOffspring.species,
-      breed: newOffspring.breed,
-      sex: newOffspring.sex,
-      dob: newOffspring.dob,
-      source: "Born on farm",
-      status: "Healthy",
-      healthStatus: "Healthy",
-      primaryPhoto: newOffspring.primaryPhoto || MOCK_IMAGES.goat1,
-      photos: [newOffspring.primaryPhoto || MOCK_IMAGES.goat1],
-      notes: newOffspring.notes || "Offspring of parent lineage.",
-      parents: {
-        motherId: animal.sex === "Female" ? animal.id : undefined,
-        fatherId: animal.sex === "Male" ? animal.id : undefined,
+    setPendingConfirm({
+      title: "Commit New Mass?",
+      message: `Log ${newWeight.weight} kg on ${newWeight.date} for growth progression metrics?`,
+      onConfirm: () => {
+        addWeightRecord({
+          animal_id: animal.id,
+          weight: Number(newWeight.weight),
+          date: newWeight.date,
+          notes: newWeight.notes || undefined,
+        });
+        setShowAddWeight(false);
+        setPendingConfirm(null);
+        setNewWeight({
+          weight: "",
+          date: new Date().toISOString().split("T")[0],
+          notes: "",
+        });
       }
     });
-    setShowAddOffspring(false);
-    setNewOffspring({
-      name: "",
-      species: animal.species,
-      breed: animal.breed,
-      sex: "Female",
-      dob: new Date().toISOString().split("T")[0],
-      notes: "",
-      primaryPhoto: "",
+  };
+
+  const triggerBreedingConfirm = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPendingConfirm({
+      title: "Record Breeding Cross?",
+      message: "Link stud mating relationship into permanent history maps?",
+      onConfirm: () => {
+        addBreedingRecord({
+          female_id: animal.sex === "Female" ? animal.id : newBreeding.partnerId,
+          male_id: animal.sex === "Male" ? animal.id : newBreeding.partnerId,
+          date: newBreeding.date,
+          status: newBreeding.status,
+          notes: newBreeding.notes,
+        });
+        setShowAddBreeding(false);
+        setPendingConfirm(null);
+        setNewBreeding({
+          partnerId: "",
+          date: new Date().toISOString().split("T")[0],
+          status: "Bred",
+          notes: "",
+        });
+      }
     });
   };
 
-  const handlePdfSingleReport = () => {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      showSuccess("Allow popups to trigger passport generation.");
-      return;
-    }
-
-    const html = `
-      <html>
-        <head>
-          <title>Passport: ${animal.animal_code}</title>
-          <style>
-            body { font-family: system-ui, sans-serif; padding: 30px; color: #1a202c; }
-            .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #047857; pb: 10px; }
-            .badge { padding: 4px 10px; border-radius: 9999px; font-weight: bold; background: #e6fffa; color: #047857; font-size: 14px; }
-            .photo { width: 100%; max-height: 350px; object-fit: cover; border-radius: 12px; margin-top: 20px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th, td { padding: 10px; border: 1px solid #e2e8f0; text-align: left; }
-            th { background: #f7fafc; font-weight: bold; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div>
-              <h1>FarmNest Passport Card</h1>
-              <p>Livestock Registry: <strong>${animal.animal_code}</strong></p>
-            </div>
-            <span class="badge">${animal.status}</span>
-          </div>
-          <img class="photo" src="${animal.primaryPhoto}" />
-          <table>
-            <tr><th>Attribute</th><td>Details</td></tr>
-            <tr><th>Identifier Name</th><td>${animal.name || "Unnamed"}</td></tr>
-            <tr><th>Species Class</th><td>${animal.species}</td></tr>
-            <tr><th>Breed</th><td>${animal.breed}</td></tr>
-            <tr><th>Sex Type</th><td>${animal.sex}</td></tr>
-            <tr><th>Birth date</th><td>${animal.dob}</td></tr>
-            <tr><th>Source</th><td>${animal.source}</td></tr>
-            <tr><th>Vitals History Count</th><td>${animalHealth.length} items logged</td></tr>
-            <tr><th>Current notes</th><td>${animal.notes || "No extra bio."}</td></tr>
-          </table>
-          <script>window.print();</script>
-        </body>
-      </html>
-    `;
-    printWindow.document.write(html);
-    printWindow.document.close();
-    showSuccess("Printed Individual Animal Report!");
+  const triggerOffspringConfirm = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPendingConfirm({
+      title: "Register New Born Offspring?",
+      message: `This automatically binds ${newOffspring.name || "Unnamed"} to Aisha's pedigree maps. Confirm?`,
+      onConfirm: () => {
+        addAnimal({
+          name: newOffspring.name,
+          species: newOffspring.species,
+          breed: newOffspring.breed,
+          sex: newOffspring.sex,
+          dob: newOffspring.dob,
+          source: "Born on farm",
+          status: "Healthy",
+          healthStatus: "Healthy",
+          primaryPhoto: newOffspring.primaryPhoto || MOCK_IMAGES.goat1,
+          photos: [newOffspring.primaryPhoto || MOCK_IMAGES.goat1],
+          notes: newOffspring.notes || "Offspring of parent lineage.",
+          parents: {
+            motherId: animal.sex === "Female" ? animal.id : undefined,
+            fatherId: animal.sex === "Male" ? animal.id : undefined,
+          }
+        });
+        setShowAddOffspring(false);
+        setPendingConfirm(null);
+        setNewOffspring({
+          name: "",
+          species: animal.species,
+          breed: animal.breed,
+          sex: "Female",
+          dob: new Date().toISOString().split("T")[0],
+          notes: "",
+          primaryPhoto: "",
+        });
+      }
+    });
   };
 
-  const MOCK_IMAGES = {
-    goat1: "https://images.unsplash.com/photo-1524413840807-0c3cb6fa808d?w=500&auto=format&fit=crop&q=80",
-    ram: "https://images.unsplash.com/photo-1484557985045-edf25e08da73?w=500&auto=format&fit=crop&q=80",
-    chicken: "https://images.unsplash.com/photo-1548550023-2bdb3c5beed7?w=500&auto=format&fit=crop&q=80",
+  const handleDownloadFullscreen = () => {
+    if (!fullscreenPhoto) return;
+    const link = document.createElement("a");
+    link.href = fullscreenPhoto;
+    link.download = `livestock_portrait_${animal.animal_code}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showSuccess("Image downloaded successfully!");
   };
 
   return (
@@ -411,13 +427,21 @@ export const AnimalProfilePage: React.FC = () => {
             
             {/* Animal ID Card */}
             <div className="bg-white rounded-3xl overflow-hidden border border-slate-100 shadow-sm relative">
-              <div className="h-64 bg-slate-100 relative">
+              <div 
+                className="h-64 bg-slate-100 relative cursor-zoom-in group"
+                onClick={() => setFullscreenPhoto(animal.primaryPhoto)}
+              >
                 <img
                   src={animal.primaryPhoto}
                   alt={animal.name}
                   className="w-full h-full object-cover"
                 />
                 
+                {/* Overlay Hover hint */}
+                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition text-xs font-black gap-2">
+                  <Eye size={18} /> View Portrait Fullscreen
+                </div>
+
                 {/* Health State Badge Overlay */}
                 <div className="absolute top-4 right-4">
                   <span className={`text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full shadow-md ${
@@ -466,10 +490,14 @@ export const AnimalProfilePage: React.FC = () => {
 
                   <button
                     onClick={() => {
-                      if (confirm(`Do you want to permanently delete livestock ${animal.animal_code}?`)) {
-                        deleteAnimal(animal.id);
-                        navigate("/");
-                      }
+                      setPendingConfirm({
+                        title: `Permanently Delete ${animal.animal_code}?`,
+                        message: "This action clears all lineage trees and weight growth trends. There is no undo.",
+                        onConfirm: () => {
+                          deleteAnimal(animal.id);
+                          navigate("/");
+                        }
+                      });
                     }}
                     className="p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl border border-red-100 transition"
                   >
@@ -539,26 +567,26 @@ export const AnimalProfilePage: React.FC = () => {
           {/* COLUMN 2 & 3: MAIN TABS AND RECORD VIEWS */}
           <div className="md:col-span-2 space-y-6">
             
-            {/* HORIZONTAL TAB SELECTOR */}
-            <div className="flex border-b overflow-x-auto gap-2 scrollbar-none bg-white p-1.5 rounded-2xl border border-slate-100 shadow-sm">
+            {/* GRID DISPLAY FOR TAB SELECTORS (NO HORIZONTAL SCROLL) */}
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 bg-slate-100 p-2 rounded-2xl">
               {[
                 { id: "overview", label: "Overview", icon: "📊" },
-                { id: "health", label: "Health Logs", icon: "🩺" },
+                { id: "health", label: "Health", icon: "🩺" },
                 { id: "breeding", label: "Breeding", icon: "❤️" },
                 { id: "photos", label: "Photos", icon: "📷" },
                 { id: "notes", label: "Notes", icon: "📝" },
-                { id: "activity", label: "Activity Stream", icon: "⚡" },
+                { id: "activity", label: "Activity", icon: "⚡" },
               ].map(tab => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as any)}
-                  className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold shrink-0 transition ${
+                  className={`flex flex-col items-center justify-center p-2 rounded-xl text-[10px] font-black tracking-wide transition-all ${
                     activeTab === tab.id
-                      ? "bg-emerald-600 text-white shadow-sm"
-                      : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+                      ? "bg-white text-emerald-950 shadow-md border border-emerald-100 scale-102"
+                      : "text-slate-600 hover:bg-white/50"
                   }`}
                 >
-                  <span>{tab.icon}</span>
+                  <span className="text-lg mb-1">{tab.icon}</span>
                   {tab.label}
                 </button>
               ))}
@@ -587,7 +615,16 @@ export const AnimalProfilePage: React.FC = () => {
                     </div>
 
                     <button
-                      onClick={() => updateTreatmentStatus(tx.id, "Completed")}
+                      onClick={() => {
+                        setPendingConfirm({
+                          title: "Mark Treatment Complete?",
+                          message: "This records treatment end, reverting livestock to 'Healthy' status. Confirm?",
+                          onConfirm: () => {
+                            updateTreatmentStatus(tx.id, "Completed");
+                            setPendingConfirm(null);
+                          }
+                        });
+                      }}
                       className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-xl shadow-sm transition"
                     >
                       Mark Complete
@@ -854,7 +891,11 @@ export const AnimalProfilePage: React.FC = () => {
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {animal.photos.map((ph, idx) => (
                     <div key={idx} className="bg-white border rounded-2xl overflow-hidden shadow-sm flex flex-col group relative">
-                      <img src={ph} className="h-36 w-full object-cover" />
+                      <img 
+                        src={ph} 
+                        className="h-36 w-full object-cover cursor-zoom-in" 
+                        onClick={() => setFullscreenPhoto(ph)}
+                      />
                       
                       <div className="p-2 flex gap-1.5 justify-between">
                         <button
@@ -890,9 +931,16 @@ export const AnimalProfilePage: React.FC = () => {
                     onClick={() => {
                       const text = prompt("Write dynamic diary note regarding livestock behavior:");
                       if (text) {
-                        const updated = animal.notes ? `${animal.notes}\n\n[Note]: ${text}` : text;
-                        updateAnimal(animal.id, { notes: updated });
-                        showSuccess("Diary note appended successfully.");
+                        setPendingConfirm({
+                          title: "Append Diary Note?",
+                          message: "Do you want to append this behavioral detail to Aisha's permanent log?",
+                          onConfirm: () => {
+                            const updated = animal.notes ? `${animal.notes}\n\n[Note]: ${text}` : text;
+                            updateAnimal(animal.id, { notes: updated });
+                            setPendingConfirm(null);
+                            showSuccess("Diary note appended successfully.");
+                          }
+                        });
                       }
                     }}
                     className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold"
@@ -947,11 +995,71 @@ export const AnimalProfilePage: React.FC = () => {
 
       </div>
 
+      {/* GLOBAL FULLSCREEN PHOTO VIEWER MODAL WITH DOWNLOAD */}
+      {fullscreenPhoto && (
+        <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-md flex flex-col items-center justify-center p-4">
+          <button
+            onClick={() => setFullscreenPhoto(null)}
+            className="absolute top-6 right-6 w-12 h-12 bg-white/10 hover:bg-white/20 text-white rounded-full flex items-center justify-center text-xl transition"
+          >
+            ✕
+          </button>
+
+          <div className="max-w-3xl max-h-[80vh] overflow-hidden rounded-2xl border border-white/10 shadow-2xl relative">
+            <img src={fullscreenPhoto} className="w-full h-full object-contain" alt="Enlarged" />
+          </div>
+
+          <div className="mt-6 flex gap-4">
+            <button
+              onClick={handleDownloadFullscreen}
+              className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-lg transition flex items-center gap-2"
+            >
+              <Download size={16} /> Download Photo
+            </button>
+            <button
+              onClick={() => setFullscreenPhoto(null)}
+              className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white font-bold text-xs rounded-xl transition border border-white/10"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* UNIVERSAL CONFIRMATION DIALOG MODAL */}
+      {pendingConfirm && (
+        <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white max-w-sm w-full rounded-3xl p-6 space-y-4 border border-slate-100 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-amber-50 rounded-xl text-amber-600">
+                <HelpCircle size={22} />
+              </div>
+              <h3 className="font-black text-sm text-slate-900">{pendingConfirm.title}</h3>
+            </div>
+            <p className="text-xs text-slate-500 leading-relaxed">{pendingConfirm.message}</p>
+            <div className="pt-2 flex gap-2">
+              <button
+                onClick={() => setPendingConfirm(null)}
+                className="flex-1 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold transition border"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={pendingConfirm.onConfirm}
+                className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold transition shadow"
+              >
+                Confirm Act
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* EDIT MODAL DIALOG */}
       {showEditModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
           <form 
-            onSubmit={handleEditSubmit}
+            onSubmit={triggerEditConfirm}
             className="bg-white w-full max-w-md rounded-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between border-b pb-2">
@@ -1056,7 +1164,7 @@ export const AnimalProfilePage: React.FC = () => {
       {showAddHealth && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
           <form 
-            onSubmit={handleAddHealthSubmit}
+            onSubmit={triggerHealthConfirm}
             className="bg-white w-full max-w-md rounded-2xl p-6 space-y-4"
           >
             <div className="flex items-center justify-between border-b pb-2">
@@ -1116,7 +1224,7 @@ export const AnimalProfilePage: React.FC = () => {
       {showAddTreatment && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
           <form 
-            onSubmit={handleAddTreatmentSubmit}
+            onSubmit={triggerTreatmentConfirm}
             className="bg-white w-full max-w-md rounded-2xl p-6 space-y-4"
           >
             <div className="flex items-center justify-between border-b pb-2">
@@ -1150,7 +1258,7 @@ export const AnimalProfilePage: React.FC = () => {
 
             <button
               type="submit"
-              className="w-full bg-emerald-600 text-white font-bold text-xs py-3 rounded-xl shadow animate-pulse"
+              className="w-full bg-emerald-600 text-white font-bold text-xs py-3 rounded-xl shadow"
             >
               Commence Treatment Route
             </button>
@@ -1162,7 +1270,7 @@ export const AnimalProfilePage: React.FC = () => {
       {showAddWeight && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
           <form 
-            onSubmit={handleAddWeightSubmit}
+            onSubmit={triggerWeightConfirm}
             className="bg-white w-full max-w-md rounded-2xl p-6 space-y-4"
           >
             <div className="flex items-center justify-between border-b pb-2">
@@ -1207,7 +1315,7 @@ export const AnimalProfilePage: React.FC = () => {
       {showAddBreeding && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
           <form 
-            onSubmit={handleAddBreedingSubmit}
+            onSubmit={triggerBreedingConfirm}
             className="bg-white w-full max-w-md rounded-2xl p-6 space-y-4"
           >
             <div className="flex items-center justify-between border-b pb-2">
@@ -1272,7 +1380,7 @@ export const AnimalProfilePage: React.FC = () => {
       {showAddOffspring && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
           <form 
-            onSubmit={handleAddOffspringSubmit}
+            onSubmit={triggerOffspringConfirm}
             className="bg-white w-full max-w-md rounded-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between border-b pb-2">

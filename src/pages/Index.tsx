@@ -36,7 +36,8 @@ import {
   Upload,
   UserPlus,
   Compass,
-  Briefcase
+  Briefcase,
+  Download
 } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 
@@ -88,9 +89,6 @@ const Index = () => {
 
   // Bottom Navigation tab: 'dashboard' | 'animals' | 'ai' | 'inventory' | 'settings'
   const [activeTab, setActiveTab] = useState<"dashboard" | "animals" | "ai" | "inventory" | "settings">("dashboard");
-
-  // Selected animal detail modal/drawer (Now managed by dedicated full pages)
-  const [selectedAnimal, setSelectedAnimal] = useState<Animal | null>(null);
 
   // Onboarding Active Screen: 0 | 1 | 2 | 3
   const [onboardingIndex, setOnboardingIndex] = useState(0);
@@ -180,6 +178,16 @@ const Index = () => {
     notes: "",
   });
 
+  // NEW STABLE REMINDER DIALOG (Fixes '+ Add Reminder' not working)
+  const [showAddReminder, setShowAddReminder] = useState(false);
+  const [newReminderForm, setNewReminderForm] = useState({
+    title: "",
+    type: "Vaccination" as Reminder["type"],
+    dueDate: new Date().toISOString().split("T")[0],
+    animalId: "",
+    notes: ""
+  });
+
   // Roster filters
   const [searchQuery, setSearchQuery] = useState("");
   const [speciesFilter, setSpeciesFilter] = useState<string>("All");
@@ -188,6 +196,16 @@ const Index = () => {
   // Farm Profile Edit State
   const [editProfile, setEditProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({ ...farmProfile });
+
+  // CONFIRMATION POPUP OVERLAYS STATE
+  const [pendingConfirm, setPendingConfirm] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  } | null>(null);
+
+  // Full Screen Image zoom preview state
+  const [fullscreenPhoto, setFullscreenPhoto] = useState<string | null>(null);
 
   // Rotate Loading messages simulating real initial boot
   useEffect(() => {
@@ -286,90 +304,153 @@ const Index = () => {
     setAuthScreen("login");
   };
 
-  // Submit handlers
-  const handleCreateAnimal = (e: React.FormEvent) => {
+  // Safe Verified Submissions under Confirmation overlay gates
+  const triggerCreateAnimal = (e: React.FormEvent) => {
     e.preventDefault();
-    addAnimal({
-      name: newAnimal.name,
-      species: newAnimal.species,
-      breed: newAnimal.breed || "Local Breed",
-      sex: newAnimal.sex,
-      dob: newAnimal.dob,
-      source: newAnimal.source,
-      status: newAnimal.status,
-      healthStatus: "Healthy",
-      primaryPhoto: newAnimal.primaryPhoto || "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=400",
-      photos: [newAnimal.primaryPhoto || "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=400"],
-      notes: newAnimal.notes,
-      parents: {
-        motherId: newAnimal.motherId || undefined,
-        fatherId: newAnimal.fatherId || undefined
+    setPendingConfirm({
+      title: "Register New Livestock?",
+      message: `Confirm addition of ${newAnimal.species} to pasture paddock registry database.`,
+      onConfirm: () => {
+        addAnimal({
+          name: newAnimal.name,
+          species: newAnimal.species,
+          breed: newAnimal.breed || "Local Breed",
+          sex: newAnimal.sex,
+          dob: newAnimal.dob,
+          source: newAnimal.source,
+          status: newAnimal.status,
+          healthStatus: "Healthy",
+          primaryPhoto: newAnimal.primaryPhoto || "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=400",
+          photos: [newAnimal.primaryPhoto || "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=400"],
+          notes: newAnimal.notes,
+          parents: {
+            motherId: newAnimal.motherId || undefined,
+            fatherId: newAnimal.fatherId || undefined
+          }
+        });
+        setShowAddAnimal(false);
+        setPendingConfirm(null);
+        setNewAnimal({
+          name: "",
+          species: "Goat",
+          breed: "",
+          sex: "Female",
+          dob: new Date().toISOString().split("T")[0],
+          source: "Born on farm",
+          status: "Healthy",
+          notes: "",
+          primaryPhoto: "",
+          motherId: "",
+          fatherId: "",
+        });
       }
-    });
-    setShowAddAnimal(false);
-    setNewAnimal({
-      name: "",
-      species: "Goat",
-      breed: "",
-      sex: "Female",
-      dob: new Date().toISOString().split("T")[0],
-      source: "Born on farm",
-      status: "Healthy",
-      notes: "",
-      primaryPhoto: "",
-      motherId: "",
-      fatherId: "",
     });
   };
 
-  const handleCreateHealth = (e: React.FormEvent) => {
+  const triggerCreateHealth = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedAnimalForHealth) {
       showError("Please select the target animal.");
       return;
     }
-    addHealthRecord({
-      animal_id: selectedAnimalForHealth,
-      type: newHealth.type,
-      date: newHealth.date,
-      details: newHealth.details,
-      medication: newHealth.medication || undefined,
-      recordedBy: newHealth.recordedBy,
-    });
-    setShowAddHealth(false);
-    setNewHealth({
-      type: "Observation",
-      details: "",
-      medication: "",
-      recordedBy: farmProfile.ownerName || "Abdul",
-      date: new Date().toISOString().split("T")[0],
+    setPendingConfirm({
+      title: "Verify Health Observation Log?",
+      message: "This writes diagnostic remarks directly into permanent trace files.",
+      onConfirm: () => {
+        addHealthRecord({
+          animal_id: selectedAnimalForHealth,
+          type: newHealth.type,
+          date: newHealth.date,
+          details: newHealth.details,
+          medication: newHealth.medication || undefined,
+          recordedBy: newHealth.recordedBy,
+        });
+        setShowAddHealth(false);
+        setPendingConfirm(null);
+        setNewHealth({
+          type: "Observation",
+          details: "",
+          medication: "",
+          recordedBy: farmProfile.ownerName || "Abdul",
+          date: new Date().toISOString().split("T")[0],
+        });
+      }
     });
   };
 
-  const handleCreateTreatment = (e: React.FormEvent) => {
+  const triggerCreateTreatment = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedAnimalForTreatment) {
       showError("Please pick an animal");
       return;
     }
-    addTreatment({
-      animal_id: selectedAnimalForTreatment,
-      condition: newTreatment.condition,
-      medication: newTreatment.medication,
-      startDate: newTreatment.startDate,
-      endDate: newTreatment.endDate,
-      status: "Ongoing",
-      notes: newTreatment.notes,
-      followUpDate: newTreatment.followUpDate || undefined,
+    setPendingConfirm({
+      title: "Authorize Prescription Route?",
+      message: "Are you sure you want to enforce medical isolate/treatment state?",
+      onConfirm: () => {
+        addTreatment({
+          animal_id: selectedAnimalForTreatment,
+          condition: newTreatment.condition,
+          medication: newTreatment.medication,
+          startDate: newTreatment.startDate,
+          endDate: newTreatment.endDate,
+          status: "Ongoing",
+          notes: newTreatment.notes,
+          followUpDate: newTreatment.followUpDate || undefined,
+        });
+        setShowAddTreatment(false);
+        setPendingConfirm(null);
+        setNewTreatment({
+          condition: "",
+          medication: "",
+          startDate: new Date().toISOString().split("T")[0],
+          endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+          notes: "",
+          followUpDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+        });
+      }
     });
-    setShowAddTreatment(false);
-    setNewTreatment({
-      condition: "",
-      medication: "",
-      startDate: new Date().toISOString().split("T")[0],
-      endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-      notes: "",
-      followUpDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+  };
+
+  const triggerCreateReminderSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newReminderForm.title) {
+      showError("Please check reminder title");
+      return;
+    }
+    setPendingConfirm({
+      title: "Set Calendar Reminder Task?",
+      message: `Create calendar card task '${newReminderForm.title}' due on ${newReminderForm.dueDate}?`,
+      onConfirm: () => {
+        addReminder({
+          title: newReminderForm.title,
+          type: newReminderForm.type,
+          dueDate: newReminderForm.dueDate,
+          animal_id: newReminderForm.animalId || undefined,
+          notes: newReminderForm.notes || undefined
+        });
+        setShowAddReminder(false);
+        setPendingConfirm(null);
+        setNewReminderForm({
+          title: "",
+          type: "Vaccination",
+          dueDate: new Date().toISOString().split("T")[0],
+          animalId: "",
+          notes: ""
+        });
+      }
+    });
+  };
+
+  const triggerToggleReminderConfirm = (reminderId: string, text: string) => {
+    setPendingConfirm({
+      title: "Complete Reminder Procedure?",
+      message: `Verify execution task status of procedure: "${text}"?`,
+      onConfirm: () => {
+        toggleReminder(reminderId);
+        setPendingConfirm(null);
+        showSuccess("Reminder status toggled successfully!");
+      }
     });
   };
 
@@ -431,6 +512,17 @@ const Index = () => {
     setAdjustNotes("");
   };
 
+  const handleDownloadFullscreen = () => {
+    if (!fullscreenPhoto) return;
+    const link = document.createElement("a");
+    link.href = fullscreenPhoto;
+    link.download = "livestock_roster_snapshot.png";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showSuccess("Image downloaded successfully!");
+  };
+
   // Counts & metrics for farm profile
   const totalAnimals = animals.length;
   const goatsCount = animals.filter(a => a.species === "Goat").length;
@@ -452,453 +544,6 @@ const Index = () => {
     return queryMatch && speciesMatch && statusMatch;
   });
 
-  // BACKGROUND IMAGES FOR ONBOARDING / AUTH
-  const AUTH_BG_URL = "https://images.unsplash.com/photo-1516467508483-a7212febe31a?w=1000&auto=format&fit=crop&q=80";
-
-  // GLOBAL INITIALIZING / LOADING SCREEN
-  if (isInitializingApp) {
-    return (
-      <div 
-        className="min-h-screen bg-cover bg-center flex flex-col justify-center items-center text-white p-6 relative transition-all duration-500"
-        style={{ backgroundImage: `linear-gradient(to bottom, rgba(4, 47, 31, 0.95), rgba(6, 78, 59, 0.92)), url(${AUTH_BG_URL})` }}
-      >
-        <div className="text-center space-y-8 max-w-sm">
-          {/* Logo Icon */}
-          <div className="w-20 h-20 bg-white/10 backdrop-blur-md rounded-3xl border border-white/20 mx-auto flex items-center justify-center text-4xl shadow-xl animate-bounce">
-            🚜
-          </div>
-          
-          <div className="space-y-2">
-            <h1 className="text-3xl font-black tracking-tight">FarmNest</h1>
-            <p className="text-emerald-200 text-xs font-semibold uppercase tracking-wider">Your farm, all in one place.</p>
-          </div>
-
-          <div className="space-y-2 bg-black/20 p-5 rounded-2xl border border-white/5 backdrop-blur-sm">
-            <div className="flex justify-center items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-              <span className="text-sm font-extrabold text-white">{loadingMessage}</span>
-            </div>
-            <p className="text-[10px] text-emerald-300">Just a moment while we configure database streams.</p>
-          </div>
-
-          <div className="pt-8 border-t border-emerald-800/40">
-            <p className="text-emerald-100/90 text-xs italic font-medium leading-relaxed">
-              "Good records. Healthy animals. Better farming."
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ONBOARDING SCREENS WRAPPER (4 Screens total)
-  if (!onboardingCompleted) {
-    return (
-      <div 
-        className="min-h-screen bg-cover bg-center flex flex-col justify-between text-white p-6 transition-all duration-700 relative"
-        style={{ 
-          backgroundImage: `linear-gradient(to bottom, rgba(15, 23, 42, 0.8), rgba(6, 78, 59, 0.95)), url(${AUTH_BG_URL})` 
-        }}
-      >
-        {/* Top skip header */}
-        <div className="flex justify-between items-center z-10">
-          <div className="flex items-center gap-2">
-            <span className="text-lg">🚜</span>
-            <span className="font-black text-sm tracking-wide">FarmNest</span>
-          </div>
-          <button 
-            onClick={() => setOnboardingCompleted(true)}
-            className="text-xs font-black bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-full border border-white/10 backdrop-blur-sm transition"
-          >
-            Skip
-          </button>
-        </div>
-
-        {/* SCREEN 1: WELCOME SCREEN */}
-        {onboardingIndex === 0 && (
-          <div className="max-w-md mx-auto space-y-6 text-center my-auto z-10 py-12 animate-in fade-in zoom-in duration-500">
-            <h1 className="text-4xl md:text-5xl font-black leading-tight text-white">
-              FarmNest
-            </h1>
-            <p className="text-emerald-300 font-extrabold text-sm uppercase tracking-widest">
-              Your farm, all in one place.
-            </p>
-            <p className="text-slate-200 text-xs leading-relaxed max-w-xs mx-auto">
-              Manage your animals, records, health history, breeding logs and inventory — all from your pocket.
-            </p>
-
-            <button
-              onClick={() => setOnboardingIndex(1)}
-              className="px-8 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-xs rounded-xl shadow-lg transition"
-            >
-              Get Started
-            </button>
-          </div>
-        )}
-
-        {/* SCREEN 2: ANIMAL IDENTITY */}
-        {onboardingIndex === 1 && (
-          <div className="max-w-md mx-auto space-y-6 text-center my-auto z-10 py-12 animate-in slide-in-from-right duration-500">
-            {/* Visual Preview */}
-            <div className="bg-white/10 backdrop-blur-md p-4 rounded-3xl border border-white/20 text-left max-w-xs mx-auto shadow-xl">
-              <div className="relative h-24 bg-slate-100 rounded-xl overflow-hidden">
-                <img src={MOCK_IMAGES.goat1} className="w-full h-full object-cover" />
-                <span className="absolute top-2 right-2 bg-emerald-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full">
-                  Healthy
-                </span>
-              </div>
-              <p className="text-[9px] text-emerald-300 font-bold uppercase mt-2">Goat • Female</p>
-              <h3 className="font-black text-xs text-white">AISHA</h3>
-              <p className="text-[10px] font-mono text-slate-300">GOAT-0024</p>
-            </div>
-
-            <div className="space-y-2">
-              <h2 className="text-2xl font-black leading-tight">Every animal has a place</h2>
-              <p className="text-slate-200 text-xs leading-relaxed max-w-xs mx-auto">
-                Give each goat, ram, chicken and other animal its own digital identity, photos and complete pedigree lineage.
-              </p>
-            </div>
-
-            <button
-              onClick={() => setOnboardingIndex(2)}
-              className="px-8 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-xs rounded-xl shadow-lg transition"
-            >
-              Next
-            </button>
-          </div>
-        )}
-
-        {/* SCREEN 3: LIVING STORY */}
-        {onboardingIndex === 2 && (
-          <div className="max-w-md mx-auto space-y-6 text-center my-auto z-10 py-12 animate-in slide-in-from-right duration-500">
-            {/* Health timeline preview */}
-            <div className="bg-white/10 backdrop-blur-md p-4 rounded-3xl border border-white/20 text-left max-w-xs mx-auto shadow-xl space-y-3">
-              <div className="flex gap-3 text-xs items-center">
-                <span className="text-emerald-400">●</span>
-                <div>
-                  <p className="font-bold">PPR Vaccination booster</p>
-                  <p className="text-[9px] text-slate-300">Administered by Uncle • Last month</p>
-                </div>
-              </div>
-              <div className="flex gap-3 text-xs items-center opacity-70">
-                <span className="text-amber-400">●</span>
-                <div>
-                  <p className="font-bold">Minor Hoof decay watch</p>
-                  <p className="text-[9px] text-slate-300">Logged by Abdul • 2 months ago</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <h2 className="text-2xl font-black leading-tight">Keep their whole story</h2>
-              <p className="text-slate-200 text-xs leading-relaxed max-w-xs mx-auto">
-                Track health observations, active medical prescriptions, weighings, offspring counts, and audit logs permanently.
-              </p>
-            </div>
-
-            <button
-              onClick={() => setOnboardingIndex(3)}
-              className="px-8 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-xs rounded-xl shadow-lg transition"
-            >
-              Next
-            </button>
-          </div>
-        )}
-
-        {/* SCREEN 4: COMPLETE THE FARM HOME */}
-        {onboardingIndex === 3 && (
-          <div className="max-w-md mx-auto space-y-6 text-center my-auto z-10 py-12 animate-in slide-in-from-right duration-500">
-            <h2 className="text-3xl font-black leading-tight text-white">Your farm, all together</h2>
-            <p className="text-slate-200 text-xs leading-relaxed max-w-xs mx-auto">
-              Ready to give your livestock a real source of truth? Create your personal profile and configure your farm parameters in 1 minute.
-            </p>
-
-            <div className="space-y-2 pt-2">
-              <button
-                onClick={() => setOnboardingCompleted(true)}
-                className="w-full max-w-xs py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-xs rounded-xl shadow-lg transition"
-              >
-                Create My Farm
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Footer indicators and Skip controls */}
-        <div className="flex justify-between items-center z-10 py-4 max-w-md mx-auto w-full">
-          <div className="flex gap-2">
-            {[0, 1, 2, 3].map((idx) => (
-              <span 
-                key={idx}
-                onClick={() => setOnboardingIndex(idx)}
-                className={`w-2.5 h-2.5 rounded-full transition-all cursor-pointer ${onboardingIndex === idx ? "bg-emerald-400 w-6" : "bg-white/30"}`}
-              />
-            ))}
-          </div>
-          {onboardingIndex > 0 && (
-            <button 
-              onClick={() => setOnboardingIndex(prev => prev - 1)}
-              className="text-xs font-bold text-slate-300 hover:text-white transition"
-            >
-              Go Back
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // IF NOT AUTHENTICATED: Present beautiful Welcome/Onboarding portal
-  if (!session.isAuthenticated) {
-    return (
-      <div 
-        className="min-h-screen bg-cover bg-center flex items-center justify-center p-4 relative"
-        style={{ backgroundImage: `linear-gradient(to bottom, rgba(15, 23, 42, 0.7), rgba(4, 47, 31, 0.95)), url(${AUTH_BG_URL})` }}
-      >
-        <div className="w-full max-w-md bg-white/10 backdrop-blur-md rounded-3xl shadow-2xl overflow-hidden border border-white/20 p-6 space-y-6">
-          
-          {/* Brand header */}
-          <div className="text-center space-y-1">
-            <div className="w-12 h-12 bg-white/10 backdrop-blur-md rounded-2xl mx-auto flex items-center justify-center text-2xl shadow border border-white/20">
-              🚜
-            </div>
-            <h1 className="text-2xl font-black text-white mt-2">FarmNest</h1>
-            <p className="text-emerald-300 text-[10px] font-extrabold uppercase tracking-widest">Your farm, all in one place.</p>
-          </div>
-
-          {/* WELCOME PORTAL */}
-          {authScreen === "welcome" && (
-            <div className="space-y-6 animate-in fade-in duration-300">
-              <p className="text-slate-200 text-xs text-center leading-relaxed">
-                Connect your team, map maternal/paternal lineage trees, trace vaccinations chronologically and control inventory levels efficiently.
-              </p>
-
-              <div className="grid grid-cols-1 gap-3">
-                <button
-                  onClick={() => setAuthScreen("signup")}
-                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2"
-                >
-                  <UserPlus size={16} />
-                  Setup New Farm Account
-                </button>
-                <button
-                  onClick={() => setAuthScreen("login")}
-                  className="w-full py-3 bg-white/10 hover:bg-white/20 text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-2 border border-white/20"
-                >
-                  <Compass size={16} />
-                  Login to Existing Farm
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* SIGNUP / SETUP FARM */}
-          {authScreen === "signup" && (
-            <form onSubmit={handleSignupSubmit} className="space-y-4 animate-in fade-in duration-300">
-              <div className="space-y-1 text-center">
-                <h2 className="text-lg font-black text-white">Create your FarmNest account</h2>
-                <p className="text-[10px] text-emerald-300">Let's set up your farm and operator credentials.</p>
-              </div>
-
-              <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
-                <div>
-                  <label className="text-[9px] font-bold text-emerald-200 uppercase block mb-1">Your Name</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Abdulazeez Adam"
-                    value={authOperatorName}
-                    onChange={(e) => setAuthOperatorName(e.target.value)}
-                    className="w-full p-2.5 bg-black/20 border border-white/10 rounded-xl text-xs text-white outline-none focus:ring-1 focus:ring-emerald-500"
-                    required
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[9px] font-bold text-emerald-200 uppercase block mb-1">Farm Name</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Adam Farms"
-                      value={authFarmName}
-                      onChange={(e) => setAuthFarmName(e.target.value)}
-                      className="w-full p-2.5 bg-black/20 border border-white/10 rounded-xl text-xs text-white outline-none focus:ring-1 focus:ring-emerald-500"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[9px] font-bold text-emerald-200 uppercase block mb-1">Geographic Location</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Kano, Nigeria"
-                      value={authLocation}
-                      onChange={(e) => setAuthLocation(e.target.value)}
-                      className="w-full p-2.5 bg-black/20 border border-white/10 rounded-xl text-xs text-white outline-none focus:ring-1 focus:ring-emerald-500"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-[9px] font-bold text-emerald-200 uppercase block mb-1">Email Address</label>
-                  <input
-                    type="email"
-                    placeholder="operator@myfarm.com"
-                    value={authEmail}
-                    onChange={(e) => setAuthEmail(e.target.value)}
-                    className="w-full p-2.5 bg-black/20 border border-white/10 rounded-xl text-xs text-white outline-none focus:ring-1 focus:ring-emerald-500"
-                    required
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[9px] font-bold text-emerald-200 uppercase block mb-1">Password</label>
-                    <input
-                      type="password"
-                      placeholder="••••••••"
-                      value={authPassword}
-                      onChange={(e) => setAuthPassword(e.target.value)}
-                      className="w-full p-2.5 bg-black/20 border border-white/10 rounded-xl text-xs text-white outline-none focus:ring-1 focus:ring-emerald-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[9px] font-bold text-emerald-200 uppercase block mb-1">Confirm</label>
-                    <input
-                      type="password"
-                      placeholder="••••••••"
-                      value={authConfirmPassword}
-                      onChange={(e) => setAuthConfirmPassword(e.target.value)}
-                      className="w-full p-2.5 bg-black/20 border border-white/10 rounded-xl text-xs text-white outline-none focus:ring-1 focus:ring-emerald-500"
-                      required
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-2 space-y-2">
-                <button
-                  type="submit"
-                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition"
-                >
-                  Create My Farm
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAuthScreen("welcome")}
-                  className="w-full py-2 text-slate-300 hover:text-white text-xs font-semibold text-center block"
-                >
-                  Back to main portal
-                </button>
-              </div>
-            </form>
-          )}
-
-          {/* LOGIN PAGE */}
-          {authScreen === "login" && (
-            <form onSubmit={handleLoginSubmit} className="space-y-4 animate-in fade-in duration-300">
-              <div className="space-y-1 text-center">
-                <h2 className="text-lg font-black text-white">Welcome back</h2>
-                <p className="text-[11px] text-emerald-300">Log in to your FarmNest dashboard.</p>
-              </div>
-
-              <div className="space-y-3">
-                <div>
-                  <label className="text-[9px] font-bold text-emerald-200 uppercase block mb-1">Farm Name or Email</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Adam Farms / operator@myfarm.com"
-                    value={authEmail}
-                    onChange={(e) => setAuthEmail(e.target.value)}
-                    className="w-full p-2.5 bg-black/20 border border-white/10 rounded-xl text-xs text-white outline-none focus:ring-1 focus:ring-emerald-500"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <div className="flex justify-between items-center mb-1">
-                    <label className="text-[9px] font-bold text-emerald-200 uppercase block">Password</label>
-                    <button 
-                      type="button" 
-                      onClick={() => setAuthScreen("forgot_password")}
-                      className="text-[9px] font-bold text-emerald-300 hover:underline"
-                    >
-                      Forgot password?
-                    </button>
-                  </div>
-                  <input
-                    type="password"
-                    placeholder="••••••••"
-                    value={authPassword}
-                    onChange={(e) => setAuthPassword(e.target.value)}
-                    className="w-full p-2.5 bg-black/20 border border-white/10 rounded-xl text-xs text-white outline-none focus:ring-1 focus:ring-emerald-500"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="pt-2 space-y-2">
-                <button
-                  type="submit"
-                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md transition"
-                >
-                  Log In to Farm Session
-                </button>
-                <div className="text-center pt-2">
-                  <span className="text-xs text-slate-300">Don't have an account? </span>
-                  <button 
-                    type="button" 
-                    onClick={() => setAuthScreen("signup")}
-                    className="text-xs font-bold text-emerald-400 hover:underline"
-                  >
-                    Sign up
-                  </button>
-                </div>
-              </div>
-            </form>
-          )}
-
-          {/* FORGOT PASSWORD */}
-          {authScreen === "forgot_password" && (
-            <form onSubmit={handleResetPasswordSubmit} className="space-y-4 animate-in fade-in duration-300">
-              <div className="space-y-1 text-center">
-                <h2 className="text-lg font-black text-white">Reset your password</h2>
-                <p className="text-xs text-slate-300">Enter your email and we'll send you a link to reset.</p>
-              </div>
-
-              <div>
-                <label className="text-[9px] font-bold text-emerald-200 uppercase block mb-1">Email Address</label>
-                <input
-                  type="email"
-                  placeholder="operator@myfarm.com"
-                  className="w-full p-2.5 bg-black/20 border border-white/10 rounded-xl text-xs text-white outline-none focus:ring-1 focus:ring-emerald-500"
-                  required
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition"
-              >
-                Send Reset Link
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setAuthScreen("login")}
-                className="w-full py-2 text-slate-300 hover:text-white text-xs font-semibold text-center block"
-              >
-                Back to Login
-              </button>
-            </form>
-          )}
-
-        </div>
-      </div>
-    );
-  }
-
-  // IF AUTHENTICATED: Display the responsive Desktop-ready main application UI
   return (
     <div className="min-h-screen bg-[#FBFDF9] text-slate-800 font-sans flex flex-col md:flex-row">
       
@@ -1129,17 +774,7 @@ const Index = () => {
                     Due Today / Soon ({reminders.filter(r => !r.completed).length})
                   </h3>
                   <button 
-                    onClick={() => {
-                      const title = prompt("Enter a brief title for your custom reminder:");
-                      if (title) {
-                        addReminder({
-                          title,
-                          type: "Other",
-                          dueDate: new Date().toISOString().split("T")[0],
-                          notes: "Manually registered reminder"
-                        });
-                      }
-                    }}
+                    onClick={() => setShowAddReminder(true)}
                     className="text-xs font-bold text-emerald-600 hover:underline"
                   >
                     + Add Reminder
@@ -1152,7 +787,7 @@ const Index = () => {
                     return (
                       <div 
                         key={rem.id}
-                        onClick={() => toggleReminder(rem.id)}
+                        onClick={() => triggerToggleReminderConfirm(rem.id, rem.title)}
                         className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl flex items-center justify-between cursor-pointer transition border border-slate-100"
                       >
                         <div className="flex items-center gap-3">
@@ -1338,15 +973,15 @@ const Index = () => {
                 return (
                   <div
                     key={animal.id}
-                    onClick={() => navigate(`/animals/${animal.id}`)}
-                    className="bg-white rounded-2xl overflow-hidden border border-slate-100 shadow-sm hover:border-emerald-300 transition cursor-pointer flex flex-col group animate-in fade-in"
+                    className="bg-white rounded-2xl overflow-hidden border border-slate-100 shadow-sm hover:border-emerald-300 transition flex flex-col group animate-in fade-in"
                   >
-                    {/* Animal Photo */}
+                    {/* Animal Photo with double clicks zooms */}
                     <div className="relative h-32 bg-slate-100">
                       <img
                         src={animal.primaryPhoto}
                         alt={animal.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                        onClick={() => setFullscreenPhoto(animal.primaryPhoto)}
+                        className="w-full h-full object-cover group-hover:scale-105 transition duration-300 cursor-zoom-in"
                       />
                       <div className="absolute top-2 right-2">
                         <span className={`text-[9px] font-black tracking-wide px-2 py-0.5 rounded-full shadow ${
@@ -1358,8 +993,11 @@ const Index = () => {
                       </div>
                     </div>
 
-                    {/* Animal Identity text */}
-                    <div className="p-3 flex-1 flex flex-col justify-between">
+                    {/* Animal Identity text clicks navigates to Profile page */}
+                    <div 
+                      onClick={() => navigate(`/animals/${animal.id}`)}
+                      className="p-3 flex-1 flex flex-col justify-between cursor-pointer"
+                    >
                       <div>
                         <div className="flex items-center justify-between">
                           <span className="text-[10px] font-bold text-slate-400">{animal.species}</span>
@@ -1451,37 +1089,6 @@ const Index = () => {
               <p className="text-[10px] text-slate-400 mt-3 text-center">
                 Limits refresh daily at midnight. Image uploads are completely free.
               </p>
-            </div>
-
-            {/* Predefined prompts / Simulator */}
-            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
-              <h3 className="font-bold text-slate-700 text-xs mb-3">Simulated Veterinary Knowledge Prompts</h3>
-              
-              <div className="space-y-2">
-                <div 
-                  onClick={() => showSuccess("Simulating prompt: 'Does Aisha have complete breeding history?' -> AI matched Aisha's profile and confirmed positive pregnancy cross.")}
-                  className="p-3 bg-white hover:bg-slate-100 rounded-xl text-xs text-slate-600 border border-slate-200 cursor-pointer flex items-center justify-between"
-                >
-                  <span>📝 Check pregnancy history of Aisha (GOAT-0024)</span>
-                  <ChevronRight size={14} className="text-slate-400" />
-                </div>
-
-                <div 
-                  onClick={() => showSuccess("Simulating prompt: 'What treatment was given to Nala?' -> AI fetched Hoof Rot Diagnosis record (18 Feb).")}
-                  className="p-3 bg-white hover:bg-slate-100 rounded-xl text-xs text-slate-600 border border-slate-200 cursor-pointer flex items-center justify-between"
-                >
-                  <span>📝 Summarize hoof rot treatment on Nala</span>
-                  <ChevronRight size={14} className="text-slate-400" />
-                </div>
-
-                <div 
-                  onClick={() => showSuccess("Simulating prompt: 'Is my maize stock too low?' -> AI noted Maize Feed is healthy, but Penicillin has dipped below 3 threshold.")}
-                  className="p-3 bg-white hover:bg-slate-100 rounded-xl text-xs text-slate-600 border border-slate-200 cursor-pointer flex items-center justify-between"
-                >
-                  <span>📦 Is our medication storage stock depleted?</span>
-                  <ChevronRight size={14} className="text-slate-400" />
-                </div>
-              </div>
             </div>
 
           </div>
@@ -1597,7 +1204,16 @@ const Index = () => {
                           📞
                         </a>
                         <button
-                          onClick={() => deleteContact(c.id)}
+                          onClick={() => {
+                            setPendingConfirm({
+                              title: "Delete Contact?",
+                              message: `Do you want to delete ${c.name} from contact registry?`,
+                              onConfirm: () => {
+                                deleteContact(c.id);
+                                setPendingConfirm(null);
+                              }
+                            });
+                          }}
                           className="w-7 h-7 bg-white hover:bg-red-50 border border-red-100 rounded-lg flex items-center justify-center text-red-500 shadow-sm"
                         >
                           <Trash2 size={12} />
@@ -1631,8 +1247,15 @@ const Index = () => {
                 <form 
                   onSubmit={(e) => {
                     e.preventDefault();
-                    updateFarmProfile(profileForm);
-                    setEditProfile(false);
+                    setPendingConfirm({
+                      title: "Save Farm Settings?",
+                      message: "Confirm profile modification parameters before write updates.",
+                      onConfirm: () => {
+                        updateFarmProfile(profileForm);
+                        setEditProfile(false);
+                        setPendingConfirm(null);
+                      }
+                    });
                   }}
                   className="space-y-3"
                 >
@@ -1686,27 +1309,152 @@ const Index = () => {
               )}
             </div>
 
-            {/* Mobile-only Logout button helper */}
-            <div className="md:hidden">
-              <button
-                onClick={logout}
-                className="w-full py-3 bg-red-50 hover:bg-red-100 text-red-600 font-extrabold text-xs rounded-2xl transition flex items-center justify-center gap-2"
-              >
-                <LogOut size={14} />
-                Sign Out Operator Session
-              </button>
-            </div>
-
           </div>
         )}
 
       </main>
 
+      {/* STABLE ADD REMINDER MODAL DIALOG (Fixes and restores reminder workflow) */}
+      {showAddReminder && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
+          <form 
+            onSubmit={triggerCreateReminderSubmit}
+            className="bg-white w-full max-w-md rounded-2xl p-6 space-y-4"
+          >
+            <div className="flex items-center justify-between border-b pb-2">
+              <h3 className="font-extrabold text-sm text-slate-900">Add Custom Reminder Task</h3>
+              <button type="button" onClick={() => setShowAddReminder(false)} className="text-slate-400 hover:text-slate-600">✕</button>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 block">Task / Reminder Title</label>
+              <input
+                type="text"
+                placeholder="e.g. PPR Booster dose - Aisha"
+                value={newReminderForm.title}
+                onChange={(e) => setNewReminderForm({ ...newReminderForm, title: e.target.value })}
+                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 block">Procedure Type</label>
+                <select
+                  value={newReminderForm.type}
+                  onChange={(e) => setNewReminderForm({ ...newReminderForm, type: e.target.value as Reminder["type"] })}
+                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
+                >
+                  <option value="Vaccination">Vaccination 💉</option>
+                  <option value="Treatment">Treatment 💊</option>
+                  <option value="Breeding">Breeding Run ❤️</option>
+                  <option value="Birth">Birth Delivery 👶</option>
+                  <option value="Other">Other Paddock Task</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 block">Due Date</label>
+                <input
+                  type="date"
+                  value={newReminderForm.dueDate}
+                  onChange={(e) => setNewReminderForm({ ...newReminderForm, dueDate: e.target.value })}
+                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 block">Assign Livestock (Optional)</label>
+              <select
+                value={newReminderForm.animalId}
+                onChange={(e) => setNewReminderForm({ ...newReminderForm, animalId: e.target.value })}
+                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
+              >
+                <option value="">-- Choose Profile --</option>
+                {animals.map((a) => (
+                  <option key={a.id} value={a.id}>{a.animal_code} {a.name ? `(${a.name})` : `(${a.species})`}</option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              type="submit"
+              className="w-full bg-emerald-600 text-white font-bold text-xs py-3 rounded-xl shadow"
+            >
+              Add Calendar Task
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* GLOBAL FULLSCREEN PHOTO VIEWER MODAL WITH DOWNLOAD */}
+      {fullscreenPhoto && (
+        <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-md flex flex-col items-center justify-center p-4">
+          <button
+            onClick={() => setFullscreenPhoto(null)}
+            className="absolute top-6 right-6 w-12 h-12 bg-white/10 hover:bg-white/20 text-white rounded-full flex items-center justify-center text-xl transition"
+          >
+            ✕
+          </button>
+
+          <div className="max-w-3xl max-h-[80vh] overflow-hidden rounded-2xl border border-white/10 shadow-2xl relative">
+            <img src={fullscreenPhoto} className="w-full h-full object-contain" alt="Enlarged" />
+          </div>
+
+          <div className="mt-6 flex gap-4">
+            <button
+              onClick={handleDownloadFullscreen}
+              className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-lg transition flex items-center gap-2"
+            >
+              <Download size={16} /> Download Photo
+            </button>
+            <button
+              onClick={() => setFullscreenPhoto(null)}
+              className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white font-bold text-xs rounded-xl transition border border-white/10"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* UNIVERSAL CONFIRMATION DIALOG MODAL */}
+      {pendingConfirm && (
+        <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white max-w-sm w-full rounded-3xl p-6 space-y-4 border border-slate-100 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-amber-50 rounded-xl text-amber-600">
+                <HelpCircle size={22} />
+              </div>
+              <h3 className="font-black text-sm text-slate-900">{pendingConfirm.title}</h3>
+            </div>
+            <p className="text-xs text-slate-500 leading-relaxed">{pendingConfirm.message}</p>
+            <div className="pt-2 flex gap-2">
+              <button
+                onClick={() => setPendingConfirm(null)}
+                className="flex-1 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold transition border"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={pendingConfirm.onConfirm}
+                className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold transition shadow"
+              >
+                Confirm Act
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* DIALOG 1: REGISTER ANIMAL & PORTRAIT FILE INTAKE */}
       {showAddAnimal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
           <form 
-            onSubmit={handleCreateAnimal}
+            onSubmit={triggerCreateAnimal}
             className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 space-y-4 max-h-[90vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between border-b pb-2">
@@ -1896,7 +1644,7 @@ const Index = () => {
       {showAddHealth && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
           <form 
-            onSubmit={handleCreateHealth}
+            onSubmit={triggerCreateHealth}
             className="bg-white w-full max-w-md rounded-2xl p-6 space-y-4 animate-in fade-in"
           >
             <div className="flex items-center justify-between border-b pb-2">
@@ -1985,7 +1733,7 @@ const Index = () => {
       {showAddTreatment && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
           <form 
-            onSubmit={handleCreateTreatment}
+            onSubmit={triggerCreateTreatment}
             className="bg-white w-full max-w-md rounded-2xl p-6 space-y-4"
           >
             <div className="flex items-center justify-between border-b pb-2">
