@@ -461,8 +461,23 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (farmName: string, password: string): Promise<boolean> => {
     if (isSupabaseConfigured()) {
-      // Formulate temporary lookup email based on farm name so Supabase schema matches standard email auth seamlessly
-      const email = `${farmName.replace(/\s+/g, "").toLowerCase()}@farmnest.com`;
+      let email = `${farmName.replace(/\s+/g, "").toLowerCase()}@farmnest.com`;
+      
+      // Attempt to look up the exact email registered for this farm_name from accounts table
+      try {
+        const { data: acct } = await supabase
+          .from("accounts")
+          .select("email, operator_name, location")
+          .ilike("farm_name", farmName.trim())
+          .maybeSingle();
+
+        if (acct?.email) {
+          email = acct.email;
+        }
+      } catch (e) {
+        console.warn("Could not query public.accounts table for email mapping", e);
+      }
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -484,9 +499,9 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         const profile = {
           ...farmProfile,
-          name: data.user.user_metadata.farmName || farmName,
-          ownerName: data.user.user_metadata.name || "Operator",
-          location: data.user.user_metadata.location || "Kano, Nigeria",
+          name: data.user.user_metadata?.farmName || farmName,
+          ownerName: data.user.user_metadata?.name || "Operator",
+          location: data.user.user_metadata?.location || "Kano, Nigeria",
         };
         setFarmProfile(profile);
         saveState("farm_v2_profile", profile);
@@ -549,6 +564,19 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (data?.user) {
+        // Insert account profile into public.accounts table
+        try {
+          await supabase.from("accounts").insert([{
+            user_id: data.user.id,
+            farm_name: farmName,
+            operator_name: name,
+            email: email,
+            location: location
+          }]);
+        } catch (e) {
+          console.error("Accounts table insert exception", e);
+        }
+
         const userSession = {
           email,
           name,

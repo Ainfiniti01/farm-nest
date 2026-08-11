@@ -1,108 +1,40 @@
--- Create Animals Table
-CREATE TABLE IF NOT EXISTS animals (
-  id TEXT PRIMARY KEY,
-  animal_code TEXT NOT NULL UNIQUE,
-  name TEXT,
-  species TEXT NOT NULL,
-  breed TEXT NOT NULL,
-  sex TEXT NOT NULL,
-  dob TEXT,
-  purchase_date TEXT,
-  source TEXT NOT NULL,
-  status TEXT NOT NULL,
-  health_status TEXT NOT NULL,
-  primary_photo TEXT,
-  photos TEXT[] DEFAULT '{}',
-  mother_id TEXT,
-  father_id TEXT,
-  notes TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+-- ========================================================
+-- ACCOUNTS TABLE SCHEMA & SECURITY POLICIES
+-- ========================================================
+
+-- 1. Create accounts table in public schema
+CREATE TABLE IF NOT EXISTS public.accounts (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  farm_name TEXT NOT NULL UNIQUE,
+  operator_name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  location TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create Health Records Table
-CREATE TABLE IF NOT EXISTS health_records (
-  id TEXT PRIMARY KEY,
-  animal_id TEXT REFERENCES animals(id) ON DELETE CASCADE,
-  type TEXT NOT NULL,
-  date TEXT NOT NULL,
-  details TEXT NOT NULL,
-  medication TEXT,
-  recorded_by TEXT NOT NULL
-);
+-- 2. Enable Explicit Data API Grants (Required for Supabase REST API)
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.accounts TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.accounts TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.accounts TO anon;
 
--- Create Treatments Table
-CREATE TABLE IF NOT EXISTS treatments (
-  id TEXT PRIMARY KEY,
-  animal_id TEXT REFERENCES animals(id) ON DELETE CASCADE,
-  condition TEXT NOT NULL,
-  medication TEXT NOT NULL,
-  start_date TEXT NOT NULL,
-  end_date TEXT NOT NULL,
-  status TEXT NOT NULL,
-  notes TEXT,
-  follow_up_date TEXT
-);
+-- 3. Enable Row Level Security (RLS)
+ALTER TABLE public.accounts ENABLE ROW LEVEL SECURITY;
 
--- Create Weight Records Table
-CREATE TABLE IF NOT EXISTS weight_records (
-  id TEXT PRIMARY KEY,
-  animal_id TEXT REFERENCES animals(id) ON DELETE CASCADE,
-  weight NUMERIC NOT NULL,
-  date TEXT NOT NULL,
-  notes TEXT
-);
+-- 4. Create RLS Policies for Accounts Table
+DROP POLICY IF EXISTS "accounts_select_policy" ON public.accounts;
+CREATE POLICY "accounts_select_policy" ON public.accounts
+FOR SELECT USING (true);
 
--- Create Breeding Records Table
-CREATE TABLE IF NOT EXISTS breeding_records (
-  id TEXT PRIMARY KEY,
-  female_id TEXT REFERENCES animals(id) ON DELETE CASCADE,
-  male_id TEXT REFERENCES animals(id) ON DELETE CASCADE,
-  date TEXT NOT NULL,
-  status TEXT NOT NULL,
-  notes TEXT
-);
+DROP POLICY IF EXISTS "accounts_insert_policy" ON public.accounts;
+CREATE POLICY "accounts_insert_policy" ON public.accounts
+FOR INSERT WITH CHECK (true);
 
--- Create Inventory Table
-CREATE TABLE IF NOT EXISTS inventory (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  category TEXT NOT NULL,
-  quantity NUMERIC NOT NULL,
-  unit TEXT NOT NULL,
-  min_stock NUMERIC NOT NULL,
-  expiry_date TEXT,
-  notes TEXT
-);
+DROP POLICY IF EXISTS "accounts_update_policy" ON public.accounts;
+CREATE POLICY "accounts_update_policy" ON public.accounts
+FOR UPDATE USING (true);
 
--- Create Contacts Table
-CREATE TABLE IF NOT EXISTS contacts (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  role TEXT NOT NULL,
-  phone TEXT NOT NULL,
-  whatsapp TEXT,
-  email TEXT,
-  address TEXT,
-  notes TEXT
-);
-
--- Create Reminders Table
-CREATE TABLE IF NOT EXISTS reminders (
-  id TEXT PRIMARY KEY,
-  title TEXT NOT NULL,
-  type TEXT NOT NULL,
-  due_date TEXT NOT NULL,
-  animal_id TEXT REFERENCES animals(id) ON DELETE CASCADE,
-  completed BOOLEAN DEFAULT FALSE,
-  notes TEXT
-);
-
--- Create Activity Logs Table
-CREATE TABLE IF NOT EXISTS activity_logs (
-  id TEXT PRIMARY KEY,
-  type TEXT NOT NULL,
-  description TEXT NOT NULL,
-  date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  actor TEXT NOT NULL,
-  target_id TEXT
-);
+DROP POLICY IF EXISTS "accounts_delete_policy" ON public.accounts;
+CREATE POLICY "accounts_delete_policy" ON public.accounts
+FOR DELETE USING (true);
