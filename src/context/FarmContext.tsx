@@ -389,9 +389,9 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
           farm_id: fn.farm_id,
           title: fn.title,
           content: fn.content,
-          created_by: fn.created_by,
-          created_at: fn.created_at,
-          updated_at: fn.updated_at
+          created_by: fn.created_by || "Operator",
+          created_at: fn.created_at || new Date().toISOString(),
+          updated_at: fn.updated_at || new Date().toISOString()
         })));
       }
 
@@ -400,9 +400,9 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
           id: an.id,
           animal_id: an.animal_id,
           content: an.content,
-          created_by: an.created_by,
-          created_at: an.created_at,
-          updated_at: an.updated_at
+          created_by: an.created_by || "Operator",
+          created_at: an.created_at || new Date().toISOString(),
+          updated_at: an.updated_at || new Date().toISOString()
         })));
       }
 
@@ -440,7 +440,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
           isAuthenticated: true
         });
 
-        // Query public.accounts for farm details
         try {
           const { data: acct } = await supabase
             .from("accounts")
@@ -526,7 +525,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       let emailToUse = identifier.trim();
 
-      // If user typed a farm name instead of email, resolve target email from accounts table
       if (!emailToUse.includes("@")) {
         const { data: accountRow } = await supabase
           .from("accounts")
@@ -569,7 +567,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signupAndSetup = async (email: string, password: string, name: string, farmName: string, location: string): Promise<boolean> => {
     setIsLoadingData(true);
     try {
-      // Register with Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
@@ -589,7 +586,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (authData?.user) {
-        // Record in public.accounts table
         try {
           await supabase.from("accounts").insert([{
             user_id: authData.user.id,
@@ -953,10 +949,10 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await logActivity("Reminder Completed", `Completed task: ${target.title}`, farmProfile.ownerName, target.animal_id);
   };
 
-  // FARM NOTES ACTIONS
+  // FARM NOTES ACTIONS (DEDICATED GENERAL FARM NOTES)
   const addFarmNote = async (note: { title?: string; content: string }) => {
     const newId = "fn_" + Date.now();
-    const newRecord = {
+    const newRecord: FarmNote = {
       id: newId,
       title: note.title?.trim() || undefined,
       content: note.content.trim(),
@@ -968,19 +964,22 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setFarmNotes(prev => [newRecord, ...prev]);
 
     try {
-      await supabase.from("farm_notes").insert([{
+      const { error } = await supabase.from("farm_notes").insert([{
         id: newRecord.id,
-        title: newRecord.title,
+        title: newRecord.title || null,
         content: newRecord.content,
         created_by: newRecord.created_by,
         user_id: session.userId || null
       }]);
+      if (error) {
+        console.warn("[FarmContext] farm_notes table insert warn", error);
+      }
     } catch (e) {
-      console.warn("[FarmContext] farm_notes table write fallback", e);
+      console.warn("[FarmContext] farm_notes table write exception", e);
     }
 
     await reloadFarmData();
-    await logActivity("Farm Note", `Added farm note: "${(note.title || note.content).slice(0, 35)}..."`, farmProfile.ownerName);
+    await logActivity("Farm Note Added", `Added farm note: "${(note.title || note.content).slice(0, 35)}..."`, farmProfile.ownerName);
     showSuccess("Farm note recorded!");
   };
 
@@ -994,9 +993,12 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setFarmNotes(prev => prev.map(fn => fn.id === id ? { ...fn, title: updates.title, content: updates.content, updated_at: payload.updated_at } : fn));
 
     try {
-      await supabase.from("farm_notes").update(payload).eq("id", id);
+      const { error } = await supabase.from("farm_notes").update(payload).eq("id", id);
+      if (error) {
+        console.warn("[FarmContext] farm_notes table update warn", error);
+      }
     } catch (e) {
-      console.warn("[FarmContext] farm_notes table update fallback", e);
+      console.warn("[FarmContext] farm_notes table update exception", e);
     }
 
     await reloadFarmData();
@@ -1009,9 +1011,12 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setFarmNotes(prev => prev.filter(f => f.id !== id));
 
     try {
-      await supabase.from("farm_notes").delete().eq("id", id);
+      const { error } = await supabase.from("farm_notes").delete().eq("id", id);
+      if (error) {
+        console.warn("[FarmContext] farm_notes delete warn", error);
+      }
     } catch (e) {
-      console.warn("[FarmContext] farm_notes delete fallback", e);
+      console.warn("[FarmContext] farm_notes delete exception", e);
     }
 
     await reloadFarmData();
@@ -1019,10 +1024,10 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     showSuccess("Farm note deleted!");
   };
 
-  // ANIMAL NOTES ACTIONS
+  // ANIMAL NOTES ACTIONS (DEDICATED SPECIFIC ANIMAL NOTES)
   const addAnimalNote = async (note: { animal_id: string; content: string }) => {
     const newId = "an_" + Date.now();
-    const newRecord = {
+    const newRecord: AnimalNote = {
       id: newId,
       animal_id: note.animal_id,
       content: note.content.trim(),
@@ -1034,20 +1039,23 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAnimalNotes(prev => [newRecord, ...prev]);
 
     try {
-      await supabase.from("animal_notes").insert([{
+      const { error } = await supabase.from("animal_notes").insert([{
         id: newRecord.id,
         animal_id: newRecord.animal_id,
         content: newRecord.content,
         created_by: newRecord.created_by,
         user_id: session.userId || null
       }]);
+      if (error) {
+        console.warn("[FarmContext] animal_notes table insert warn", error);
+      }
     } catch (e) {
-      console.warn("[FarmContext] animal_notes table write fallback", e);
+      console.warn("[FarmContext] animal_notes table write exception", e);
     }
 
     await reloadFarmData();
     const animalObj = animals.find(a => a.id === note.animal_id);
-    await logActivity("Animal Note", `Logged note for ${animalObj?.animal_code || 'livestock'}: "${note.content.slice(0, 30)}..."`, farmProfile.ownerName, note.animal_id);
+    await logActivity("Animal Note Added", `Logged note for ${animalObj?.animal_code || 'livestock'}: "${note.content.slice(0, 30)}..."`, farmProfile.ownerName, note.animal_id);
     showSuccess("Animal note recorded!");
   };
 
@@ -1060,9 +1068,12 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAnimalNotes(prev => prev.map(an => an.id === id ? { ...an, content: content.trim(), updated_at: payload.updated_at } : an));
 
     try {
-      await supabase.from("animal_notes").update(payload).eq("id", id);
+      const { error } = await supabase.from("animal_notes").update(payload).eq("id", id);
+      if (error) {
+        console.warn("[FarmContext] animal_notes table update warn", error);
+      }
     } catch (e) {
-      console.warn("[FarmContext] animal_notes table update fallback", e);
+      console.warn("[FarmContext] animal_notes table update exception", e);
     }
 
     await reloadFarmData();
@@ -1075,9 +1086,12 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAnimalNotes(prev => prev.filter(a => a.id !== id));
 
     try {
-      await supabase.from("animal_notes").delete().eq("id", id);
+      const { error } = await supabase.from("animal_notes").delete().eq("id", id);
+      if (error) {
+        console.warn("[FarmContext] animal_notes delete warn", error);
+      }
     } catch (e) {
-      console.warn("[FarmContext] animal_notes delete fallback", e);
+      console.warn("[FarmContext] animal_notes delete exception", e);
     }
 
     await reloadFarmData();

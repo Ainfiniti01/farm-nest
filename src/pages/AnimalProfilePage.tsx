@@ -2,14 +2,18 @@
 
 import React, { useState, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { useFarm, Animal, HealthRecord, Treatment, WeightRecord, BreedingRecord } from "@/context/FarmContext";
+import { useFarm, Animal, HealthRecord, Treatment, WeightRecord, BreedingRecord, AnimalNote } from "@/context/FarmContext";
 import { 
   ArrowLeft, 
   Trash2, 
   Download, 
   Eye,
   AlertCircle,
-  HelpCircle
+  HelpCircle,
+  X,
+  Edit,
+  Plus,
+  FileText
 } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
@@ -25,7 +29,7 @@ export const AnimalProfilePage: React.FC = () => {
     treatments,
     weightRecords,
     breedingRecords,
-    reminders,
+    animalNotes,
     activityLogs,
     farmProfile,
     updateAnimal,
@@ -35,11 +39,15 @@ export const AnimalProfilePage: React.FC = () => {
     updateTreatmentStatus,
     addWeightRecord,
     addBreedingRecord,
+    addAnimalNote,
+    updateAnimalNote,
+    deleteAnimalNote,
+    addAnimal
   } = useFarm();
 
   const animal = animals.find(a => a.id === id || a.animal_code === id);
 
-  // ALL HOOK DECLARATIONS MUST BE AT THE TOP (BEFORE EARLY RETURNS)
+  // ALL HOOK DECLARATIONS MUST BE AT THE TOP
   const [activeTab, setActiveTab] = useState<"overview" | "health" | "breeding" | "photos" | "notes" | "activity">("overview");
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAddHealth, setShowAddHealth] = useState(false);
@@ -48,9 +56,11 @@ export const AnimalProfilePage: React.FC = () => {
   const [showAddBreeding, setShowAddBreeding] = useState(false);
   const [showAddOffspring, setShowAddOffspring] = useState(false);
   
-  // Custom dialog notes states (replaces browser prompt)
-  const [showAddNote, setShowAddNote] = useState(false);
-  const [newNoteText, setNewNoteText] = useState("");
+  // Animal Note modals states
+  const [showAddAnimalNoteModal, setShowAddAnimalNoteModal] = useState(false);
+  const [selectedAnimalNote, setSelectedAnimalNote] = useState<AnimalNote | null>(null);
+  const [isEditingAnimalNote, setIsEditingAnimalNote] = useState(false);
+  const [noteContentText, setNoteContentText] = useState("");
 
   // CONFIRMATION POPUP STATES
   const [pendingConfirm, setPendingConfirm] = useState<{
@@ -116,7 +126,7 @@ export const AnimalProfilePage: React.FC = () => {
     primaryPhoto: "",
   });
 
-  // CONDITIONAL RENDER CHECK AFTER ALL HOOKS
+  // EARLY RETURN IF ANIMAL NOT FOUND
   if (!animal) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center p-6 text-center">
@@ -184,7 +194,7 @@ export const AnimalProfilePage: React.FC = () => {
     });
   };
 
-  // PDF passport helper (Popup-blocker Proof hidden iframe print technique)
+  // PDF passport helper
   const handlePdfSingleReport = () => {
     const html = `
       <html>
@@ -224,7 +234,6 @@ export const AnimalProfilePage: React.FC = () => {
       </html>
     `;
 
-    // Create custom, hidden temporary print iframe
     const iframe = document.createElement("iframe");
     iframe.style.position = "fixed";
     iframe.style.right = "0";
@@ -260,6 +269,7 @@ export const AnimalProfilePage: React.FC = () => {
   const animalTreatments = treatments.filter(t => t.animal_id === animal.id);
   const animalWeights = weightRecords.filter(w => w.animal_id === animal.id);
   const animalBreeding = breedingRecords.filter(b => b.female_id === animal.id || b.male_id === animal.id);
+  const currentAnimalNotes = animalNotes.filter(an => an.animal_id === animal.id);
   const animalLogs = activityLogs.filter(l => l.targetId === animal.id);
 
   const mother = animals.find(a => a.id === animal.parents?.motherId);
@@ -272,6 +282,55 @@ export const AnimalProfilePage: React.FC = () => {
       weight: w.weight,
     }))
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  // Animal Note Handlers
+  const handleOpenAddNoteModal = () => {
+    setNoteContentText("");
+    setShowAddAnimalNoteModal(true);
+  };
+
+  const handleCreateAnimalNoteSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!noteContentText.trim()) {
+      showError("Note content is required.");
+      return;
+    }
+
+    await addAnimalNote({
+      animal_id: animal.id,
+      content: noteContentText.trim()
+    });
+
+    setShowAddAnimalNoteModal(false);
+    setNoteContentText("");
+  };
+
+  const handleSelectAnimalNote = (note: AnimalNote) => {
+    setSelectedAnimalNote(note);
+    setNoteContentText(note.content);
+    setIsEditingAnimalNote(false);
+  };
+
+  const handleUpdateAnimalNoteSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedAnimalNote || !noteContentText.trim()) return;
+
+    await updateAnimalNote(selectedAnimalNote.id, noteContentText.trim());
+    setSelectedAnimalNote(prev => prev ? { ...prev, content: noteContentText.trim() } : null);
+    setIsEditingAnimalNote(false);
+  };
+
+  const handleDeleteAnimalNoteTrigger = (noteId: string) => {
+    setPendingConfirm({
+      title: "Delete this note?",
+      message: "This action cannot be undone.",
+      onConfirm: async () => {
+        await deleteAnimalNote(noteId);
+        setPendingConfirm(null);
+        setSelectedAnimalNote(null);
+      }
+    });
+  };
 
   // Submit methods under safe confirmations
   const triggerEditConfirm = (e: React.FormEvent) => {
@@ -410,7 +469,7 @@ export const AnimalProfilePage: React.FC = () => {
     e.preventDefault();
     setPendingConfirm({
       title: "Register New Born Offspring?",
-      message: `This automatically binds ${newOffspring.name || "Unnamed"} to Aisha's pedigree maps. Confirm?`,
+      message: `This automatically binds ${newOffspring.name || "Unnamed"} to ${animal.name || animal.animal_code}'s pedigree maps. Confirm?`,
       onConfirm: () => {
         addAnimal({
           name: newOffspring.name,
@@ -444,27 +503,6 @@ export const AnimalProfilePage: React.FC = () => {
     });
   };
 
-  const handleAppendNoteSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newNoteText.trim()) return;
-
-    setPendingConfirm({
-      title: "Append Diary Note?",
-      message: "Do you want to append this behavioral detail to the animal's bio?",
-      onConfirm: () => {
-        const timestamp = new Date().toLocaleDateString();
-        const formattedNote = `[${timestamp}]: ${newNoteText.trim()}`;
-        const updatedNotes = animal.notes ? `${animal.notes}\n\n${formattedNote}` : formattedNote;
-        
-        updateAnimal(animal.id, { notes: updatedNotes });
-        setShowAddNote(false);
-        setNewNoteText("");
-        setPendingConfirm(null);
-        showSuccess("Behavioral note appended to diary!");
-      }
-    });
-  };
-
   const handleDownloadFullscreen = () => {
     if (!fullscreenPhoto) return;
     const link = document.createElement("a");
@@ -483,7 +521,7 @@ export const AnimalProfilePage: React.FC = () => {
       <div className="bg-white border-b border-emerald-100/60 py-4 px-4 sticky top-0 z-30 shadow-sm">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <Link
-            to="/"
+            to="/animals"
             className="flex items-center gap-2 text-xs font-bold text-emerald-800 hover:text-emerald-950 transition"
           >
             <ArrowLeft size={16} />
@@ -516,12 +554,10 @@ export const AnimalProfilePage: React.FC = () => {
                   className="w-full h-full object-cover"
                 />
                 
-                {/* Overlay Hover hint */}
                 <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition text-xs font-black gap-2">
                   <Eye size={18} /> View Portrait Fullscreen
                 </div>
 
-                {/* Health State Badge Overlay */}
                 <div className="absolute top-4 right-4">
                   <span className={`text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full shadow-md ${
                     animal.healthStatus === "Healthy" ? "bg-emerald-100 text-emerald-800 border border-emerald-200" :
@@ -574,7 +610,7 @@ export const AnimalProfilePage: React.FC = () => {
                         message: "This action clears all lineage trees and weight growth trends. There is no undo.",
                         onConfirm: () => {
                           deleteAnimal(animal.id);
-                          navigate("/");
+                          navigate("/animals");
                         }
                       });
                     }}
@@ -646,7 +682,7 @@ export const AnimalProfilePage: React.FC = () => {
           {/* COLUMN 2 & 3: MAIN TABS AND RECORD VIEWS */}
           <div className="md:col-span-2 space-y-6">
             
-            {/* GRID DISPLAY FOR TAB SELECTORS (NO HORIZONTAL SCROLL) */}
+            {/* GRID DISPLAY FOR TAB SELECTORS */}
             <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 bg-slate-100 p-2 rounded-2xl">
               {[
                 { id: "overview", label: "Overview", icon: "📊" },
@@ -828,7 +864,6 @@ export const AnimalProfilePage: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Previous weighing log items */}
                   <div className="space-y-1.5">
                     {animalWeights.slice(-3).map(w => (
                       <div key={w.id} className="text-xs p-2 bg-slate-50 rounded-lg flex items-center justify-between">
@@ -836,23 +871,6 @@ export const AnimalProfilePage: React.FC = () => {
                         <span className="text-[10px] text-slate-400">{w.date} {w.notes && `(${w.notes})`}</span>
                       </div>
                     ))}
-                  </div>
-                </div>
-
-                {/* Simulated AI context placeholder */}
-                <div className="bg-emerald-950 text-white rounded-3xl p-5 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-800/40 rounded-full blur-xl" />
-                  <div className="flex items-start gap-3">
-                    <span className="text-2xl">🤖</span>
-                    <div>
-                      <h4 className="font-black text-xs uppercase text-emerald-300">Farm AI Passport Stream</h4>
-                      <p className="text-[11px] text-emerald-100 mt-1">
-                        AI will automatically read {animal.name || "Aisha"}'s complete biography, including PPR vaccinations, medication trials, and lineage relationships to synthesize clinical advice on demand.
-                      </p>
-                      <span className="inline-block mt-3 text-[9px] font-bold bg-white/10 px-2.5 py-0.5 rounded-full">
-                        Coming soon in v2.0
-                      </span>
-                    </div>
                   </div>
                 </div>
 
@@ -864,7 +882,7 @@ export const AnimalProfilePage: React.FC = () => {
               <div className="space-y-6">
                 
                 <div className="flex items-center justify-between">
-                  <h3 className="font-bold text-slate-900 text-sm">Chronic Clinical Incident Log</h3>
+                  <h3 className="font-bold text-slate-900 text-sm">Clinical Incident Log</h3>
                   <button
                     onClick={() => setShowAddHealth(true)}
                     className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold"
@@ -873,7 +891,6 @@ export const AnimalProfilePage: React.FC = () => {
                   </button>
                 </div>
 
-                {/* Health timeline elements */}
                 <div className="space-y-3">
                   {animalHealth.map(h => (
                     <div key={h.id} className="p-4 bg-white rounded-2xl border border-slate-100 shadow-sm relative">
@@ -928,7 +945,7 @@ export const AnimalProfilePage: React.FC = () => {
                         <span className="text-[10px] text-slate-400">{b.date}</span>
                       </div>
                       <p className="text-xs text-slate-700 mt-1 leading-relaxed">
-                        Line cross of Mother <strong>Dam ID: {b.female_id}</strong> & stud Balami <strong>Sire ID: {b.male_id}</strong>
+                        Line cross of Dam ID: <strong>{b.female_id}</strong> & Sire ID: <strong>{b.male_id}</strong>
                       </p>
                       {b.notes && (
                         <p className="text-[11px] text-slate-500 italic mt-2">Notes: {b.notes}</p>
@@ -1000,27 +1017,55 @@ export const AnimalProfilePage: React.FC = () => {
               </div>
             )}
 
-            {/* 5. BIO NOTES TAB */}
+            {/* 5. ANIMAL NOTES TAB (DEDICATED ANIMAL-LEVEL NOTES) */}
             {activeTab === "notes" && (
               <div className="space-y-6">
                 
                 <div className="flex items-center justify-between">
-                  <h3 className="font-bold text-slate-900 text-sm">Bio & Behavioral Notes</h3>
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-sm">Animal Notes</h3>
+                    <p className="text-[10px] text-slate-400">Specific observations for {animal.name || animal.animal_code}</p>
+                  </div>
                   <button
-                    onClick={() => {
-                      setNewNoteText("");
-                      setShowAddNote(true);
-                    }}
-                    className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold"
+                    onClick={handleOpenAddNoteModal}
+                    className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow transition"
                   >
-                    + Append Note
+                    <Plus size={14} /> Add Note
                   </button>
                 </div>
 
-                <div className="p-5 bg-white rounded-3xl border border-slate-100 shadow-sm">
-                  <p className="text-xs text-slate-700 whitespace-pre-line leading-relaxed">
-                    {animal.notes || "No bio diary records set. Click '+ Append Note' to log paddock comments."}
-                  </p>
+                <div className="space-y-2.5">
+                  {currentAnimalNotes.map((note) => {
+                    const formattedDate = new Date(note.created_at).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric"
+                    });
+
+                    return (
+                      <div 
+                        key={note.id}
+                        onClick={() => handleSelectAnimalNote(note)}
+                        className="p-4 bg-white rounded-2xl border border-slate-100 shadow-sm hover:border-emerald-300 transition cursor-pointer group"
+                      >
+                        <p className="text-xs text-slate-700 font-medium leading-relaxed line-clamp-2">
+                          {note.content}
+                        </p>
+                        <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-slate-50 text-[10px] text-slate-400">
+                          <span>{formattedDate} · {note.created_by || "Operator"}</span>
+                          <span className="text-emerald-600 font-bold opacity-0 group-hover:opacity-100 transition">View details →</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {currentAnimalNotes.length === 0 && (
+                    <div className="text-center py-12 bg-white rounded-3xl border border-dashed text-slate-400 text-xs space-y-1">
+                      <FileText size={28} className="mx-auto text-slate-300" />
+                      <p className="font-semibold">No animal notes on record.</p>
+                      <p className="text-[11px] text-slate-400">Record specific physical traits, standing behavior or medication responses.</p>
+                    </div>
+                  )}
                 </div>
 
               </div>
@@ -1063,46 +1108,135 @@ export const AnimalProfilePage: React.FC = () => {
 
       </div>
 
-      {/* CUSTOM DIALOG: APPEND NOTE MODAL (Workaround for Prompt blocking) */}
-      {showAddNote && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
+      {/* CREATE ANIMAL NOTE MODAL */}
+      {showAddAnimalNoteModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4 animate-in fade-in">
           <form 
-            onSubmit={handleAppendNoteSubmit}
-            className="bg-white w-full max-w-md rounded-2xl p-6 space-y-4"
+            onSubmit={handleCreateAnimalNoteSubmit}
+            className="bg-white w-full max-w-md rounded-2xl p-6 space-y-4 shadow-2xl"
           >
             <div className="flex items-center justify-between border-b pb-2">
-              <h3 className="font-extrabold text-sm text-slate-900">Append Behavioral Diary Note</h3>
-              <button type="button" onClick={() => setShowAddNote(false)} className="text-slate-400 hover:text-slate-600">✕</button>
+              <h3 className="font-extrabold text-sm text-slate-900">Add Animal Note</h3>
+              <button type="button" onClick={() => setShowAddAnimalNoteModal(false)} className="text-slate-400 hover:text-slate-600 p-1">
+                <X size={16} />
+              </button>
             </div>
 
+            <p className="text-[11px] text-slate-500">
+              Note for: <strong className="text-emerald-800">{animal.name ? `${animal.name} (${animal.animal_code})` : animal.animal_code}</strong>
+            </p>
+
             <div>
-              <label className="text-[10px] font-bold text-slate-500 block">Note Content</label>
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                Note <span className="text-red-500">*</span>
+              </label>
               <textarea
-                placeholder="e.g. Exhibited stable feed consumption this morning. Active standing behavior."
-                value={newNoteText}
-                onChange={(e) => setNewNoteText(e.target.value)}
+                placeholder="e.g. Small white patch on forehead, less active today, eating normally..."
+                value={noteContentText}
+                onChange={(e) => setNoteContentText(e.target.value)}
                 rows={4}
-                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1 text-slate-800 outline-none"
+                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none focus:ring-1 focus:ring-emerald-500"
                 required
               />
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex gap-2 pt-2">
               <button
                 type="button"
-                onClick={() => setShowAddNote(false)}
-                className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition"
+                onClick={() => setShowAddAnimalNoteModal(false)}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold rounded-xl transition"
+                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow transition"
               >
-                Save Diary Note
+                Save Note
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* VIEW/EDIT ANIMAL NOTE MODAL */}
+      {selectedAnimalNote && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white w-full max-w-md rounded-2xl p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b pb-2">
+              <h3 className="font-extrabold text-sm text-slate-900">
+                {isEditingAnimalNote ? "Edit Animal Note" : "Animal Note"}
+              </h3>
+              <button type="button" onClick={() => setSelectedAnimalNote(null)} className="text-slate-400 hover:text-slate-600 p-1">
+                <X size={16} />
+              </button>
+            </div>
+
+            {!isEditingAnimalNote ? (
+              <div className="space-y-4">
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                  <p className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">
+                    {selectedAnimalNote.content}
+                  </p>
+                </div>
+
+                <div className="text-[11px] text-slate-500 space-y-0.5 border-t pt-3">
+                  <p>Added by <strong className="text-slate-700">{selectedAnimalNote.created_by || "Operator"}</strong></p>
+                  <p>{new Date(selectedAnimalNote.created_at).toLocaleDateString("en-US", {
+                    month: "long",
+                    day: "numeric",
+                    year: "numeric"
+                  })} at {new Date(selectedAnimalNote.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingAnimalNote(true)}
+                    className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5"
+                  >
+                    <Edit size={14} /> Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteAnimalNoteTrigger(selectedAnimalNote.id)}
+                    className="flex-1 py-2 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5"
+                  >
+                    <Trash2 size={14} /> Delete
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleUpdateAnimalNoteSubmit} className="space-y-4">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Note Content</label>
+                  <textarea
+                    value={noteContentText}
+                    onChange={(e) => setNoteContentText(e.target.value)}
+                    rows={4}
+                    className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none focus:ring-1 focus:ring-emerald-500"
+                    required
+                  />
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingAnimalNote(false)}
+                    className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow transition"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
         </div>
       )}
 

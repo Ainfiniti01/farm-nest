@@ -2,16 +2,19 @@
 
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useFarm, Reminder } from "@/context/FarmContext";
+import { useFarm, Reminder, FarmNote } from "@/context/FarmContext";
 import { 
   Plus, 
   Calendar, 
   Activity, 
-  Package, 
   Boxes, 
   HelpCircle,
   Check,
-  Sparkles
+  FileText,
+  X,
+  Edit,
+  Trash2,
+  ArrowRight
 } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 
@@ -23,9 +26,13 @@ export const Dashboard: React.FC = () => {
     inventory,
     reminders,
     activityLogs,
+    farmNotes,
     farmProfile,
     toggleReminder,
-    addReminder
+    addReminder,
+    addFarmNote,
+    updateFarmNote,
+    deleteFarmNote
   } = useFarm();
 
   // Confirmation state
@@ -44,6 +51,13 @@ export const Dashboard: React.FC = () => {
     animalId: "",
     notes: ""
   });
+
+  // Farm Note Modals
+  const [showAddFarmNote, setShowAddFarmNote] = useState(false);
+  const [selectedFarmNote, setSelectedFarmNote] = useState<FarmNote | null>(null);
+  const [isEditingFarmNote, setIsEditingFarmNote] = useState(false);
+  const [noteTitle, setNoteTitle] = useState("");
+  const [noteContent, setNoteContent] = useState("");
 
   // Fallback priority logic
   const farmHeaderImage = farmProfile.image || "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=1200&auto=format&fit=crop&q=80";
@@ -98,6 +112,61 @@ export const Dashboard: React.FC = () => {
       }
     });
   };
+
+  // Farm Note Handlers
+  const handleOpenAddNote = () => {
+    setNoteTitle("");
+    setNoteContent("");
+    setShowAddFarmNote(true);
+  };
+
+  const handleCreateFarmNote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!noteContent.trim()) {
+      showError("Note content is required.");
+      return;
+    }
+    await addFarmNote({
+      title: noteTitle.trim() || undefined,
+      content: noteContent.trim(),
+    });
+    setShowAddFarmNote(false);
+    setNoteTitle("");
+    setNoteContent("");
+  };
+
+  const handleSelectNote = (note: FarmNote) => {
+    setSelectedFarmNote(note);
+    setNoteTitle(note.title || "");
+    setNoteContent(note.content);
+    setIsEditingFarmNote(false);
+  };
+
+  const handleUpdateFarmNote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedFarmNote || !noteContent.trim()) return;
+    await updateFarmNote(selectedFarmNote.id, {
+      title: noteTitle.trim() || undefined,
+      content: noteContent.trim(),
+    });
+    setSelectedFarmNote(prev => prev ? { ...prev, title: noteTitle.trim() || undefined, content: noteContent.trim() } : null);
+    setIsEditingFarmNote(false);
+  };
+
+  const handleDeleteFarmNote = (noteId: string) => {
+    setPendingConfirm({
+      title: "Delete this note?",
+      message: "This action cannot be undone.",
+      onConfirm: async () => {
+        await deleteFarmNote(noteId);
+        setPendingConfirm(null);
+        setSelectedFarmNote(null);
+      }
+    });
+  };
+
+  // 3-5 most recent farm notes
+  const recentFarmNotes = farmNotes.slice(0, 4);
 
   return (
     <div className="space-y-6">
@@ -269,7 +338,71 @@ export const Dashboard: React.FC = () => {
 
       </div>
 
-      {/* 4. ACTIVITY STREAMS STREAM */}
+      {/* 4. FARM NOTES DASHBOARD WIDGET */}
+      <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+            <FileText size={16} className="text-emerald-600" />
+            Farm Notes
+          </h3>
+          <Link 
+            to="/notes" 
+            className="text-xs font-bold text-emerald-700 hover:text-emerald-900 flex items-center gap-1 transition"
+          >
+            View all <ArrowRight size={13} />
+          </Link>
+        </div>
+
+        <div className="space-y-2">
+          {recentFarmNotes.map((note) => {
+            const formattedDate = new Date(note.created_at).toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric"
+            });
+
+            return (
+              <div
+                key={note.id}
+                onClick={() => handleSelectNote(note)}
+                className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl flex items-center justify-between cursor-pointer transition border border-slate-100"
+              >
+                <div className="flex items-start gap-2.5 min-w-0 pr-2">
+                  <span className="text-sm shrink-0">📝</span>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-800 truncate">
+                      {note.title || note.content}
+                    </p>
+                    {note.title && (
+                      <p className="text-[10px] text-slate-500 truncate mt-0.5">
+                        {note.content}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="text-[10px] font-bold text-slate-400 bg-white px-2 py-0.5 rounded border shrink-0">
+                  {formattedDate} · {note.created_by || "Adam"}
+                </div>
+              </div>
+            );
+          })}
+
+          {recentFarmNotes.length === 0 && (
+            <div className="text-center p-6 text-slate-400 text-xs">
+              No general farm notes recorded yet.
+            </div>
+          )}
+        </div>
+
+        <button
+          onClick={handleOpenAddNote}
+          className="w-full py-2.5 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-200 text-slate-700 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5"
+        >
+          <Plus size={14} /> Add Farm Note
+        </button>
+      </div>
+
+      {/* 5. ACTIVITY STREAMS STREAM */}
       <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm space-y-4">
         <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
           <Activity size={16} className="text-emerald-600" />
@@ -369,6 +502,148 @@ export const Dashboard: React.FC = () => {
               Add Calendar Task
             </button>
           </form>
+        </div>
+      )}
+
+      {/* ADD FARM NOTE MODAL */}
+      {showAddFarmNote && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
+          <form 
+            onSubmit={handleCreateFarmNote}
+            className="bg-white w-full max-w-md rounded-2xl p-6 space-y-4 text-left"
+          >
+            <div className="flex items-center justify-between border-b pb-2">
+              <h3 className="font-extrabold text-sm text-slate-900">Add Farm Note</h3>
+              <button type="button" onClick={() => setShowAddFarmNote(false)} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                Title (Optional)
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Changed feeding schedule"
+                value={noteTitle}
+                onChange={(e) => setNoteTitle(e.target.value)}
+                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none focus:ring-1 focus:ring-emerald-500"
+              />
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                Note Content <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                placeholder="Describe general farm activities or decisions..."
+                value={noteContent}
+                onChange={(e) => setNoteContent(e.target.value)}
+                rows={4}
+                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none focus:ring-1 focus:ring-emerald-500"
+                required
+              />
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowAddFarmNote(false)}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow transition"
+              >
+                Save Note
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* VIEW/EDIT FARM NOTE MODAL */}
+      {selectedFarmNote && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-2xl p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b pb-2">
+              <h3 className="font-extrabold text-sm text-slate-900">
+                {isEditingFarmNote ? "Edit Farm Note" : "Farm Note"}
+              </h3>
+              <button type="button" onClick={() => setSelectedFarmNote(null)} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
+            </div>
+
+            {!isEditingFarmNote ? (
+              <div className="space-y-4">
+                {selectedFarmNote.title && (
+                  <h4 className="font-black text-base text-slate-900">{selectedFarmNote.title}</h4>
+                )}
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                  <p className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">{selectedFarmNote.content}</p>
+                </div>
+                <div className="text-[11px] text-slate-500 space-y-0.5 border-t pt-3">
+                  <p>Added by <strong className="text-slate-700">{selectedFarmNote.created_by || "Operator"}</strong></p>
+                  <p>{new Date(selectedFarmNote.created_at).toLocaleDateString("en-US", {
+                    month: "long",
+                    day: "numeric",
+                    year: "numeric"
+                  })}</p>
+                </div>
+                <div className="flex gap-2 pt-2">
+                  <button
+                    onClick={() => setIsEditingFarmNote(true)}
+                    className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5"
+                  >
+                    <Edit size={14} /> Edit
+                  </button>
+                  <button
+                    onClick={() => handleDeleteFarmNote(selectedFarmNote.id)}
+                    className="flex-1 py-2 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5"
+                  >
+                    <Trash2 size={14} /> Delete
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleUpdateFarmNote} className="space-y-4">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Title</label>
+                  <input
+                    type="text"
+                    value={noteTitle}
+                    onChange={(e) => setNoteTitle(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none focus:ring-1 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Content</label>
+                  <textarea
+                    value={noteContent}
+                    onChange={(e) => setNoteContent(e.target.value)}
+                    rows={4}
+                    className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none focus:ring-1 focus:ring-emerald-500"
+                    required
+                  />
+                </div>
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingFarmNote(false)}
+                    className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow transition"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
         </div>
       )}
 
