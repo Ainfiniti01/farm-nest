@@ -165,7 +165,7 @@ interface FarmContextType {
   updateFarmProfile: (profile: FarmProfile) => void;
   incrementAiUsage: (type: "text" | "image") => void;
   setOnboardingCompleted: (val: boolean) => void;
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (farmName: string, password: string) => Promise<boolean>;
   signupAndSetup: (email: string, password: string, name: string, farmName: string, location: string) => Promise<boolean>;
   logout: () => void;
   seedSampleData: () => void;
@@ -459,8 +459,10 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     showSuccess("Database reset complete! Starting fresh with 0 records.");
   };
 
-  const login = async (email: string, password: string): Promise<boolean> => {
+  const login = async (farmName: string, password: string): Promise<boolean> => {
     if (isSupabaseConfigured()) {
+      // Formulate temporary lookup email based on farm name so Supabase schema matches standard email auth seamlessly
+      const email = `${farmName.replace(/\s+/g, "").toLowerCase()}@farmnest.com`;
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -480,16 +482,14 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setSession(userSession);
         saveState("farm_v2_user_session", userSession);
 
-        if (data.user.user_metadata?.farmName) {
-          const profile = {
-            ...farmProfile,
-            name: data.user.user_metadata.farmName,
-            ownerName: data.user.user_metadata.name || "Operator",
-            location: data.user.user_metadata.location || "Kano, Nigeria",
-          };
-          setFarmProfile(profile);
-          saveState("farm_v2_profile", profile);
-        }
+        const profile = {
+          ...farmProfile,
+          name: data.user.user_metadata.farmName || farmName,
+          ownerName: data.user.user_metadata.name || "Operator",
+          location: data.user.user_metadata.location || "Kano, Nigeria",
+        };
+        setFarmProfile(profile);
+        saveState("farm_v2_profile", profile);
 
         showSuccess("Logged into your live farm database successfully!");
         return true;
@@ -499,10 +499,10 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const storedUsersRaw = localStorage.getItem("farm_registered_users");
       const usersList = storedUsersRaw ? JSON.parse(storedUsersRaw) : [];
 
-      const foundUser = usersList.find((u: any) => u.email.toLowerCase() === email.toLowerCase());
+      const foundUser = usersList.find((u: any) => u.farmName.toLowerCase() === farmName.toLowerCase());
 
       if (!foundUser || foundUser.password !== password) {
-        showError("Invalid email or password combination. Access denied.");
+        showError("Invalid farm name or password combination. Access denied.");
         return false;
       }
 
@@ -523,7 +523,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setFarmProfile(profile);
       saveState("farm_v2_profile", profile);
 
-      showSuccess(`Logged in securely to local paddock: ${foundUser.farmName}`);
+      showSuccess(`Logged in securely to paddock: ${foundUser.farmName}`);
       return true;
     }
     return false;
@@ -559,7 +559,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         const updatedProfile = {
           ...farmProfile,
-          name,
+          name: farmName,
           ownerName: name,
           location
         };
@@ -574,9 +574,9 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const storedUsersRaw = localStorage.getItem("farm_registered_users");
       const usersList = storedUsersRaw ? JSON.parse(storedUsersRaw) : [];
 
-      const alreadyExists = usersList.some((u: any) => u.email.toLowerCase() === email.toLowerCase());
+      const alreadyExists = usersList.some((u: any) => u.farmName.toLowerCase() === farmName.toLowerCase());
       if (alreadyExists) {
-        showError("An account is already registered under this email.");
+        showError("A farm profile is already registered under this name.");
         return false;
       }
 
@@ -809,6 +809,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (a.id === currentTx.animal_id) {
             return { ...a, status: "Healthy", healthStatus: "Healthy" };
           }
+          return a;
           return a;
         });
         saveState("farm_v2_animals", next);

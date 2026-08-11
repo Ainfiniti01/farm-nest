@@ -9,20 +9,20 @@ export const Login: React.FC = () => {
   const navigate = useNavigate();
   const { login } = useFarm();
   
-  const [email, setEmail] = useState("");
+  const [farmName, setFarmName] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) {
-      showError("Please enter your email and password.");
+    if (!farmName || !password) {
+      showError("Please enter your farm name and password.");
       return;
     }
 
     setIsLoading(true);
     try {
-      const success = await login(email, password);
+      const success = await login(farmName, password);
       if (success) {
         navigate("/dashboard");
       }
@@ -61,12 +61,12 @@ export const Login: React.FC = () => {
 
         <form onSubmit={handleLoginSubmit} className="space-y-4">
           <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Email Address</label>
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Farm Name</label>
             <input
-              type="email"
-              placeholder="operator@farmnest.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              type="text"
+              placeholder="e.g. Adam Farms"
+              value={farmName}
+              onChange={(e) => setFarmName(e.target.value)}
               className="w-full p-3 bg-slate-700/60 border border-slate-600 rounded-xl text-xs text-white focus:ring-1 focus:ring-emerald-500 outline-none"
               required
             />
