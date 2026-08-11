@@ -47,6 +47,10 @@ export const AnimalProfilePage: React.FC = () => {
   const [showAddWeight, setShowAddWeight] = useState(false);
   const [showAddBreeding, setShowAddBreeding] = useState(false);
   const [showAddOffspring, setShowAddOffspring] = useState(false);
+  
+  // Custom dialog notes states (replaces browser prompt)
+  const [showAddNote, setShowAddNote] = useState(false);
+  const [newNoteText, setNewNoteText] = useState("");
 
   // CONFIRMATION POPUP STATES
   const [pendingConfirm, setPendingConfirm] = useState<{
@@ -436,6 +440,27 @@ export const AnimalProfilePage: React.FC = () => {
           notes: "",
           primaryPhoto: "",
         });
+      }
+    });
+  };
+
+  const handleAppendNoteSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newNoteText.trim()) return;
+
+    setPendingConfirm({
+      title: "Append Diary Note?",
+      message: "Do you want to append this behavioral detail to the animal's bio?",
+      onConfirm: () => {
+        const timestamp = new Date().toLocaleDateString();
+        const formattedNote = `[${timestamp}]: ${newNoteText.trim()}`;
+        const updatedNotes = animal.notes ? `${animal.notes}\n\n${formattedNote}` : formattedNote;
+        
+        updateAnimal(animal.id, { notes: updatedNotes });
+        setShowAddNote(false);
+        setNewNoteText("");
+        setPendingConfirm(null);
+        showSuccess("Behavioral note appended to diary!");
       }
     });
   };
@@ -983,19 +1008,8 @@ export const AnimalProfilePage: React.FC = () => {
                   <h3 className="font-bold text-slate-900 text-sm">Bio & Behavioral Notes</h3>
                   <button
                     onClick={() => {
-                      const text = prompt("Write dynamic diary note regarding livestock behavior:");
-                      if (text) {
-                        setPendingConfirm({
-                          title: "Append Diary Note?",
-                          message: "Do you want to append this behavioral detail to Aisha's permanent log?",
-                          onConfirm: () => {
-                            const updated = animal.notes ? `${animal.notes}\n\n[Note]: ${text}` : text;
-                            updateAnimal(animal.id, { notes: updated });
-                            setPendingConfirm(null);
-                            showSuccess("Diary note appended successfully.");
-                          }
-                        });
-                      }
+                      setNewNoteText("");
+                      setShowAddNote(true);
                     }}
                     className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold"
                   >
@@ -1048,6 +1062,49 @@ export const AnimalProfilePage: React.FC = () => {
         </div>
 
       </div>
+
+      {/* CUSTOM DIALOG: APPEND NOTE MODAL (Workaround for Prompt blocking) */}
+      {showAddNote && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
+          <form 
+            onSubmit={handleAppendNoteSubmit}
+            className="bg-white w-full max-w-md rounded-2xl p-6 space-y-4"
+          >
+            <div className="flex items-center justify-between border-b pb-2">
+              <h3 className="font-extrabold text-sm text-slate-900">Append Behavioral Diary Note</h3>
+              <button type="button" onClick={() => setShowAddNote(false)} className="text-slate-400 hover:text-slate-600">✕</button>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 block">Note Content</label>
+              <textarea
+                placeholder="e.g. Exhibited stable feed consumption this morning. Active standing behavior."
+                value={newNoteText}
+                onChange={(e) => setNewNoteText(e.target.value)}
+                rows={4}
+                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1 text-slate-800 outline-none"
+                required
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setShowAddNote(false)}
+                className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold rounded-xl transition"
+              >
+                Save Diary Note
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* GLOBAL FULLSCREEN PHOTO VIEWER MODAL WITH DOWNLOAD */}
       {fullscreenPhoto && (
