@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useFarm } from "@/context/FarmContext";
+import { DiagnosticsPanel } from "@/components/DiagnosticsPanel";
 import { 
   User, 
   Phone, 
@@ -13,11 +14,10 @@ import {
   Bell,
   Trash2
 } from "lucide-react";
-import { showSuccess } from "@/utils/toast";
 
 export const Settings: React.FC = () => {
   const navigate = useNavigate();
-  const { farmProfile, logout, resetDatabase } = useFarm();
+  const { logout, resetDatabase } = useFarm();
 
   const [pendingConfirm, setPendingConfirm] = useState<{
     title: string;
@@ -53,8 +53,8 @@ export const Settings: React.FC = () => {
     setPendingConfirm({
       title: "Sign Out Operator?",
       message: "Are you sure you want to terminate this operational session?",
-      onConfirm: () => {
-        logout();
+      onConfirm: async () => {
+        await logout();
         setPendingConfirm(null);
         navigate("/login");
       }
@@ -76,6 +76,9 @@ export const Settings: React.FC = () => {
   return (
     <div className="space-y-6">
       
+      {/* Diagnostics Panel helper */}
+      <DiagnosticsPanel />
+
       {/* Header */}
       <div>
         <h2 className="text-xl font-black text-slate-900">Farm Settings</h2>
@@ -137,7 +140,7 @@ export const Settings: React.FC = () => {
             className="flex-1 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5"
           >
             <Trash2 size={14} />
-            Wipe & Reset Database
+            Wipe Local Cache
           </button>
 
           <button

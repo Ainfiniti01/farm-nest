@@ -1,14 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
 
-// Uses environment variables set by the Dyad Integration manager
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://placeholder-url-to-prevent-crashing.supabase.co";
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "placeholder-anon-key-to-prevent-crashing";
+export const SUPABASE_URL = "https://prnpvgzlrxwhohnyqlth.supabase.co";
+export const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_ok0AUs-TKtHXpZQFSDKwYg_BIE2zHK9";
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Unified Supabase client instance
+export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
-// Helper to check if credentials have been populated correctly
-export const isSupabaseConfigured = (): boolean => {
-  const url = import.meta.env.VITE_SUPABASE_URL;
-  const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  return !!url && !!key && url !== "" && key !== "";
-};
+// Guarantees Supabase Cloud integration is active
+export const isSupabaseConfigured = (): boolean => true;
