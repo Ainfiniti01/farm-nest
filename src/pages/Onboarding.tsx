@@ -9,13 +9,13 @@ const ONBOARDING_SLIDES = [
     title: "Secure Livestock Records",
     subtitle: "Give every animal a unique digital ID and keep its health records, treatments, photos, lineage, and important notes in one place.",
     emoji: "🐐",
-    bg: "https://images.unsplash.com/photo-1524413840807-0c3cb6fa808d?w=1200&auto=format&fit=crop&q=80"
+    bg: "https://images.unsplash.com/photo-1542764343-436008e87145?q=80&w=1470&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3Dw=1200&auto=format&fit=crop&q=80"
   },
   {
     title: "Smarter Inventory Management",
     subtitle: "Keep track of feed, medication, equipment, and other farm supplies, with alerts when important items are running low.",
     emoji: "📦",
-    bg: "https://images.unsplash.com/photo-1595273670150-bd0c3c392e46?w=1200&auto=format&fit=crop&q=80"
+    bg: "https://images.unsplash.com/photo-1500595046743-cd271d694d30?q=80&w=1474&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3Dw=1200&auto=format&fit=crop&q=80"
   },
   {
     title: "Better Breeding Traceability",
@@ -63,7 +63,7 @@ export const Onboarding: React.FC = () => {
     <div className="min-h-screen bg-slate-950 text-white flex flex-col justify-center items-center px-6 py-12 relative overflow-hidden transition-all duration-500">
       {/* Background Image with elegant overlay to match auth layouts */}
       <div 
-        className="absolute inset-0 bg-cover bg-center transition-all duration-700 opacity-20 filter blur-[2px] scale-105" 
+        className="absolute inset-0 bg-cover bg-center transition-all duration-700 opacity-0.5 filter blur-[2px] scale-105" 
         style={{ backgroundImage: `url('${currentSlide.bg}')` }} 
       />
       <div className="absolute inset-0 bg-gradient-to-b from-slate-950/80 via-slate-950/90 to-slate-950 z-0" />
