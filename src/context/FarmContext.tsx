@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { showSuccess, showError } from "@/utils/toast";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -163,6 +163,7 @@ interface FarmContextType {
   session: UserSession;
   onboardingCompleted: boolean;
   isLoadingData: boolean;
+  isAuthReady: boolean;
   aiUsage: {
     questionsUsed: number;
     questionsLimit: number;
@@ -218,6 +219,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [animalNotes, setAnimalNotes] = useState<AnimalNote[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [onboardingCompleted, setOnboardingCompletedState] = useState<boolean>(false);
+  
+  const [isAuthReady, setIsAuthReady] = useState<boolean>(false);
   const [isLoadingData, setIsLoadingData] = useState<boolean>(true);
   
   const [farmProfile, setFarmProfile] = useState<FarmProfile>({
@@ -248,7 +251,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Fetch complete farm dataset from Supabase PostgreSQL
-  const reloadFarmData = async () => {
+  const reloadFarmData = useCallback(async () => {
     setIsLoadingData(true);
     try {
       const [
@@ -422,66 +425,121 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setIsLoadingData(false);
     }
-  };
+  }, []);
 
-  // Monitor Supabase Authentication State Changes
+  const loadUserProfileAndData = useCallback(async (userId: string, userMetadata?: any) => {
+    try {
+      const { data: acct } = await supabase
+        .from("accounts")
+        .select("farm_name, operator_name, location")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (acct) {
+        setFarmProfile(prev => ({
+          ...prev,
+          name: acct.farm_name || prev.name,
+          ownerName: acct.operator_name || prev.ownerName,
+          location: acct.location || prev.location
+        }));
+      } else if (userMetadata?.farmName) {
+        setFarmProfile(prev => ({
+          ...prev,
+          name: userMetadata.farmName,
+          ownerName: userMetadata.name || prev.ownerName,
+          location: userMetadata.location || prev.location
+        }));
+      }
+    } catch (e) {
+      console.warn("[FarmContext] Profile lookup exception", e);
+    }
+
+    await reloadFarmData();
+  }, [reloadFarmData]);
+
+  // Monitor and initialize Supabase Authentication State cleanly on startup
   useEffect(() => {
+    let isMounted = true;
+
     const storedOnboarding = localStorage.getItem("farm_v2_onboarding_completed");
     if (storedOnboarding) {
       setOnboardingCompletedState(JSON.parse(storedOnboarding));
     }
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, sbSession) => {
-      if (sbSession?.user) {
-        setSession({
-          userId: sbSession.user.id,
-          email: sbSession.user.email || "",
-          name: sbSession.user.user_metadata?.name || "Operator",
-          isAuthenticated: true
-        });
-
-        try {
-          const { data: acct } = await supabase
-            .from("accounts")
-            .select("farm_name, operator_name, location")
-            .eq("user_id", sbSession.user.id)
-            .maybeSingle();
-
-          if (acct) {
-            setFarmProfile(prev => ({
-              ...prev,
-              name: acct.farm_name || prev.name,
-              ownerName: acct.operator_name || prev.ownerName,
-              location: acct.location || prev.location
-            }));
-          } else if (sbSession.user.user_metadata?.farmName) {
-            setFarmProfile(prev => ({
-              ...prev,
-              name: sbSession.user.user_metadata.farmName,
-              ownerName: sbSession.user.user_metadata.name || prev.ownerName,
-              location: sbSession.user.user_metadata.location || prev.location
-            }));
+    const initAuth = async () => {
+      try {
+        const { data: { session: sbSession } } = await supabase.auth.getSession();
+        if (isMounted) {
+          if (sbSession?.user) {
+            setSession({
+              userId: sbSession.user.id,
+              email: sbSession.user.email || "",
+              name: sbSession.user.user_metadata?.name || "Operator",
+              isAuthenticated: true
+            });
+            await loadUserProfileAndData(sbSession.user.id, sbSession.user.user_metadata);
+          } else {
+            setSession({
+              userId: undefined,
+              email: "",
+              name: "",
+              isAuthenticated: false
+            });
           }
-        } catch (e) {
-          console.warn("[FarmContext] Profile lookup exception", e);
         }
+      } catch (err) {
+        console.error("[FarmContext] Auth restoration error:", err);
+      } finally {
+        if (isMounted) {
+          setIsAuthReady(true);
+          setIsLoadingData(false);
+        }
+      }
+    };
 
-        await reloadFarmData();
-      } else {
+    initAuth();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, sbSession) => {
+      if (!isMounted) return;
+
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
+        if (sbSession?.user) {
+          setSession({
+            userId: sbSession.user.id,
+            email: sbSession.user.email || "",
+            name: sbSession.user.user_metadata?.name || "Operator",
+            isAuthenticated: true
+          });
+          await loadUserProfileAndData(sbSession.user.id, sbSession.user.user_metadata);
+        }
+      } else if (event === "SIGNED_OUT") {
         setSession({
           userId: undefined,
           email: "",
           name: "",
           isAuthenticated: false
         });
-        setIsLoadingData(false);
+        setAnimals([]);
+        setHealthRecords([]);
+        setTreatments([]);
+        setWeightRecords([]);
+        setBreedingRecords([]);
+        setInventory([]);
+        setContacts([]);
+        setReminders([]);
+        setFarmNotes([]);
+        setAnimalNotes([]);
       }
+
+      setIsAuthReady(true);
+      setIsLoadingData(false);
     });
 
     return () => {
+      isMounted = false;
       authListener.subscription.unsubscribe();
     };
-  }, []);
+  }, [loadUserProfileAndData]);
 
   const logActivity = async (type: string, description: string, actor: string, targetId?: string) => {
     const newLog = {
@@ -553,6 +611,13 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (authData?.user) {
+        setSession({
+          userId: authData.user.id,
+          email: authData.user.email || "",
+          name: authData.user.user_metadata?.name || "Operator",
+          isAuthenticated: true
+        });
+        await loadUserProfileAndData(authData.user.id, authData.user.user_metadata);
         showSuccess("Signed in successfully!");
         return true;
       }
@@ -606,6 +671,13 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
         setFarmProfile(newProfile);
 
+        setSession({
+          userId: authData.user.id,
+          email: authData.user.email || "",
+          name: name,
+          isAuthenticated: true
+        });
+
         showSuccess(`Farm setup complete for ${farmName}!`);
         return true;
       }
@@ -655,7 +727,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       photos: animalData.photos,
       notes: animalData.notes,
       mother_id: animalData.parents?.motherId,
-      father_id: animalData.parents?.fatherId
+      father_id: animalData.parents?.fatherId,
+      user_id: session.userId || null
     };
 
     const { error } = await supabase.from("animals").insert([dbPayload]);
@@ -717,7 +790,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       date: record.date,
       details: record.details,
       medication: record.medication,
-      recorded_by: record.recordedBy
+      recorded_by: record.recordedBy,
+      user_id: session.userId || null
     }]);
 
     if (error) {
@@ -753,7 +827,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       end_date: treatmentData.endDate,
       status: treatmentData.status,
       notes: treatmentData.notes,
-      follow_up_date: treatmentData.followUpDate
+      follow_up_date: treatmentData.followUpDate,
+      user_id: session.userId || null
     }]);
 
     if (error) {
@@ -791,7 +866,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       animal_id: record.animal_id,
       weight: record.weight,
       date: record.date,
-      notes: record.notes
+      notes: record.notes,
+      user_id: session.userId || null
     }]);
 
     if (error) {
@@ -812,7 +888,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       male_id: record.male_id,
       date: record.date,
       status: record.status,
-      notes: record.notes
+      notes: record.notes,
+      user_id: session.userId || null
     }]);
 
     if (error) {
@@ -833,7 +910,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       quantity: item.quantity,
       unit: item.unit,
       min_stock: item.minStock,
-      notes: item.notes
+      notes: item.notes,
+      user_id: session.userId || null
     }]);
 
     if (error) {
@@ -880,7 +958,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       whatsapp: contact.whatsapp,
       email: contact.email,
       address: contact.address,
-      notes: contact.notes
+      notes: contact.notes,
+      user_id: session.userId || null
     }]);
 
     if (error) {
@@ -922,7 +1001,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       due_date: reminder.dueDate,
       animal_id: reminder.animal_id,
       completed: false,
-      notes: reminder.notes
+      notes: reminder.notes,
+      user_id: session.userId || null
     }]);
 
     if (error) {
@@ -949,7 +1029,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await logActivity("Reminder Completed", `Completed task: ${target.title}`, farmProfile.ownerName, target.animal_id);
   };
 
-  // FARM NOTES ACTIONS (DEDICATED GENERAL FARM NOTES)
+  // FARM NOTES ACTIONS
   const addFarmNote = async (note: { title?: string; content: string }) => {
     const newId = "fn_" + Date.now();
     const newRecord: FarmNote = {
@@ -1024,7 +1104,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     showSuccess("Farm note deleted!");
   };
 
-  // ANIMAL NOTES ACTIONS (DEDICATED SPECIFIC ANIMAL NOTES)
+  // ANIMAL NOTES ACTIONS
   const addAnimalNote = async (note: { animal_id: string; content: string }) => {
     const newId = "an_" + Date.now();
     const newRecord: AnimalNote = {
@@ -1142,6 +1222,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         session,
         onboardingCompleted,
         isLoadingData,
+        isAuthReady,
         aiUsage,
         addAnimal,
         updateAnimal,

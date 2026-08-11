@@ -27,16 +27,47 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-// Clean Security Guard Wrapper redirects to login if unauthenticated, and ensures layout bounds
+// Loading spinner displayed while restoring active session on page reload
+const AuthLoadingScreen = () => (
+  <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center text-center p-6 text-white relative">
+    <div className="z-10 space-y-4 max-w-sm">
+      <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
+      <div>
+        <h3 className="text-sm font-black text-emerald-400 tracking-wide">Restoring FarmNest session...</h3>
+        <p className="text-slate-400 text-xs mt-1">Connecting to farm records</p>
+      </div>
+    </div>
+  </div>
+);
+
+// Protected Route Guard: Waits for Supabase auth initialization before checking session
 const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { session } = useFarm();
+  const { session, isAuthReady } = useFarm();
   
-  // Real authentication protection logic
+  if (!isAuthReady) {
+    return <AuthLoadingScreen />;
+  }
+
   if (!session.isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 
   return <Layout>{children}</Layout>;
+};
+
+// Public Only Route Guard: Prevents authenticated users from being sent to login/register on refresh
+const PublicOnlyRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { session, isAuthReady } = useFarm();
+
+  if (!isAuthReady) {
+    return <AuthLoadingScreen />;
+  }
+
+  if (session.isAuthenticated) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <>{children}</>;
 };
 
 const AppRoutes = () => {
@@ -50,9 +81,32 @@ const AppRoutes = () => {
         element={<Navigate to={onboardingCompleted ? "/dashboard" : "/onboarding"} replace />} 
       />
       
-      <Route path="/onboarding" element={<Onboarding />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
+      <Route 
+        path="/onboarding" 
+        element={
+          <PublicOnlyRoute>
+            <Onboarding />
+          </PublicOnlyRoute>
+        } 
+      />
+      
+      <Route 
+        path="/login" 
+        element={
+          <PublicOnlyRoute>
+            <Login />
+          </PublicOnlyRoute>
+        } 
+      />
+      
+      <Route 
+        path="/register" 
+        element={
+          <PublicOnlyRoute>
+            <Register />
+          </PublicOnlyRoute>
+        } 
+      />
 
       {/* Protected Layout Paths */}
       <Route 
