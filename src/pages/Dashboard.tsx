@@ -24,7 +24,8 @@ export const Dashboard: React.FC = () => {
     reminders,
     activityLogs,
     farmProfile,
-    toggleReminder
+    toggleReminder,
+    addReminder
   } = useFarm();
 
   // Confirmation state
@@ -34,7 +35,17 @@ export const Dashboard: React.FC = () => {
     onConfirm: () => void;
   } | null>(null);
 
-  // Fallback priority logic: Use farmProfile.image if set; otherwise use high-quality Unsplash agricultural farmland
+  // New Reminder modal states
+  const [showAddReminder, setShowAddReminder] = useState(false);
+  const [newReminderForm, setNewReminderForm] = useState({
+    title: "",
+    type: "Vaccination" as Reminder["type"],
+    dueDate: new Date().toISOString().split("T")[0],
+    animalId: "",
+    notes: ""
+  });
+
+  // Fallback priority logic
   const farmHeaderImage = farmProfile.image || "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=1200&auto=format&fit=crop&q=80";
 
   // Calculations
@@ -53,6 +64,36 @@ export const Dashboard: React.FC = () => {
         toggleReminder(reminderId);
         setPendingConfirm(null);
         showSuccess("Reminder marked done!");
+      }
+    });
+  };
+
+  const triggerCreateReminderSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newReminderForm.title) {
+      showError("Please check reminder title");
+      return;
+    }
+    setPendingConfirm({
+      title: "Set Calendar Reminder Task?",
+      message: `Create calendar card task '${newReminderForm.title}' due on ${newReminderForm.dueDate}?`,
+      onConfirm: () => {
+        addReminder({
+          title: newReminderForm.title,
+          type: newReminderForm.type,
+          dueDate: newReminderForm.dueDate,
+          animal_id: newReminderForm.animalId || undefined,
+          notes: newReminderForm.notes || undefined
+        });
+        setShowAddReminder(false);
+        setPendingConfirm(null);
+        setNewReminderForm({
+          title: "",
+          type: "Vaccination",
+          dueDate: new Date().toISOString().split("T")[0],
+          animalId: "",
+          notes: ""
+        });
       }
     });
   };
@@ -142,6 +183,12 @@ export const Dashboard: React.FC = () => {
               <Calendar size={16} className="text-emerald-600" />
               Due Today / Soon ({reminders.filter(r => !r.completed).length})
             </h3>
+            <button 
+              onClick={() => setShowAddReminder(true)}
+              className="text-xs font-bold text-emerald-600 hover:underline"
+            >
+              + Add Reminder
+            </button>
           </div>
 
           <div className="space-y-2">
@@ -247,6 +294,82 @@ export const Dashboard: React.FC = () => {
           ))}
         </div>
       </div>
+
+      {/* STABLE ADD REMINDER MODAL DIALOG */}
+      {showAddReminder && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
+          <form 
+            onSubmit={triggerCreateReminderSubmit}
+            className="bg-white w-full max-w-md rounded-2xl p-6 space-y-4 text-left"
+          >
+            <div className="flex items-center justify-between border-b pb-2">
+              <h3 className="font-extrabold text-sm text-slate-900">Add Custom Reminder Task</h3>
+              <button type="button" onClick={() => setShowAddReminder(false)} className="text-slate-400 hover:text-slate-600">✕</button>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 block">Task / Reminder Title</label>
+              <input
+                type="text"
+                placeholder="e.g. PPR Booster dose - Aisha"
+                value={newReminderForm.title}
+                onChange={(e) => setNewReminderForm({ ...newReminderForm, title: e.target.value })}
+                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1 text-slate-800"
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 block">Procedure Type</label>
+                <select
+                  value={newReminderForm.type}
+                  onChange={(e) => setNewReminderForm({ ...newReminderForm, type: e.target.value as Reminder["type"] })}
+                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1 text-slate-800"
+                >
+                  <option value="Vaccination">Vaccination 💉</option>
+                  <option value="Treatment">Treatment 💊</option>
+                  <option value="Breeding">Breeding Run ❤️</option>
+                  <option value="Birth">Birth Delivery 👶</option>
+                  <option value="Other">Other Paddock Task</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 block">Due Date</label>
+                <input
+                  type="date"
+                  value={newReminderForm.dueDate}
+                  onChange={(e) => setNewReminderForm({ ...newReminderForm, dueDate: e.target.value })}
+                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1 text-slate-800"
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 block">Assign Livestock (Optional)</label>
+              <select
+                value={newReminderForm.animalId}
+                onChange={(e) => setNewReminderForm({ ...newReminderForm, animalId: e.target.value })}
+                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1 text-slate-800"
+              >
+                <option value="">-- Choose Profile --</option>
+                {animals.map((a) => (
+                  <option key={a.id} value={a.id}>{a.animal_code} {a.name ? `(${a.name})` : `(${a.species})`}</option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              type="submit"
+              className="w-full bg-emerald-600 text-white font-bold text-xs py-3 rounded-xl shadow"
+            >
+              Add Calendar Task
+            </button>
+          </form>
+        </div>
+      )}
 
       {/* UNIVERSAL CONFIRMATION DIALOG MODAL */}
       {pendingConfirm && (
