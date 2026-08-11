@@ -196,6 +196,63 @@ export const AnimalProfilePage: React.FC = () => {
     });
   };
 
+  // PDF passport helper
+  const handlePdfSingleReport = () => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      showSuccess("Allow popups to trigger passport generation.");
+      return;
+    }
+
+    const html = `
+      <html>
+        <head>
+          <title>Passport: ${animal.animal_code}</title>
+          <style>
+            body { font-family: system-ui, sans-serif; padding: 30px; color: #1a202c; }
+            .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #047857; pb: 10px; }
+            .badge { padding: 4px 10px; border-radius: 9999px; font-weight: bold; background: #e6fffa; color: #047857; font-size: 14px; }
+            .photo { width: 100%; max-height: 350px; object-fit: cover; border-radius: 12px; margin-top: 20px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { padding: 10px; border: 1px solid #e2e8f0; text-align: left; }
+            th { background: #f7fafc; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <h1>FarmNest Passport Card</h1>
+              <p>Livestock Registry: <strong>${animal.animal_code}</strong></p>
+            </div>
+            <span class="badge">${animal.status}</span>
+          </div>
+          <img class="photo" src="${animal.primaryPhoto}" />
+          <table>
+            <tr><th>Attribute</th><td>Details</td></tr>
+            <tr><th>Identifier Name</th><td>${animal.name || "Unnamed"}</td></tr>
+            <tr><th>Species Class</th><td>${animal.species}</td></tr>
+            <tr><th>Breed</th><td>${animal.breed}</td></tr>
+            <tr><th>Sex Type</th><td>${animal.sex}</td></tr>
+            <tr><th>Birth date</th><td>${animal.dob}</td></tr>
+            <tr><th>Source</th><td>${animal.source}</td></tr>
+            <tr><th>Vitals History Count</th><td>${animalHealth.length} items logged</td></tr>
+            <tr><th>Current notes</th><td>${animal.notes || "No extra bio."}</td></tr>
+          </table>
+          <script>window.print();</script>
+        </body>
+      </html>
+    `;
+    printWindow.document.write(html);
+    printWindow.document.close();
+    showSuccess("Printed Individual Animal Report!");
+  };
+
+  const MOCK_IMAGES = {
+    goat1: "https://images.unsplash.com/photo-1524413840807-0c3cb6fa808d?w=500&auto=format&fit=crop&q=80",
+    ram: "https://images.unsplash.com/photo-1484557985045-edf25e08da73?w=500&auto=format&fit=crop&q=80",
+    chicken: "https://images.unsplash.com/photo-1548550023-2bdb3c5beed7?w=500&auto=format&fit=crop&q=80",
+  };
+
   // Derived arrays
   const animalReminders = reminders.filter(r => r.animal_id === animal.id && !r.completed);
   const animalHealth = healthRecords.filter(h => h.animal_id === animal.id);
