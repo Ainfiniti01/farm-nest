@@ -3,26 +3,26 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useFarm } from "@/context/FarmContext";
-import { showError } from "@/utils/toast";
+import { showError, showSuccess } from "@/utils/toast";
 
 export const Login: React.FC = () => {
   const navigate = useNavigate();
   const { login } = useFarm();
   
-  const [farmName, setFarmName] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!farmName || !password) {
-      showError("Please enter your farm name and password.");
+    if (!identifier.trim() || !password) {
+      showError("Please enter your registered Email or Farm Name and Password.");
       return;
     }
 
     setIsLoading(true);
     try {
-      const success = await login(farmName, password);
+      const success = await login(identifier.trim(), password);
       if (success) {
         navigate("/dashboard");
       }
@@ -40,8 +40,8 @@ export const Login: React.FC = () => {
         <div className="z-10 space-y-6 max-w-sm">
           <div className="w-16 h-16 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
           <div>
-            <h2 className="text-xl font-black text-emerald-400 tracking-tight">Authenticating operator credentials...</h2>
-            <p className="text-slate-400 text-xs mt-2 italic font-serif">"Connecting to secure database vault."</p>
+            <h2 className="text-xl font-black text-emerald-400 tracking-tight">Authenticating Supabase Session...</h2>
+            <p className="text-slate-400 text-xs mt-2 italic font-serif">"Connecting to live database vault."</p>
           </div>
         </div>
       </div>
@@ -56,17 +56,19 @@ export const Login: React.FC = () => {
         <div className="text-center space-y-1">
           <span className="text-4xl block">🌾</span>
           <h2 className="text-2xl font-black tracking-tight text-white">Sign Into FarmNest</h2>
-          <p className="text-slate-400 text-xs">Access your livestock logs and active veterinary prescriptions.</p>
+          <p className="text-slate-400 text-xs">Access your live livestock records and veterinary logs.</p>
         </div>
 
         <form onSubmit={handleLoginSubmit} className="space-y-4">
           <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Farm Name</label>
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+              Email Address or Farm Name
+            </label>
             <input
               type="text"
-              placeholder="e.g. Adam Farms"
-              value={farmName}
-              onChange={(e) => setFarmName(e.target.value)}
+              placeholder="operator@farmnest.com OR Adam Farms"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
               className="w-full p-3 bg-slate-700/60 border border-slate-600 rounded-xl text-xs text-white focus:ring-1 focus:ring-emerald-500 outline-none"
               required
             />
