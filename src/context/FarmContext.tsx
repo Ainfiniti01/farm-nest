@@ -169,6 +169,7 @@ interface FarmContextType {
   signupAndSetup: (email: string, password: string, name: string, farmName: string, location: string) => Promise<boolean>;
   logout: () => void;
   seedSampleData: () => void;
+  resetDatabase: () => void;
 }
 
 const FarmContext = createContext<FarmContextType | undefined>(undefined);
@@ -221,7 +222,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     setActivityLogs(prev => {
       const next = [log, ...prev].slice(0, 50);
-      saveState("farm_logs", next);
+      saveState("farm_v2_logs", next);
       return next;
     });
 
@@ -239,25 +240,25 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const setOnboardingCompleted = (val: boolean) => {
     setOnboardingCompletedState(val);
-    saveState("farm_onboarding_completed", val);
+    saveState("farm_v2_onboarding_completed", val);
   };
 
   // Load and sync state on initial load
   useEffect(() => {
     const loadState = async () => {
-      const storedAnimals = localStorage.getItem("farm_animals");
-      const storedHealth = localStorage.getItem("farm_health");
-      const storedTreatments = localStorage.getItem("farm_treatments");
-      const storedWeight = localStorage.getItem("farm_weights");
-      const storedBreeding = localStorage.getItem("farm_breeding");
-      const storedInventory = localStorage.getItem("farm_inventory");
-      const storedInvTx = localStorage.getItem("farm_inventory_tx");
-      const storedContacts = localStorage.getItem("farm_contacts");
-      const storedReminders = localStorage.getItem("farm_reminders");
-      const storedLogs = localStorage.getItem("farm_logs");
-      const storedProfile = localStorage.getItem("farm_profile");
-      const storedSession = localStorage.getItem("farm_user_session");
-      const storedOnboarding = localStorage.getItem("farm_onboarding_completed");
+      const storedAnimals = localStorage.getItem("farm_v2_animals");
+      const storedHealth = localStorage.getItem("farm_v2_health");
+      const storedTreatments = localStorage.getItem("farm_v2_treatments");
+      const storedWeight = localStorage.getItem("farm_v2_weights");
+      const storedBreeding = localStorage.getItem("farm_v2_breeding");
+      const storedInventory = localStorage.getItem("farm_v2_inventory");
+      const storedInvTx = localStorage.getItem("farm_v2_inventory_tx");
+      const storedContacts = localStorage.getItem("farm_v2_contacts");
+      const storedReminders = localStorage.getItem("farm_v2_reminders");
+      const storedLogs = localStorage.getItem("farm_v2_logs");
+      const storedProfile = localStorage.getItem("farm_v2_profile");
+      const storedSession = localStorage.getItem("farm_v2_user_session");
+      const storedOnboarding = localStorage.getItem("farm_v2_onboarding_completed");
 
       if (storedAnimals) setAnimals(JSON.parse(storedAnimals));
       if (storedHealth) setHealthRecords(JSON.parse(storedHealth));
@@ -316,7 +317,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
               created_at: a.created_at
             }));
             setAnimals(mapped);
-            saveState("farm_animals", mapped);
+            saveState("farm_v2_animals", mapped);
           }
 
           if (resHealth) {
@@ -330,7 +331,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
               recordedBy: h.recorded_by
             }));
             setHealthRecords(mapped);
-            saveState("farm_health", mapped);
+            saveState("farm_v2_health", mapped);
           }
 
           if (resTreatments) {
@@ -346,7 +347,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
               followUpDate: t.follow_up_date
             }));
             setTreatments(mapped);
-            saveState("farm_treatments", mapped);
+            saveState("farm_v2_treatments", mapped);
           }
 
           if (resWeights) {
@@ -358,7 +359,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
               notes: w.notes
             }));
             setWeightRecords(mapped);
-            saveState("farm_weights", mapped);
+            saveState("farm_v2_weights", mapped);
           }
 
           if (resBreeding) {
@@ -371,7 +372,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
               notes: b.notes
             }));
             setBreedingRecords(mapped);
-            saveState("farm_breeding", mapped);
+            saveState("farm_v2_breeding", mapped);
           }
 
           if (resInventory) {
@@ -386,7 +387,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
               notes: i.notes
             }));
             setInventory(mapped);
-            saveState("farm_inventory", mapped);
+            saveState("farm_v2_inventory", mapped);
           }
 
           if (resContacts) {
@@ -401,7 +402,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
               notes: c.notes
             }));
             setContacts(mapped);
-            saveState("farm_contacts", mapped);
+            saveState("farm_v2_contacts", mapped);
           }
 
           if (resReminders) {
@@ -415,7 +416,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
               notes: r.notes
             }));
             setReminders(mapped);
-            saveState("farm_reminders", mapped);
+            saveState("farm_v2_reminders", mapped);
           }
 
         } catch (err) {
@@ -429,6 +430,33 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const seedSampleData = () => {
     // Left empty since user requested removing dummy seed datasets entirely
+  };
+
+  const resetDatabase = () => {
+    const keys = [
+      "farm_v2_animals",
+      "farm_v2_health",
+      "farm_v2_treatments",
+      "farm_v2_weights",
+      "farm_v2_breeding",
+      "farm_v2_inventory",
+      "farm_v2_inventory_tx",
+      "farm_v2_contacts",
+      "farm_v2_reminders",
+      "farm_v2_logs",
+    ];
+    keys.forEach(k => localStorage.removeItem(k));
+    setAnimals([]);
+    setHealthRecords([]);
+    setTreatments([]);
+    setWeightRecords([]);
+    setBreedingRecords([]);
+    setInventory([]);
+    setInventoryTransactions([]);
+    setContacts([]);
+    setReminders([]);
+    setActivityLogs([]);
+    showSuccess("Database reset complete! Starting fresh with 0 records.");
   };
 
   const login = async (email: string, password: string): Promise<boolean> => {
@@ -450,7 +478,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
           isAuthenticated: true
         };
         setSession(userSession);
-        saveState("farm_user_session", userSession);
+        saveState("farm_v2_user_session", userSession);
 
         if (data.user.user_metadata?.farmName) {
           const profile = {
@@ -460,7 +488,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
             location: data.user.user_metadata.location || "Kano, Nigeria",
           };
           setFarmProfile(profile);
-          saveState("farm_profile", profile);
+          saveState("farm_v2_profile", profile);
         }
 
         showSuccess("Logged into your live farm database successfully!");
@@ -484,7 +512,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAuthenticated: true
       };
       setSession(userSession);
-      saveState("farm_user_session", userSession);
+      saveState("farm_v2_user_session", userSession);
 
       const profile = {
         ...farmProfile,
@@ -493,7 +521,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         location: foundUser.location,
       };
       setFarmProfile(profile);
-      saveState("farm_profile", profile);
+      saveState("farm_v2_profile", profile);
 
       showSuccess(`Logged in securely to local paddock: ${foundUser.farmName}`);
       return true;
@@ -527,7 +555,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
           isAuthenticated: true
         };
         setSession(userSession);
-        saveState("farm_user_session", userSession);
+        saveState("farm_v2_user_session", userSession);
 
         const updatedProfile = {
           ...farmProfile,
@@ -536,7 +564,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
           location
         };
         setFarmProfile(updatedProfile);
-        saveState("farm_profile", updatedProfile);
+        saveState("farm_v2_profile", updatedProfile);
 
         showSuccess(`Farm nested and database credentials mapped for: ${farmName}`);
         return true;
@@ -562,7 +590,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAuthenticated: true
       };
       setSession(userSession);
-      saveState("farm_user_session", userSession);
+      saveState("farm_v2_user_session", userSession);
 
       const updatedProfile: FarmProfile = {
         name: farmName || "My Farm",
@@ -572,7 +600,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         image: "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=600&auto=format&fit=crop&q=80",
       };
       setFarmProfile(updatedProfile);
-      saveState("farm_profile", updatedProfile);
+      saveState("farm_v2_profile", updatedProfile);
 
       showSuccess(`Local Secure Profile mapped for: ${farmName}!`);
       return true;
@@ -583,7 +611,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = () => {
     const userSession = { email: "", name: "", isAuthenticated: false };
     setSession(userSession);
-    saveState("farm_user_session", userSession);
+    saveState("farm_v2_user_session", userSession);
     showSuccess("Logged out of session.");
   };
 
@@ -603,7 +631,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const updated = [newAnimal, ...animals];
     setAnimals(updated);
-    saveState("farm_animals", updated);
+    saveState("farm_v2_animals", updated);
 
     logActivity("Animal Registered", `Registered ${animalData.species} named ${animalData.name || generatedCode}`, farmProfile.ownerName, newAnimal.id);
 
@@ -636,7 +664,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updateAnimal = async (id: string, updates: Partial<Animal>) => {
     const updated = animals.map(a => (a.id === id ? { ...a, ...updates } : a));
     setAnimals(updated);
-    saveState("farm_animals", updated);
+    saveState("farm_v2_animals", updated);
     logActivity("Animal Updated", `Updated details of ${animals.find(a => a.id === id)?.animal_code}`, farmProfile.ownerName, id);
     showSuccess("Animal updated");
 
@@ -668,7 +696,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!animal) return;
     const updated = animals.filter(a => a.id !== id);
     setAnimals(updated);
-    saveState("farm_animals", updated);
+    saveState("farm_v2_animals", updated);
     logActivity("Animal Removed", `Removed ${animal.animal_code}`, farmProfile.ownerName);
     showSuccess("Animal removed successfully");
 
@@ -685,7 +713,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const newRecord: HealthRecord = { ...record, id: "h_" + Date.now() };
     const updated = [newRecord, ...healthRecords];
     setHealthRecords(updated);
-    saveState("farm_health", updated);
+    saveState("farm_v2_health", updated);
 
     let newStatus: Animal["status"] = "Healthy";
     let hStatus: Animal["healthStatus"] = "Healthy";
@@ -704,7 +732,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         return a;
       });
-      saveState("farm_animals", next);
+      saveState("farm_v2_animals", next);
       return next;
     });
 
@@ -732,7 +760,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const newTx: Treatment = { ...treatmentData, id: "t_" + Date.now() };
     const updated = [newTx, ...treatments];
     setTreatments(updated);
-    saveState("farm_treatments", updated);
+    saveState("farm_v2_treatments", updated);
 
     setAnimals(prev => {
       const next = prev.map(a => {
@@ -741,7 +769,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         return a;
       });
-      saveState("farm_animals", next);
+      saveState("farm_v2_animals", next);
       return next;
     });
 
@@ -773,7 +801,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const updated = treatments.map(t => (t.id === id ? { ...t, status } : t));
     setTreatments(updated);
-    saveState("farm_treatments", updated);
+    saveState("farm_v2_treatments", updated);
 
     if (status === "Completed") {
       setAnimals(prev => {
@@ -783,7 +811,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
           return a;
         });
-        saveState("farm_animals", next);
+        saveState("farm_v2_animals", next);
         return next;
       });
     }
@@ -804,7 +832,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const newWeight: WeightRecord = { ...record, id: "w_" + Date.now() };
     const updated = [...weightRecords, newWeight];
     setWeightRecords(updated);
-    saveState("farm_weights", updated);
+    saveState("farm_v2_weights", updated);
     showSuccess("Weight logged");
 
     if (isSupabaseConfigured()) {
@@ -826,7 +854,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const newB: BreedingRecord = { ...record, id: "b_" + Date.now() };
     const updated = [newB, ...breedingRecords];
     setBreedingRecords(updated);
-    saveState("farm_breeding", updated);
+    saveState("farm_v2_breeding", updated);
     showSuccess("Breeding registered");
 
     if (isSupabaseConfigured()) {
@@ -849,7 +877,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const newItem: InventoryItem = { ...item, id: "i_" + Date.now() };
     const updated = [...inventory, newItem];
     setInventory(updated);
-    saveState("farm_inventory", updated);
+    saveState("farm_v2_inventory", updated);
     showSuccess("Inventory item created");
 
     if (isSupabaseConfigured()) {
@@ -885,7 +913,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const updated = inventory.map(i => (i.id === itemId ? { ...i, quantity: nextQty } : i));
     setInventory(updated);
-    saveState("farm_inventory", updated);
+    saveState("farm_v2_inventory", updated);
     showSuccess("Storage stock adjusted");
 
     if (isSupabaseConfigured()) {
@@ -901,7 +929,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const newC: Contact = { ...contact, id: "c_" + Date.now() };
     const updated = [...contacts, newC];
     setContacts(updated);
-    saveState("farm_contacts", updated);
+    saveState("farm_v2_contacts", updated);
     showSuccess("Contact saved");
 
     if (isSupabaseConfigured()) {
@@ -925,13 +953,13 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updateContact = (id: string, updates: Partial<Contact>) => {
     const updated = contacts.map(c => (c.id === id ? { ...c, ...updates } : c));
     setContacts(updated);
-    saveState("farm_contacts", updated);
+    saveState("farm_v2_contacts", updated);
   };
 
   const deleteContact = async (id: string) => {
     const updated = contacts.filter(c => c.id !== id);
     setContacts(updated);
-    saveState("farm_contacts", updated);
+    saveState("farm_v2_contacts", updated);
     showSuccess("Contact removed");
 
     if (isSupabaseConfigured()) {
@@ -947,7 +975,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const newR: Reminder = { ...reminder, id: "r_" + Date.now(), completed: false };
     const updated = [newR, ...reminders];
     setReminders(updated);
-    saveState("farm_reminders", updated);
+    saveState("farm_v2_reminders", updated);
     showSuccess("Reminder set");
 
     if (isSupabaseConfigured()) {
@@ -974,7 +1002,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const updated = reminders.map(r => (r.id === id ? { ...r, completed: nextVal } : r));
     setReminders(updated);
-    saveState("farm_reminders", updated);
+    saveState("farm_v2_reminders", updated);
 
     if (isSupabaseConfigured()) {
       try {
@@ -987,7 +1015,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updateFarmProfile = (profile: FarmProfile) => {
     setFarmProfile(profile);
-    saveState("farm_profile", profile);
+    saveState("farm_v2_profile", profile);
     showSuccess("Farm profile updated");
   };
 
@@ -1044,6 +1072,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         signupAndSetup,
         logout,
         seedSampleData,
+        resetDatabase,
       }}
     >
       {children}

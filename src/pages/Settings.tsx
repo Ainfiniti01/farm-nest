@@ -11,13 +11,13 @@ import {
   ChevronRight,
   Shield,
   Bell,
-  Activity
+  Trash2
 } from "lucide-react";
 import { showSuccess } from "@/utils/toast";
 
 export const Settings: React.FC = () => {
   const navigate = useNavigate();
-  const { farmProfile, logout } = useFarm();
+  const { farmProfile, logout, resetDatabase } = useFarm();
 
   const [pendingConfirm, setPendingConfirm] = useState<{
     title: string;
@@ -61,6 +61,18 @@ export const Settings: React.FC = () => {
     });
   };
 
+  const handleResetData = () => {
+    setPendingConfirm({
+      title: "Wipe All Local Data?",
+      message: "This will immediately clear all local cached livestock animals, logs, inventories, and diagnostic traces. There is no undo.",
+      onConfirm: () => {
+        resetDatabase();
+        setPendingConfirm(null);
+        navigate("/");
+      }
+    });
+  };
+
   return (
     <div className="space-y-6">
       
@@ -97,7 +109,7 @@ export const Settings: React.FC = () => {
       {/* Account Settings Placeholder */}
       <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm space-y-4">
         <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wider text-slate-400">
-          Core Preferences (Coming Soon)
+          Core Preferences & Maintenance
         </h3>
 
         <div className="space-y-2 text-xs">
@@ -118,12 +130,24 @@ export const Settings: React.FC = () => {
           </div>
         </div>
 
-        <button
-          onClick={handleLogout}
-          className="w-full py-2.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-xs font-bold transition text-center"
-        >
-          Sign Out Operator Session
-        </button>
+        <div className="pt-2 flex flex-col sm:flex-row gap-3">
+          <button
+            onClick={handleResetData}
+            type="button"
+            className="flex-1 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5"
+          >
+            <Trash2 size={14} />
+            Wipe & Reset Database
+          </button>
+
+          <button
+            onClick={handleLogout}
+            type="button"
+            className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition text-center"
+          >
+            Sign Out Session
+          </button>
+        </div>
       </div>
 
       {/* CONFIRMATION OVERLAY */}
