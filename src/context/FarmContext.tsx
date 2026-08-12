@@ -322,7 +322,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch (err) {
       console.error("[FarmContext] Account fetch error:", err);
-    } fontally {
+    } finally {
       fetchingAccountRef.current = false;
     }
   }, [session.isAuthenticated]);
