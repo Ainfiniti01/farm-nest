@@ -172,12 +172,12 @@ interface FarmContextType {
     imageUsed: number;
     imageLimit: number;
   };
-  loadDashboardData: () => Promise<void>;
-  loadAnimals: () => Promise<void>;
-  loadAnimalProfile: (animalId: string) => Promise<void>;
-  loadInventory: () => Promise<void>;
-  loadFarmNotes: () => Promise<void>;
-  loadContacts: () => Promise<void>;
+  loadDashboardData: (force?: boolean) => Promise<void>;
+  loadAnimals: (force?: boolean) => Promise<void>;
+  loadAnimalProfile: (animalId: string, force?: boolean) => Promise<void>;
+  loadInventory: (force?: boolean) => Promise<void>;
+  loadFarmNotes: (force?: boolean) => Promise<void>;
+  loadContacts: (force?: boolean) => Promise<void>;
   addAnimal: (animal: Omit<Animal, "id" | "animal_code" | "created_at">) => Promise<void>;
   updateAnimal: (id: string, updates: Partial<Animal>) => Promise<void>;
   deleteAnimal: (id: string) => Promise<void>;
@@ -229,10 +229,22 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [onboardingCompleted, setOnboardingCompletedState] = useState<boolean>(false);
   
   const [isAuthReady, setIsAuthReady] = useState<boolean>(false);
-  const [isLoadingData, setIsLoadingData] = useState<boolean>(true);
+  const [isLoadingData, setIsLoadingData] = useState<boolean>(false);
 
+  // In-memory caching & flight guard refs
+  const hasLoadedAccountRef = useRef<boolean>(false);
+  const hasLoadedDashboardRef = useRef<boolean>(false);
+  const hasLoadedAnimalsRef = useRef<boolean>(false);
+  const hasLoadedInventoryRef = useRef<boolean>(false);
+  const hasLoadedFarmNotesRef = useRef<boolean>(false);
+  const hasLoadedContactsRef = useRef<boolean>(false);
+
+  const fetchingAccountRef = useRef<boolean>(false);
   const fetchingDashboardRef = useRef<boolean>(false);
   const fetchingAnimalsRef = useRef<boolean>(false);
+  const fetchingInventoryRef = useRef<boolean>(false);
+  const fetchingFarmNotesRef = useRef<boolean>(false);
+  const fetchingContactsRef = useRef<boolean>(false);
   const fetchingAnimalProfileRef = useRef<string | null>(null);
   const isLoggingOutRef = useRef<boolean>(false);
 
@@ -265,12 +277,60 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem("farm_v2_onboarding_completed", JSON.stringify(val));
   };
 
-  // 1. LIGHTWEIGHT DASHBOARD DATA LOADER (Summary info only, shared across farm)
-  const loadDashboardData = useCallback(async () => {
+  const clearSessionCache = useCallback(() => {
+    hasLoadedAccountRef.current = false;
+    hasLoadedDashboardRef.current = false;
+    hasLoadedAnimalsRef.current = false;
+    hasLoadedInventoryRef.current = false;
+    hasLoadedFarmNotesRef.current = false;
+    hasLoadedContactsRef.current = false;
+
+    fetchingAccountRef.current = false;
+    fetchingDashboardRef.current = false;
+    fetchingAnimalsRef.current = false;
+    fetchingInventoryRef.current = false;
+    fetchingFarmNotesRef.current = false;
+    fetchingContactsRef.current = false;
+    fetchingAnimalProfileRef.current = null;
+  }, []);
+
+  // LIGHTWEIGHT ACCOUNT LOADER
+  const loadAccount = useCallback(async (force = false) => {
     if (!session.isAuthenticated) return;
+    if (hasLoadedAccountRef.current && !force) return;
+    if (fetchingAccountRef.current) return;
+    fetchingAccountRef.current = true;
+
+    try {
+      const { data } = await supabase
+        .from("accounts")
+        .select("id, farm_name, operator_name, location")
+        .limit(1)
+        .maybeSingle();
+
+      if (data) {
+        setAccountId(data.id);
+        setFarmProfile(prev => ({
+          ...prev,
+          name: data.farm_name || prev.name,
+          ownerName: data.operator_name || prev.ownerName,
+          location: data.location || prev.location
+        }));
+        hasLoadedAccountRef.current = true;
+      }
+    } catch (err) {
+      console.error("[FarmContext] Account fetch error:", err);
+    } finally {
+      fetchingAccountRef.current = false;
+    }
+  }, [session.isAuthenticated]);
+
+  // TARGETED LOADER 1: DASHBOARD DATA
+  const loadDashboardData = useCallback(async (force = false) => {
+    if (!session.isAuthenticated) return;
+    if (hasLoadedDashboardRef.current && !force) return;
     if (fetchingDashboardRef.current) return;
     fetchingDashboardRef.current = true;
-    setIsLoadingData(true);
 
     try {
       const [
@@ -299,25 +359,29 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
           ownerName: acctRes.data.operator_name || prev.ownerName,
           location: acctRes.data.location || prev.location
         }));
+        hasLoadedAccountRef.current = true;
       }
 
       if (resAnimals.data) {
-        setAnimals(resAnimals.data.map((a: any) => ({
-          id: a.id,
-          animal_code: a.animal_code,
-          name: a.name || "",
-          species: a.species,
-          breed: "",
-          sex: a.sex,
-          dob: "",
-          source: "Born on farm",
-          status: a.status,
-          healthStatus: a.health_status,
-          primaryPhoto: DEFAULT_ANIMAL_PHOTO,
-          photos: [DEFAULT_ANIMAL_PHOTO],
-          notes: "",
-          created_at: new Date().toISOString()
-        })));
+        setAnimals(prev => {
+          if (prev.length > 0) return prev;
+          return resAnimals.data.map((a: any) => ({
+            id: a.id,
+            animal_code: a.animal_code,
+            name: a.name || "",
+            species: a.species,
+            breed: "",
+            sex: a.sex,
+            dob: "",
+            source: "Born on farm",
+            status: a.status,
+            healthStatus: a.health_status,
+            primaryPhoto: DEFAULT_ANIMAL_PHOTO,
+            photos: [DEFAULT_ANIMAL_PHOTO],
+            notes: "",
+            created_at: new Date().toISOString()
+          }));
+        });
       }
 
       if (resTreatments.data) {
@@ -335,14 +399,17 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (resInventory.data) {
-        setInventory(resInventory.data.map((i: any) => ({
-          id: i.id,
-          name: i.name,
-          category: i.category,
-          quantity: parseFloat(i.quantity),
-          unit: i.unit,
-          minStock: parseFloat(i.min_stock)
-        })));
+        setInventory(prev => {
+          if (prev.length > 0) return prev;
+          return resInventory.data.map((i: any) => ({
+            id: i.id,
+            name: i.name,
+            category: i.category,
+            quantity: parseFloat(i.quantity),
+            unit: i.unit,
+            minStock: parseFloat(i.min_stock)
+          }));
+        });
       }
 
       if (resReminders.data) {
@@ -358,15 +425,18 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (resFarmNotes.data && !resFarmNotes.error) {
-        setFarmNotes(resFarmNotes.data.map((fn: any) => ({
-          id: fn.id,
-          farm_id: fn.farm_id,
-          title: fn.title,
-          content: fn.content,
-          created_by: fn.created_by || "Operator",
-          created_at: fn.created_at || new Date().toISOString(),
-          updated_at: fn.updated_at || new Date().toISOString()
-        })));
+        setFarmNotes(prev => {
+          if (prev.length > 0) return prev;
+          return resFarmNotes.data.map((fn: any) => ({
+            id: fn.id,
+            farm_id: fn.farm_id,
+            title: fn.title,
+            content: fn.content,
+            created_by: fn.created_by || "Operator",
+            created_at: fn.created_at || new Date().toISOString(),
+            updated_at: fn.updated_at || new Date().toISOString()
+          }));
+        });
       }
 
       if (resLogs.data) {
@@ -380,17 +450,18 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })));
       }
 
+      hasLoadedDashboardRef.current = true;
     } catch (err) {
       console.error("[FarmContext] Dashboard load error:", err);
     } finally {
       fetchingDashboardRef.current = false;
-      setIsLoadingData(false);
     }
   }, [session.isAuthenticated]);
 
-  // LOAD ALL ANIMALS FOR DIRECTORY
-  const loadAnimals = useCallback(async () => {
+  // TARGETED LOADER 2: ANIMALS DIRECTORY
+  const loadAnimals = useCallback(async (force = false) => {
     if (!session.isAuthenticated) return;
+    if (hasLoadedAnimalsRef.current && !force) return;
     if (fetchingAnimalsRef.current) return;
     fetchingAnimalsRef.current = true;
 
@@ -419,16 +490,17 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
           parents: { motherId: a.mother_id, fatherId: a.father_id },
           created_at: a.created_at
         })));
+        hasLoadedAnimalsRef.current = true;
       }
     } finally {
       fetchingAnimalsRef.current = false;
     }
   }, [session.isAuthenticated]);
 
-  // LOAD DETAILED PROFILE FOR SINGLE ANIMAL
-  const loadAnimalProfile = useCallback(async (animalId: string) => {
+  // TARGETED LOADER 3: SINGLE ANIMAL PROFILE
+  const loadAnimalProfile = useCallback(async (animalId: string, force = false) => {
     if (!animalId || !session.isAuthenticated) return;
-    if (fetchingAnimalProfileRef.current === animalId) return;
+    if (fetchingAnimalProfileRef.current === animalId && !force) return;
     fetchingAnimalProfileRef.current = animalId;
 
     try {
@@ -483,17 +555,21 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (resTreatments.data) {
-        setTreatments(resTreatments.data.map((t: any) => ({
-          id: t.id,
-          animal_id: t.animal_id,
-          condition: t.condition,
-          medication: t.medication,
-          startDate: t.start_date,
-          endDate: t.end_date,
-          status: t.status,
-          notes: t.notes,
-          followUpDate: t.follow_up_date
-        })));
+        setTreatments(prev => {
+          const other = prev.filter(t => t.animal_id !== animalId);
+          const current = resTreatments.data.map((t: any) => ({
+            id: t.id,
+            animal_id: t.animal_id,
+            condition: t.condition,
+            medication: t.medication,
+            startDate: t.start_date,
+            endDate: t.end_date,
+            status: t.status,
+            notes: t.notes,
+            followUpDate: t.follow_up_date
+          }));
+          return [...other, ...current];
+        });
       }
 
       if (resWeights.data) {
@@ -543,72 +619,103 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [session.isAuthenticated]);
 
-  const loadInventory = useCallback(async () => {
+  // TARGETED LOADER 4: INVENTORY
+  const loadInventory = useCallback(async (force = false) => {
     if (!session.isAuthenticated) return;
-    const { data, error } = await supabase
-      .from("inventory")
-      .select("id, name, category, quantity, unit, min_stock, expiry_date, notes");
+    if (hasLoadedInventoryRef.current && !force) return;
+    if (fetchingInventoryRef.current) return;
+    fetchingInventoryRef.current = true;
 
-    if (!error && data) {
-      setInventory(data.map((i: any) => ({
-        id: i.id,
-        name: i.name,
-        category: i.category,
-        quantity: parseFloat(i.quantity),
-        unit: i.unit,
-        minStock: parseFloat(i.min_stock),
-        expiryDate: i.expiry_date,
-        notes: i.notes
-      })));
+    try {
+      const { data, error } = await supabase
+        .from("inventory")
+        .select("id, name, category, quantity, unit, min_stock, expiry_date, notes");
+
+      if (!error && data) {
+        setInventory(data.map((i: any) => ({
+          id: i.id,
+          name: i.name,
+          category: i.category,
+          quantity: parseFloat(i.quantity),
+          unit: i.unit,
+          minStock: parseFloat(i.min_stock),
+          expiryDate: i.expiry_date,
+          notes: i.notes
+        })));
+        hasLoadedInventoryRef.current = true;
+      }
+    } finally {
+      fetchingInventoryRef.current = false;
     }
   }, [session.isAuthenticated]);
 
-  const loadFarmNotes = useCallback(async () => {
+  // TARGETED LOADER 5: FARM NOTES
+  const loadFarmNotes = useCallback(async (force = false) => {
     if (!session.isAuthenticated) return;
-    const { data, error } = await supabase
-      .from("farm_notes")
-      .select("id, farm_id, title, content, created_by, created_at, updated_at")
-      .order("created_at", { ascending: false });
+    if (hasLoadedFarmNotesRef.current && !force) return;
+    if (fetchingFarmNotesRef.current) return;
+    fetchingFarmNotesRef.current = true;
 
-    if (!error && data) {
-      setFarmNotes(data.map((fn: any) => ({
-        id: fn.id,
-        farm_id: fn.farm_id,
-        title: fn.title,
-        content: fn.content,
-        created_by: fn.created_by || "Operator",
-        created_at: fn.created_at || new Date().toISOString(),
-        updated_at: fn.updated_at || new Date().toISOString()
-      })));
+    try {
+      const { data, error } = await supabase
+        .from("farm_notes")
+        .select("id, farm_id, title, content, created_by, created_at, updated_at")
+        .order("created_at", { ascending: false });
+
+      if (!error && data) {
+        setFarmNotes(data.map((fn: any) => ({
+          id: fn.id,
+          farm_id: fn.farm_id,
+          title: fn.title,
+          content: fn.content,
+          created_by: fn.created_by || "Operator",
+          created_at: fn.created_at || new Date().toISOString(),
+          updated_at: fn.updated_at || new Date().toISOString()
+        })));
+        hasLoadedFarmNotesRef.current = true;
+      }
+    } finally {
+      fetchingFarmNotesRef.current = false;
     }
   }, [session.isAuthenticated]);
 
-  const loadContacts = useCallback(async () => {
+  // TARGETED LOADER 6: CONTACTS
+  const loadContacts = useCallback(async (force = false) => {
     if (!session.isAuthenticated) return;
-    const { data, error } = await supabase
-      .from("contacts")
-      .select("id, name, role, phone, whatsapp, email, address, notes");
+    if (hasLoadedContactsRef.current && !force) return;
+    if (fetchingContactsRef.current) return;
+    fetchingContactsRef.current = true;
 
-    if (!error && data) {
-      setContacts(data.map((c: any) => ({
-        id: c.id,
-        name: c.name,
-        role: c.role,
-        phone: c.phone,
-        whatsapp: c.whatsapp,
-        email: c.email,
-        address: c.address,
-        notes: c.notes
-      })));
+    try {
+      const { data, error } = await supabase
+        .from("contacts")
+        .select("id, name, role, phone, whatsapp, email, address, notes");
+
+      if (!error && data) {
+        setContacts(data.map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          role: c.role,
+          phone: c.phone,
+          whatsapp: c.whatsapp,
+          email: c.email,
+          address: c.address,
+          notes: c.notes
+        })));
+        hasLoadedContactsRef.current = true;
+      }
+    } finally {
+      fetchingContactsRef.current = false;
     }
   }, [session.isAuthenticated]);
 
   const reloadFarmData = useCallback(async () => {
     if (session.isAuthenticated) {
-      await loadDashboardData();
+      await loadDashboardData(true);
     }
   }, [loadDashboardData, session.isAuthenticated]);
 
+  // Auth Initialization
   useEffect(() => {
     let isMounted = true;
 
@@ -673,9 +780,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setIsAuthReady(true);
         }
       } else if (event === "SIGNED_OUT") {
-        fetchingDashboardRef.current = false;
-        fetchingAnimalsRef.current = false;
-        fetchingAnimalProfileRef.current = null;
+        clearSessionCache();
         setSession({
           userId: undefined,
           email: "",
@@ -702,13 +807,14 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isMounted = false;
       authListener.subscription.unsubscribe();
     };
-  }, []);
+  }, [clearSessionCache]);
 
+  // Load basic account details once authenticated
   useEffect(() => {
     if (session.isAuthenticated) {
-      loadDashboardData();
+      loadAccount();
     }
-  }, [session.isAuthenticated, loadDashboardData]);
+  }, [session.isAuthenticated, loadAccount]);
 
   const logActivity = async (type: string, description: string, actor: string, targetId?: string) => {
     const newLog = {
@@ -780,6 +886,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (authData?.user) {
+        clearSessionCache();
         setSession({
           userId: authData.user.id,
           email: authData.user.email || "",
@@ -843,6 +950,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
         setFarmProfile(newProfile);
 
+        clearSessionCache();
         setSession({
           userId: authData.user.id,
           email: authData.user.email || "",
@@ -871,9 +979,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.warn("[FarmContext] Local signout warning", e);
     } finally {
       isLoggingOutRef.current = false;
-      fetchingDashboardRef.current = false;
-      fetchingAnimalsRef.current = false;
-      fetchingAnimalProfileRef.current = null;
+      clearSessionCache();
       setAccountId(null);
       setSession({ userId: undefined, email: "", name: "", isAuthenticated: false });
       setAnimals([]);

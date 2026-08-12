@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useFarm, Reminder, FarmNote } from "@/context/FarmContext";
 import { 
@@ -33,8 +33,13 @@ export const Dashboard: React.FC = () => {
     addReminder,
     addFarmNote,
     updateFarmNote,
-    deleteFarmNote
+    deleteFarmNote,
+    loadDashboardData
   } = useFarm();
+
+  useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
 
   // Confirmation state
   const [pendingConfirm, setPendingConfirm] = useState<{
@@ -163,7 +168,7 @@ export const Dashboard: React.FC = () => {
 
     setIsSavingNoteEdit(true);
     try {
-      const success = await updateFarmNote(selectedNote.id, {
+      const success = await updateFarmNote(selectedFarmNote.id, {
         title: noteTitle.trim() || undefined,
         content: noteContent.trim(),
       });
