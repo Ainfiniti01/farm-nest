@@ -55,98 +55,6 @@ export const AnimalProfilePage: React.FC = () => {
 
   const animal = animals.find(a => a.id === id || a.animal_code === id);
 
-  // ALL HOOK DECLARATIONS MUST BE AT THE TOP
-  const [activeTab, setActiveTab] = useState<"overview" | "health" | "breeding" | "photos" | "notes" | "activity">("overview");
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [showAddHealth, setShowAddHealth] = useState(false);
-  const [showAddTreatment, setShowAddTreatment] = useState(false);
-  const [showAddWeight, setShowAddWeight] = useState(false);
-  const [showAddBreeding, setShowAddBreeding] = useState(false);
-  const [showAddOffspring, setShowAddOffspring] = useState(false);
-  
-  // Animal Note modals states
-  const [showAddAnimalNoteModal, setShowAddAnimalNoteModal] = useState(false);
-  const [selectedAnimalNote, setSelectedAnimalNote] = useState<AnimalNote | null>(null);
-  const [isEditingAnimalNote, setIsEditingAnimalNote] = useState(false);
-  const [noteContentText, setNoteContentText] = useState("");
-
-  // Loading states for Animal Notes
-  const [isSubmittingAnimalNote, setIsSubmittingAnimalNote] = useState(false);
-  const [isSavingAnimalNoteEdit, setIsSavingAnimalNoteEdit] = useState(false);
-  const [isDeletingAnimalNote, setIsDeletingAnimalNote] = useState(false);
-
-  // CONFIRMATION POPUP STATES
-  const [pendingConfirm, setPendingConfirm] = useState<{
-    title: string;
-    message: string;
-    onConfirm: () => void;
-  } | null>(null);
-
-  // Full Screen Photo State
-  const [fullscreenPhoto, setFullscreenPhoto] = useState<string | null>(null);
-
-  // Edit Animal form state
-  const [editForm, setEditForm] = useState({
-    name: animal ? animal.name : "",
-    breed: animal ? animal.breed : "",
-    sex: animal ? animal.sex<dyad-write path="src/pages/AnimalProfilePage.tsx" description="Complete AnimalProfilePage with loadAnimalProfile hook and optimized animal profile management">
-"use client";
-
-import React, { useState, useRef, useEffect } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
-import { useFarm, Animal, HealthRecord, Treatment, WeightRecord, BreedingRecord, AnimalNote } from "@/context/FarmContext";
-import { 
-  ArrowLeft, 
-  Trash2, 
-  Download, 
-  Eye,
-  AlertCircle,
-  HelpCircle,
-  X,
-  Edit,
-  Plus,
-  FileText,
-  Loader2
-} from "lucide-react";
-import { showSuccess, showError } from "@/utils/toast";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
-
-export const AnimalProfilePage: React.FC = () => {
-  const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const {
-    animals,
-    healthRecords,
-    treatments,
-    weightRecords,
-    breedingRecords,
-    animalNotes,
-    activityLogs,
-    farmProfile,
-    loadAnimalProfile,
-    updateAnimal,
-    deleteAnimal,
-    addHealthRecord,
-    addTreatment,
-    updateTreatmentStatus,
-    addWeightRecord,
-    addBreedingRecord,
-    addAnimalNote,
-    updateAnimalNote,
-    deleteAnimalNote,
-    addAnimal
-  } = useFarm();
-
-  useEffect(() => {
-    if (id) {
-      loadAnimalProfile(id);
-    }
-  }, [id, loadAnimalProfile]);
-
-  const animal = animals.find(a => a.id === id || a.animal_code === id);
-
   // ALL HOOK DECLARATIONS
   const [activeTab, setActiveTab] = useState<"overview" | "health" | "breeding" | "photos" | "notes" | "activity">("overview");
   const [showEditModal, setShowEditModal] = useState(false);
@@ -230,6 +138,23 @@ export const AnimalProfilePage: React.FC = () => {
     notes: "",
     primaryPhoto: "",
   });
+
+  // Sync edit form when animal loads
+  useEffect(() => {
+    if (animal) {
+      setEditForm({
+        name: animal.name,
+        breed: animal.breed,
+        sex: animal.sex,
+        dob: animal.dob,
+        purchaseDate: animal.purchaseDate || "",
+        source: animal.source,
+        status: animal.status,
+        notes: animal.notes,
+        primaryPhoto: animal.primaryPhoto,
+      });
+    }
+  }, [animal]);
 
   // EARLY RETURN IF ANIMAL NOT FOUND
   if (!animal) {
@@ -363,10 +288,6 @@ export const AnimalProfilePage: React.FC = () => {
     } else {
       showError("Could not initialize printing passport frame.");
     }
-  };
-
-  const MOCK_IMAGES = {
-    goat1: "https://images.unsplash.com/photo-1524413840807-0c3cb6fa808d?w=500&auto=format&fit=crop&q=80",
   };
 
   // Derived arrays
