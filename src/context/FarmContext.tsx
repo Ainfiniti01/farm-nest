@@ -4,6 +4,21 @@ import { supabase } from "@/lib/supabaseClient";
 
 export const DEFAULT_ANIMAL_PHOTO = "/placeholder.svg";
 
+export const getSpeciesCode = (species: string): string => {
+  const s = species.toLowerCase();
+  if (s.includes("goat")) return "G";
+  if (s.includes("ram") || s.includes("sheep")) return "S";
+  if (s.includes("chicken") || s.includes("poultry") || s.includes("hen")) return "C";
+  return s.charAt(0).toUpperCase() || "O";
+};
+
+export const getFarmPrefix = (farmName: string): string => {
+  const clean = farmName.replace(/[^a-zA-Z]/g, "").toUpperCase();
+  if (clean.length >= 2) return clean.slice(0, 2);
+  if (clean.length === 1) return clean + "F";
+  return "AD";
+};
+
 export interface Animal {
   id: string;
   animal_code: string;
@@ -251,7 +266,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [accountId, setAccountId] = useState<string | null>(null);
   
   const [farmProfile, setFarmProfile] = useState<FarmProfile>({
-    name: "My Farm",
+    name: "Adam Farms",
     description: "Agricultural production unit.",
     ownerName: "Operator",
     location: "Kano, Nigeria",
@@ -997,18 +1012,24 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addAnimal = async (animalData: Omit<Animal, "id" | "animal_code" | "created_at">) => {
-    const prefix = animalData.species.toUpperCase();
-    
-    let dbCodesQuery = supabase.from("animals").select("animal_code").ilike("animal_code", `${prefix}-%`);
-    const { data: existingRows } = await dbCodesQuery;
+    // Generate farm-specific identifier: Farm Prefix (2 letters) + Species Code (1 letter) + Sequential 3-digit number
+    const farmPre = getFarmPrefix(farmProfile.name || "Adam Farms");
+    const specCode = getSpeciesCode(animalData.species);
+    const codePrefix = `${farmPre}${specCode}`; // e.g. ADG, ADS, YUG
+
+    // Fetch existing codes starting with codePrefix or legacy prefix from DB to determine sequence
+    const { data: existingRows } = await supabase.from("animals").select("animal_code").ilike("animal_code", `${codePrefix}%`);
     const existingCodeSet = new Set((existingRows || []).map((r: any) => r.animal_code));
 
-    let countNumber = (existingRows?.length || 0) + 1;
-    let generatedCode = `${prefix}-${countNumber.toString().padStart(4, "0")}`;
+    // Also include in-memory animals
+    animals.forEach(a => existingCodeSet.add(a.animal_code));
+
+    let countNumber = existingCodeSet.size + 1;
+    let generatedCode = `${codePrefix}${countNumber.toString().padStart(3, "0")}`;
 
     while (existingCodeSet.has(generatedCode)) {
       countNumber++;
-      generatedCode = `${prefix}-${countNumber.toString().padStart(4, "0")}`;
+      generatedCode = `${codePrefix}${countNumber.toString().padStart(3, "0")}`;
     }
 
     const newId = "a_" + Date.now();
