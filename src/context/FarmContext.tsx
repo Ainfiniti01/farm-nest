@@ -1,3 +1,5 @@
+"use client";
+
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { showSuccess, showError } from "@/utils/toast";
 import { supabase } from "@/lib/supabaseClient";
@@ -997,18 +999,38 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addAnimal = async (animalData: Omit<Animal, "id" | "animal_code" | "created_at">) => {
-    const prefix = animalData.species.toUpperCase();
-    
-    let dbCodesQuery = supabase.from("animals").select("animal_code").ilike("animal_code", `${prefix}-%`);
+    // Generate Farm Prefix (e.g. Adam -> AD, Yuswas -> YU, My Farm -> MF)
+    const getFarmPrefix = (farmName: string): string => {
+      const clean = farmName.replace(/[^a-zA-Z]/g, "").toUpperCase();
+      if (clean.length >= 2) return clean.slice(0, 2);
+      if (clean.length === 1) return (clean + "F").slice(0, 2);
+      return "AD";
+    };
+
+    // Species Code: Goat -> G, Ram/Sheep -> S, Chicken -> C, Other -> O
+    const getSpeciesCode = (species: Animal["species"]): string => {
+      switch (species) {
+        case "Goat": return "G";
+        case "Ram": return "S";
+        case "Chicken": return "C";
+        default: return "O";
+      }
+    };
+
+    const farmPrefix = getFarmPrefix(farmProfile.name || "Adam");
+    const speciesCode = getSpeciesCode(animalData.species);
+    const codePrefix = `${farmPrefix}${speciesCode}`;
+
+    let dbCodesQuery = supabase.from("animals").select("animal_code").ilike("animal_code", `${codePrefix}%`);
     const { data: existingRows } = await dbCodesQuery;
     const existingCodeSet = new Set((existingRows || []).map((r: any) => r.animal_code));
 
-    let countNumber = (existingRows?.length || 0) + 1;
-    let generatedCode = `${prefix}-${countNumber.toString().padStart(4, "0")}`;
+    let countNumber = 1;
+    let generatedCode = `${codePrefix}${countNumber.toString().padStart(3, "0")}`;
 
     while (existingCodeSet.has(generatedCode)) {
       countNumber++;
-      generatedCode = `${prefix}-${countNumber.toString().padStart(4, "0")}`;
+      generatedCode = `${codePrefix}${countNumber.toString().padStart(3, "0")}`;
     }
 
     const newId = "a_" + Date.now();
@@ -1016,7 +1038,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const dbPayload = {
       id: newId,
       animal_code: generatedCode,
-      name: animalData.name,
+      name: animalData.name ? animalData.name.trim() : "",
       species: animalData.species,
       breed: animalData.breed,
       sex: animalData.sex,
@@ -1042,7 +1064,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const createdAnimalObj: Animal = {
       id: newId,
       animal_code: generatedCode,
-      name: animalData.name,
+      name: animalData.name ? animalData.name.trim() : "",
       species: animalData.species,
       breed: animalData.breed,
       sex: animalData.sex,
@@ -1065,7 +1087,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updateAnimal = async (id: string, updates: Partial<Animal>) => {
     const payload: any = {};
-    if (updates.name !== undefined) payload.name = updates.name;
+    if (updates.name !== undefined) payload.name = updates.name.trim();
     if (updates.breed !== undefined) payload.breed = updates.breed;
     if (updates.sex !== undefined) payload.sex = updates.sex;
     if (updates.dob !== undefined) payload.dob = updates.dob;
