@@ -165,7 +165,7 @@ export const Animals: React.FC = () => {
         <Search className="absolute left-3 top-3 text-slate-400" size={16} />
         <input
           type="text"
-          placeholder="Search tags, breeds, names (e.g. ADG001)..."
+          placeholder="Search tags, breeds, names (e.g. GOAT-0024)..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-1 focus:ring-emerald-500 outline-none transition"
@@ -209,64 +209,52 @@ export const Animals: React.FC = () => {
 
       {/* Grid Cards List */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-2">
-        {filteredAnimals.map((animal) => {
-          const hasCustomName = Boolean(animal.name && animal.name.trim() !== "");
-          return (
-            <div
-              key={animal.id}
-              className="bg-white rounded-2xl overflow-hidden border border-slate-100 shadow-sm hover:border-emerald-300 transition flex flex-col group"
-            >
-              <div className="relative h-32 bg-slate-100">
-                <img
-                  src={animal.primaryPhoto}
-                  alt={hasCustomName ? animal.name : animal.animal_code}
-                  onClick={() => setFullscreenPhoto(animal.primaryPhoto)}
-                  className="w-full h-full object-cover group-hover:scale-105 transition duration-300 cursor-zoom-in"
-                />
-                <div className="absolute top-2 right-2">
-                  <span className={`text-[9px] font-black tracking-wide px-2 py-0.5 rounded-full shadow ${
-                    animal.status === "Sold" ? "bg-slate-200 text-slate-700" :
-                    animal.status === "Deceased" ? "bg-red-200 text-red-800" :
-                    animal.healthStatus === "Healthy" ? "bg-emerald-100 text-emerald-800" :
-                    animal.healthStatus === "Under Treatment" ? "bg-purple-100 text-purple-800" : "bg-amber-100 text-amber-800"
-                  }`}>
-                    {animal.status}
-                  </span>
-                </div>
-              </div>
-
-              <div 
-                onClick={() => navigate(`/animals/${animal.id}`)}
-                className="p-3 flex-1 flex flex-col justify-between cursor-pointer"
-              >
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-slate-400">{animal.species}</span>
-                    <span className="text-[10px] text-slate-500">{animal.sex === "Female" ? "♀️" : "♂️"}</span>
-                  </div>
-
-                  {hasCustomName ? (
-                    <>
-                      <h4 className="font-extrabold text-xs text-slate-900 mt-0.5">
-                        {animal.name}
-                      </h4>
-                      <p className="text-[10px] font-mono text-slate-500 mt-0.5">{animal.animal_code}</p>
-                    </>
-                  ) : (
-                    <h4 className="font-black text-xs text-slate-900 mt-0.5 font-mono">
-                      {animal.animal_code}
-                    </h4>
-                  )}
-                </div>
-
-                <div className="pt-2 border-t border-slate-50 flex items-center justify-between mt-2">
-                  <span className="text-[9px] text-slate-400">{animal.breed}</span>
-                  <ChevronRight size={12} className="text-slate-400" />
-                </div>
+        {filteredAnimals.map((animal) => (
+          <div
+            key={animal.id}
+            className="bg-white rounded-2xl overflow-hidden border border-slate-100 shadow-sm hover:border-emerald-300 transition flex flex-col group"
+          >
+            <div className="relative h-32 bg-slate-100">
+              <img
+                src={animal.primaryPhoto}
+                alt={animal.name}
+                onClick={() => setFullscreenPhoto(animal.primaryPhoto)}
+                className="w-full h-full object-cover group-hover:scale-105 transition duration-300 cursor-zoom-in"
+              />
+              <div className="absolute top-2 right-2">
+                <span className={`text-[9px] font-black tracking-wide px-2 py-0.5 rounded-full shadow ${
+                  animal.status === "Sold" ? "bg-slate-200 text-slate-700" :
+                  animal.status === "Deceased" ? "bg-red-200 text-red-800" :
+                  animal.healthStatus === "Healthy" ? "bg-emerald-100 text-emerald-800" :
+                  animal.healthStatus === "Under Treatment" ? "bg-purple-100 text-purple-800" : "bg-amber-100 text-amber-800"
+                }`}>
+                  {animal.status}
+                </span>
               </div>
             </div>
-          );
-        })}
+
+            <div 
+              onClick={() => navigate(`/animals/${animal.id}`)}
+              className="p-3 flex-1 flex flex-col justify-between cursor-pointer"
+            >
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-slate-400">{animal.species}</span>
+                  <span className="text-[10px] text-slate-500">{animal.sex === "Female" ? "♀️" : "♂️"}</span>
+                </div>
+                <h4 className="font-extrabold text-xs text-slate-900 mt-0.5">
+                  {animal.name || "Unnamed"}
+                </h4>
+                <p className="text-[10px] font-mono text-slate-500 mt-0.5">{animal.animal_code}</p>
+              </div>
+
+              <div className="pt-2 border-t border-slate-50 flex items-center justify-between mt-2">
+                <span className="text-[9px] text-slate-400">{animal.breed}</span>
+                <ChevronRight size={12} className="text-slate-400" />
+              </div>
+            </div>
+          </div>
+        ))}
         {filteredAnimals.length === 0 && (
           <div className="col-span-full text-center py-12 text-slate-400 text-xs">
             No matching livestock records found. Click "Register Animal" to begin!
@@ -404,10 +392,10 @@ export const Animals: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="text-[10px] font-bold text-slate-500 block">Animal Custom Name (Optional)</label>
+                <label className="text-[10px] font-bold text-slate-500 block">Animal Name</label>
                 <input
                   type="text"
-                  placeholder="e.g. Aisha (Leave blank for auto ID)"
+                  placeholder="e.g. Aisha"
                   value={newAnimal.name}
                   onChange={(e) => setNewAnimal({ ...newAnimal, name: e.target.value })}
                   className="w-full p-2 bg-slate-50 border rounded-xl text-xs mt-1"
