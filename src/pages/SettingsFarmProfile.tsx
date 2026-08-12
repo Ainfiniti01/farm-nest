@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useFarm } from "@/context/FarmContext";
 import { ArrowLeft, Camera, HelpCircle } from "lucide-react";
@@ -8,7 +8,11 @@ import { showSuccess } from "@/utils/toast";
 
 export const SettingsFarmProfile: React.FC = () => {
   const navigate = useNavigate();
-  const { farmProfile, updateFarmProfile } = useFarm();
+  const { farmProfile, updateFarmProfile, loadAccount } = useFarm();
+
+  useEffect(() => {
+    loadAccount();
+  }, [loadAccount]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -19,6 +23,17 @@ export const SettingsFarmProfile: React.FC = () => {
     description: farmProfile.description || "Agricultural production unit.",
     image: farmProfile.image || ""
   });
+
+  // Sync state if farmProfile updates from account loader
+  useEffect(() => {
+    setFormState({
+      name: farmProfile.name,
+      ownerName: farmProfile.ownerName,
+      location: farmProfile.location,
+      description: farmProfile.description || "Agricultural production unit.",
+      image: farmProfile.image || ""
+    });
+  }, [farmProfile]);
 
   const [pendingConfirm, setPendingConfirm] = useState<{
     title: string;

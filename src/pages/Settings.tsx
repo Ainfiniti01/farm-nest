@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useFarm } from "@/context/FarmContext";
 import { DiagnosticsPanel } from "@/components/DiagnosticsPanel";
@@ -17,7 +17,11 @@ import {
 
 export const Settings: React.FC = () => {
   const navigate = useNavigate();
-  const { logout, resetDatabase } = useFarm();
+  const { logout, resetDatabase, loadAccount } = useFarm();
+
+  useEffect(() => {
+    loadAccount();
+  }, [loadAccount]);
 
   const [pendingConfirm, setPendingConfirm] = useState<{
     title: string;

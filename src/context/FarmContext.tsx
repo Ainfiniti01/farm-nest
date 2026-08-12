@@ -174,6 +174,7 @@ interface FarmContextType {
     imageUsed: number;
     imageLimit: number;
   };
+  loadAccount: (force?: boolean) => Promise<void>;
   loadDashboardData: (force?: boolean) => Promise<void>;
   loadAnimals: (force?: boolean) => Promise<void>;
   loadAnimalProfile: (animalId: string, force?: boolean) => Promise<void>;
@@ -296,7 +297,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     fetchingAnimalProfileRef.current = null;
   }, []);
 
-  // LIGHTWEIGHT ACCOUNT LOADER
+  // LIGHTWEIGHT ACCOUNT LOADER (prioritized for /settings & header profile)
   const loadAccount = useCallback(async (force = false) => {
     if (!session.isAuthenticated) return;
     if (hasLoadedAccountRef.current && !force) return;
@@ -327,7 +328,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [session.isAuthenticated]);
 
-  // TARGETED LOADER 1: DASHBOARD DATA
+  // TARGETED LOADER 1: DASHBOARD DATA (prioritized for / and /dashboard)
   const loadDashboardData = useCallback(async (force = false) => {
     if (!session.isAuthenticated) return;
     if (hasLoadedDashboardRef.current && !force) return;
@@ -460,7 +461,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [session.isAuthenticated]);
 
-  // TARGETED LOADER 2: ANIMALS DIRECTORY
+  // TARGETED LOADER 2: ANIMALS DIRECTORY (prioritized for /animals)
   const loadAnimals = useCallback(async (force = false) => {
     if (!session.isAuthenticated) return;
     if (hasLoadedAnimalsRef.current && !force) return;
@@ -499,7 +500,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [session.isAuthenticated]);
 
-  // TARGETED LOADER 3: SINGLE ANIMAL PROFILE
+  // TARGETED LOADER 3: SINGLE ANIMAL PROFILE (prioritized for /animals/:id)
   const loadAnimalProfile = useCallback(async (animalId: string, force = false) => {
     if (!animalId || !session.isAuthenticated) return;
     if (fetchingAnimalProfileRef.current === animalId && !force) return;
@@ -621,7 +622,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [session.isAuthenticated]);
 
-  // TARGETED LOADER 4: INVENTORY
+  // TARGETED LOADER 4: INVENTORY (prioritized for /inventory)
   const loadInventory = useCallback(async (force = false) => {
     if (!session.isAuthenticated) return;
     if (hasLoadedInventoryRef.current && !force) return;
@@ -651,7 +652,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [session.isAuthenticated]);
 
-  // TARGETED LOADER 5: FARM NOTES
+  // TARGETED LOADER 5: FARM NOTES (prioritized for /notes)
   const loadFarmNotes = useCallback(async (force = false) => {
     if (!session.isAuthenticated) return;
     if (hasLoadedFarmNotesRef.current && !force) return;
@@ -681,7 +682,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [session.isAuthenticated]);
 
-  // TARGETED LOADER 6: CONTACTS
+  // TARGETED LOADER 6: CONTACTS (prioritized for /settings/contacts)
   const loadContacts = useCallback(async (force = false) => {
     if (!session.isAuthenticated) return;
     if (hasLoadedContactsRef.current && !force) return;
@@ -1618,6 +1619,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isLoadingData,
         isAuthReady,
         aiUsage,
+        loadAccount,
         loadDashboardData,
         loadAnimals,
         loadAnimalProfile,
