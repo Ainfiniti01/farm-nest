@@ -14,6 +14,52 @@ export const normalizeFarmName = (name: string): string => {
   return `${trimmed} Farm`;
 };
 
+export interface AnimalOwnership {
+  type: "Farm Owned" | "Client Owned";
+  ownerName?: string;
+  custodian?: string;
+  agreement?: string;
+}
+
+export const parseAnimalNotesAndOwnership = (rawNotes: string | null | undefined): { notes: string; ownership: AnimalOwnership } => {
+  if (!rawNotes) {
+    return { notes: "", ownership: { type: "Farm Owned" } };
+  }
+  const match = rawNotes.match(/\[OWNERSHIP:(.*?)\]/);
+  if (match && match[1]) {
+    try {
+      const parsed = JSON.parse(match[1]);
+      const cleanNotes = rawNotes.replace(/\[OWNERSHIP:.*?\]/, "").trim();
+      return {
+        notes: cleanNotes,
+        ownership: {
+          type: parsed.type === "Client Owned" ? "Client Owned" : "Farm Owned",
+          ownerName: parsed.ownerName || "",
+          custodian: parsed.custodian || "",
+          agreement: parsed.agreement || "",
+        }
+      };
+    } catch (e) {
+      // fallback
+    }
+  }
+  return { notes: rawNotes, ownership: { type: "Farm Owned" } };
+};
+
+export const encodeAnimalNotesAndOwnership = (cleanNotes: string, ownership?: AnimalOwnership): string => {
+  if (!ownership || ownership.type === "Farm Owned") {
+    return cleanNotes.trim();
+  }
+  const payload = JSON.stringify({
+    type: ownership.type,
+    ownerName: ownership.ownerName || "",
+    custodian: ownership.custodian || "",
+    agreement: ownership.agreement || "",
+  });
+  const prefix = `[OWNERSHIP:${payload}]`;
+  return cleanNotes.trim() ? `${prefix} ${cleanNotes.trim()}` : prefix;
+};
+
 export interface Animal {
   id: string;
   animal_code: string;
@@ -31,6 +77,7 @@ export interface Animal {
   parents?: { motherId?: string; fatherId?: string };
   offspring?: string[];
   notes: string;
+  ownership?: AnimalOwnership;
   created_at: string;
 }
 
@@ -200,6 +247,7 @@ interface FarmContextType {
   addBreedingRecord: (record: Omit<BreedingRecord, "id">) => Promise<void>;
   addInventoryItem: (item: Omit<InventoryItem, "id">) => Promise<void>;
   updateInventoryStock: (itemId: string, qtyChange: number, type: "add" | "remove" | "adjust", notes: string, recordedBy: string) => Promise<void>;
+  deleteInventoryItem: (id: string) => Promise<void>;
   addContact: (contact: Omit<Contact, "id">) => Promise<void>;
   updateContact: (id: string, updates: Partial<Contact>) => Promise<void>;
   deleteContact: (id: string) => Promise<void>;
@@ -309,7 +357,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     fetchingAnimalProfileRef.current = null;
   }, []);
 
-  // LIGHTWEIGHT ACCOUNT LOADER (prioritized for /settings & header profile)
   const loadAccount = useCallback(async (force = false) => {
     if (!session.isAuthenticated) return;
     if (hasLoadedAccountRef.current && !force) return;
@@ -341,7 +388,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [session.isAuthenticated, session.email]);
 
-  // TARGETED LOADER 1: DASHBOARD DATA (prioritized for / and /dashboard)
   const loadDashboardData = useCallback(async (force = false) => {
     if (!session.isAuthenticated) return;
     if (hasLoadedDashboardRef.current && !force) return;
@@ -359,7 +405,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         resLogs
       ] = await Promise.all([
         supabase.from("accounts").select("id, farm_name, operator_name, email, location").limit(1).maybeSingle(),
-        supabase.from("animals").select("id, animal_code, name, species, sex, status, health_status"),
+        supabase.from("animals").select("id, animal_code, name, species, sex, status, health_status, notes"),
         supabase.from("treatments").select("id, animal_id, condition, medication, start_date, end_date, status, follow_up_date").eq("status", "Ongoing"),
         supabase.from("inventory").select("id, name, category, quantity, unit, min_stock"),
         supabase.from("reminders").select("id, title, type, due_date, animal_id, completed, notes").eq("completed", false),
@@ -382,22 +428,26 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (resAnimals.data) {
         setAnimals(prev => {
           if (prev.length > 0) return prev;
-          return resAnimals.data.map((a: any) => ({
-            id: a.id,
-            animal_code: a.animal_code,
-            name: a.name || "",
-            species: a.species,
-            breed: "",
-            sex: a.sex,
-            dob: "",
-            source: "Born on farm",
-            status: a.status,
-            healthStatus: a.health_status,
-            primaryPhoto: DEFAULT_ANIMAL_PHOTO,
-            photos: [DEFAULT_ANIMAL_PHOTO],
-            notes: "",
-            created_at: new Date().toISOString()
-          }));
+          return resAnimals.data.map((a: any) => {
+            const parsed = parseAnimalNotesAndOwnership(a.notes);
+            return {
+              id: a.id,
+              animal_code: a.animal_code,
+              name: a.name || "",
+              species: a.species,
+              breed: "",
+              sex: a.sex,
+              dob: "",
+              source: "Born on farm",
+              status: a.status,
+              healthStatus: a.health_status,
+              primaryPhoto: DEFAULT_ANIMAL_PHOTO,
+              photos: [DEFAULT_ANIMAL_PHOTO],
+              notes: parsed.notes,
+              ownership: parsed.ownership,
+              created_at: new Date().toISOString()
+            };
+          });
         });
       }
 
@@ -475,8 +525,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [session.isAuthenticated, session.email]);
 
-  // TARGETED LOADER 2: ANIMALS DIRECTORY
-  // Uses fallback query strategy to prevent 500 errors if legacy base64 photos array is oversized
   const loadAnimals = useCallback(async (force = false) => {
     if (!session.isAuthenticated) return;
     if (hasLoadedAnimalsRef.current && !force) return;
@@ -484,15 +532,12 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     fetchingAnimalsRef.current = true;
 
     try {
-      // Step 1: Attempt full selection with photos array
       let { data, error } = await supabase
         .from("animals")
         .select("id, animal_code, name, species, breed, sex, dob, purchase_date, source, status, health_status, primary_photo, photos, mother_id, father_id, notes, created_at")
         .order("created_at", { ascending: false });
 
-      // Step 2: Fallback if query returns 500/error due to heavy photos array
       if (error) {
-        console.warn("[FarmContext] Full animals query failed, attempting lightweight fallback query...", error.message);
         const fallbackRes = await supabase
           .from("animals")
           .select("id, animal_code, name, species, breed, sex, dob, purchase_date, source, status, health_status, primary_photo, mother_id, father_id, notes, created_at")
@@ -502,37 +547,29 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         error = fallbackRes.error as any;
       }
 
-      // Step 3: Emergency fallback if primary_photo is also problematic
-      if (error) {
-        console.warn("[FarmContext] Primary photo query failed, running emergency minimal query...", error.message);
-        const emergencyRes = await supabase
-          .from("animals")
-          .select("id, animal_code, name, species, breed, sex, dob, purchase_date, source, status, health_status, mother_id, father_id, notes, created_at")
-          .order("created_at", { ascending: false });
-
-        data = emergencyRes.data as any;
-        error = emergencyRes.error as any;
-      }
-
       if (!error && data) {
-        setAnimals(data.map((a: any) => ({
-          id: a.id,
-          animal_code: a.animal_code,
-          name: a.name || "",
-          species: a.species,
-          breed: a.breed || "Local Breed",
-          sex: a.sex,
-          dob: a.dob || "",
-          purchaseDate: a.purchase_date,
-          source: a.source || "Born on farm",
-          status: a.status || "Healthy",
-          healthStatus: a.health_status || "Healthy",
-          primaryPhoto: a.primary_photo || DEFAULT_ANIMAL_PHOTO,
-          photos: (a.photos && Array.isArray(a.photos) && a.photos.length > 0) ? a.photos : [a.primary_photo || DEFAULT_ANIMAL_PHOTO],
-          notes: a.notes || "",
-          parents: { motherId: a.mother_id, fatherId: a.father_id },
-          created_at: a.created_at || new Date().toISOString()
-        })));
+        setAnimals(data.map((a: any) => {
+          const parsed = parseAnimalNotesAndOwnership(a.notes);
+          return {
+            id: a.id,
+            animal_code: a.animal_code,
+            name: a.name || "",
+            species: a.species,
+            breed: a.breed || "Local Breed",
+            sex: a.sex,
+            dob: a.dob || "",
+            purchaseDate: a.purchase_date,
+            source: a.source || "Born on farm",
+            status: a.status || "Healthy",
+            healthStatus: a.health_status || "Healthy",
+            primaryPhoto: a.primary_photo || DEFAULT_ANIMAL_PHOTO,
+            photos: (a.photos && Array.isArray(a.photos) && a.photos.length > 0) ? a.photos : [a.primary_photo || DEFAULT_ANIMAL_PHOTO],
+            notes: parsed.notes,
+            ownership: parsed.ownership,
+            parents: { motherId: a.mother_id, fatherId: a.father_id },
+            created_at: a.created_at || new Date().toISOString()
+          };
+        }));
         hasLoadedAnimalsRef.current = true;
       }
     } catch (err) {
@@ -542,7 +579,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [session.isAuthenticated]);
 
-  // TARGETED LOADER 3: SINGLE ANIMAL PROFILE
   const loadAnimalProfile = useCallback(async (animalId: string, force = false) => {
     if (!animalId || !session.isAuthenticated) return;
     if (fetchingAnimalProfileRef.current === animalId && !force) return;
@@ -561,6 +597,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (resAnimal.data) {
         const a = resAnimal.data;
+        const parsed = parseAnimalNotesAndOwnership(a.notes);
         const loadedAnimal: Animal = {
           id: a.id,
           animal_code: a.animal_code,
@@ -575,7 +612,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
           healthStatus: a.health_status,
           primaryPhoto: a.primary_photo || DEFAULT_ANIMAL_PHOTO,
           photos: (a.photos && a.photos.length > 0) ? a.photos : [DEFAULT_ANIMAL_PHOTO],
-          notes: a.notes || "",
+          notes: parsed.notes,
+          ownership: parsed.ownership,
           parents: { motherId: a.mother_id, fatherId: a.father_id },
           created_at: a.created_at
         };
@@ -664,7 +702,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [session.isAuthenticated]);
 
-  // TARGETED LOADER 4: INVENTORY
   const loadInventory = useCallback(async (force = false) => {
     if (!session.isAuthenticated) return;
     if (hasLoadedInventoryRef.current && !force) return;
@@ -694,7 +731,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [session.isAuthenticated]);
 
-  // TARGETED LOADER 5: FARM NOTES
   const loadFarmNotes = useCallback(async (force = false) => {
     if (!session.isAuthenticated) return;
     if (hasLoadedFarmNotesRef.current && !force) return;
@@ -724,7 +760,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [session.isAuthenticated]);
 
-  // TARGETED LOADER 6: CONTACTS
   const loadContacts = useCallback(async (force = false) => {
     if (!session.isAuthenticated) return;
     if (hasLoadedContactsRef.current && !force) return;
@@ -760,7 +795,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [loadDashboardData, session.isAuthenticated]);
 
-  // Auth Initialization
   useEffect(() => {
     let isMounted = true;
 
@@ -862,7 +896,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [clearSessionCache]);
 
-  // Load basic account details once authenticated
   useEffect(() => {
     if (session.isAuthenticated) {
       loadAccount();
@@ -915,7 +948,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!cleanInput.includes("@")) {
         const normalizedInput = normalizeFarmName(cleanInput);
         
-        // Case-insensitive query against public.accounts table for farm_name or raw identifier
         const { data: accountRow } = await supabase
           .from("accounts")
           .select("email, farm_name")
@@ -1242,6 +1274,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const newId = "a_" + Date.now();
 
+    const fullNotes = encodeAnimalNotesAndOwnership(animalData.notes || "", animalData.ownership);
+
     const dbPayload = {
       id: newId,
       animal_code: generatedCode,
@@ -1256,7 +1290,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       health_status: animalData.healthStatus,
       primary_photo: animalData.primaryPhoto || DEFAULT_ANIMAL_PHOTO,
       photos: (animalData.photos && animalData.photos.length > 0) ? animalData.photos : [DEFAULT_ANIMAL_PHOTO],
-      notes: animalData.notes,
+      notes: fullNotes,
       mother_id: animalData.parents?.motherId,
       father_id: animalData.parents?.fatherId,
       user_id: session.userId || null
@@ -1283,6 +1317,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       primaryPhoto: animalData.primaryPhoto || DEFAULT_ANIMAL_PHOTO,
       photos: (animalData.photos && animalData.photos.length > 0) ? animalData.photos : [DEFAULT_ANIMAL_PHOTO],
       notes: animalData.notes,
+      ownership: animalData.ownership || { type: "Farm Owned" },
       parents: animalData.parents,
       created_at: new Date().toISOString()
     };
@@ -1293,7 +1328,15 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateAnimal = async (id: string, updates: Partial<Animal>) => {
-    const payload: any = {};
+    const existing = animals.find(a => a.id === id);
+    const targetCleanNotes = updates.notes !== undefined ? updates.notes : (existing?.notes || "");
+    const targetOwnership = updates.ownership !== undefined ? updates.ownership : existing?.ownership;
+    const fullNotes = encodeAnimalNotesAndOwnership(targetCleanNotes, targetOwnership);
+
+    const payload: any = {
+      notes: fullNotes
+    };
+
     if (updates.name !== undefined) payload.name = updates.name.trim();
     if (updates.breed !== undefined) payload.breed = updates.breed;
     if (updates.sex !== undefined) payload.sex = updates.sex;
@@ -1304,7 +1347,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (updates.healthStatus !== undefined) payload.health_status = updates.healthStatus;
     if (updates.primaryPhoto !== undefined) payload.primary_photo = updates.primaryPhoto;
     if (updates.photos !== undefined) payload.photos = updates.photos;
-    if (updates.notes !== undefined) payload.notes = updates.notes;
     if (updates.parents?.motherId !== undefined) payload.mother_id = updates.parents.motherId;
     if (updates.parents?.fatherId !== undefined) payload.father_id = updates.parents.fatherId;
 
@@ -1314,7 +1356,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
-    setAnimals(prev => prev.map(a => a.id === id ? { ...a, ...updates } : a));
+    setAnimals(prev => prev.map(a => a.id === id ? { ...a, ...updates, notes: targetCleanNotes, ownership: targetOwnership } : a));
     await logActivity("Animal Updated", `Updated details for livestock record`, farmProfile.ownerName, id);
     showSuccess("Animal updated");
   };
@@ -1506,6 +1548,19 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setInventory(prev => prev.map(i => i.id === itemId ? { ...i, quantity: newQty } : i));
     await logActivity("Stock Adjusted", `Adjusted stock for ${target.name}: now ${newQty} ${target.unit}`, recordedBy || farmProfile.ownerName);
     showSuccess("Stock quantity updated");
+  };
+
+  const deleteInventoryItem = async (id: string) => {
+    const target = inventory.find(i => i.id === id);
+    const { error } = await supabase.from("inventory").delete().eq("id", id);
+    if (error) {
+      showError("Failed to delete inventory item: " + error.message);
+      return;
+    }
+
+    setInventory(prev => prev.filter(i => i.id !== id));
+    await logActivity("Inventory Item Deleted", `Deleted supply item: ${target?.name || ''}`, farmProfile.ownerName);
+    showSuccess("Inventory item deleted");
   };
 
   const addContact = async (contact: Omit<Contact, "id">) => {
@@ -1801,6 +1856,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         addBreedingRecord,
         addInventoryItem,
         updateInventoryStock,
+        deleteInventoryItem,
         addContact,
         updateContact,
         deleteContact,
