@@ -62,7 +62,6 @@ export const AnimalProfilePage: React.FC = () => {
 
   const animal = animals.find(a => a.id === id || a.animal_code === id);
 
-  // ALL HOOK DECLARATIONS
   const [activeTab, setActiveTab] = useState<"overview" | "health" | "breeding" | "photos" | "notes" | "activity">("overview");
   const [showEditModal, setShowEditModal] = useState(false);
   const [showOwnershipModal, setShowOwnershipModal] = useState(false);
@@ -72,28 +71,23 @@ export const AnimalProfilePage: React.FC = () => {
   const [showAddBreeding, setShowAddBreeding] = useState(false);
   const [showAddOffspring, setShowAddOffspring] = useState(false);
   
-  // Animal Note modals states
   const [showAddAnimalNoteModal, setShowAddAnimalNoteModal] = useState(false);
   const [selectedAnimalNote, setSelectedAnimalNote] = useState<AnimalNote | null>(null);
   const [isEditingAnimalNote, setIsEditingAnimalNote] = useState(false);
   const [noteContentText, setNoteContentText] = useState("");
 
-  // Loading states for Animal Notes
   const [isSubmittingAnimalNote, setIsSubmittingAnimalNote] = useState(false);
   const [isSavingAnimalNoteEdit, setIsSavingAnimalNoteEdit] = useState(false);
   const [isDeletingAnimalNote, setIsDeletingAnimalNote] = useState(false);
 
-  // CONFIRMATION POPUP STATES
   const [pendingConfirm, setPendingConfirm] = useState<{
     title: string;
     message: string;
     onConfirm: () => void;
   } | null>(null);
 
-  // Full Screen Photo State
   const [fullscreenPhoto, setFullscreenPhoto] = useState<string | null>(null);
 
-  // Edit Animal form state
   const [editForm, setEditForm] = useState({
     name: animal ? animal.name : "",
     breed: animal ? animal.breed : "",
@@ -106,7 +100,6 @@ export const AnimalProfilePage: React.FC = () => {
     primaryPhoto: animal ? animal.primaryPhoto : "",
   });
 
-  // Edit Ownership form state
   const [ownershipForm, setOwnershipForm] = useState({
     type: (animal?.ownershipType || "Farm Owned") as "Farm Owned" | "Client Owned",
     ownerName: animal?.ownerName || "",
@@ -114,7 +107,6 @@ export const AnimalProfilePage: React.FC = () => {
     agreement: animal?.agreement || ""
   });
 
-  // Action modals states
   const [newHealth, setNewHealth] = useState({
     type: "Observation" as HealthRecord["type"],
     details: "",
@@ -155,7 +147,6 @@ export const AnimalProfilePage: React.FC = () => {
     primaryPhoto: "",
   });
 
-  // Sync edit forms when animal loads
   useEffect(() => {
     if (animal) {
       setEditForm({
@@ -185,7 +176,6 @@ export const AnimalProfilePage: React.FC = () => {
     }
   }, [animal]);
 
-  // EARLY RETURN IF ANIMAL NOT FOUND
   if (!animal) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center p-6 text-center">
@@ -207,7 +197,6 @@ export const AnimalProfilePage: React.FC = () => {
   const hasCustomName = Boolean(animal.name && animal.name.trim().length > 0);
   const displayName = hasCustomName ? animal.name : animal.animal_code;
 
-  // Photo handlers
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -279,7 +268,6 @@ export const AnimalProfilePage: React.FC = () => {
     });
   };
 
-  // PDF passport helper
   const handlePdfSingleReport = () => {
     const html = `
       <html>
@@ -347,7 +335,6 @@ export const AnimalProfilePage: React.FC = () => {
     }
   };
 
-  // Derived arrays
   const animalHealth = healthRecords.filter(h => h.animal_id === animal.id);
   const animalTreatments = treatments.filter(t => t.animal_id === animal.id);
   const animalWeights = weightRecords.filter(w => w.animal_id === animal.id);
@@ -366,7 +353,6 @@ export const AnimalProfilePage: React.FC = () => {
     }))
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-  // Animal Note Handlers
   const handleOpenAddNoteModal = () => {
     setNoteContentText("");
     setShowAddAnimalNoteModal(true);
@@ -437,7 +423,6 @@ export const AnimalProfilePage: React.FC = () => {
     });
   };
 
-  // Submit methods under safe confirmations
   const triggerEditConfirm = (e: React.FormEvent) => {
     e.preventDefault();
     setPendingConfirm({
@@ -1292,758 +1277,7 @@ export const AnimalProfilePage: React.FC = () => {
                   {animalLogs.map(l => (
                     <div key={l.id} className="flex gap-3 text-xs relative pl-6">
                       <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[10px] absolute left-0 top-0.5 border">
-                        ⚙️
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-slate-800">{l.type}</span>
-                          <span className="text-[9px] text-slate-400">{new Date(l.date).toLocaleString()}</span>
-                        </div>
-                        <p className="text-slate-600 mt-0.5">{l.description}</p>
-                      </div>
-                    </div>
-                  ))}
-                  {animalLogs.length === 0 && (
-                    <div className="text-center py-12 bg-white rounded-3xl border border-dashed text-slate-400 text-xs">
-                      No system events generated. Normal audit streams recorded at startup.
-                    </div>
-                  )}
-                </div>
-
-              </div>
-            )}
-
-          </div>
-
-        </div>
-
-      </div>
-
-      {/* EDIT OWNERSHIP MODAL */}
-      {showOwnershipModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4 animate-in fade-in">
-          <form 
-            onSubmit={triggerOwnershipConfirm}
-            className="bg-white w-full max-w-md rounded-2xl p-6 space-y-4 shadow-2xl"
-          >
-            <div className="flex items-center justify-between border-b pb-2">
-              <h3 className="font-extrabold text-sm text-slate-900">Edit Livestock Ownership</h3>
-              <button 
-                type="button" 
-                onClick={() => setShowOwnershipModal(false)}
-                className="text-slate-400 hover:text-slate-600 p-1"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            <div>
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
-                Ownership Type
-              </label>
-              <select
-                value={ownershipForm.type}
-                onChange={(e) => handleOwnershipTypeChange(e.target.value as any)}
-                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-semibold focus:ring-1 focus:ring-emerald-500 outline-none"
-              >
-                <option value="Farm Owned">Farm Owned</option>
-                <option value="Client Owned">Client Owned</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
-                Owner Name
-              </label>
-              <input
-                type="text"
-                placeholder="Client or Partner Name"
-                value={ownershipForm.ownerName}
-                onChange={(e) => setOwnershipForm({ ...ownershipForm, ownerName: e.target.value })}
-                disabled={ownershipForm.type === "Farm Owned"}
-                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-40 disabled:bg-slate-100"
-                required={ownershipForm.type === "Client Owned"}
-              />
-            </div>
-
-            <div>
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
-                Current Custodian
-              </label>
-              <input
-                type="text"
-                placeholder="Who currently looks after the animal"
-                value={ownershipForm.custodian}
-                onChange={(e) => setOwnershipForm({ ...ownershipForm, custodian: e.target.value })}
-                disabled={ownershipForm.type === "Farm Owned"}
-                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-40 disabled:bg-slate-100"
-              />
-            </div>
-
-            <div>
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
-                Agreement Details (Optional)
-              </label>
-              <textarea
-                placeholder="e.g. 50% breeding profit share, Boarding fee paid monthly..."
-                value={ownershipForm.agreement}
-                onChange={(e) => setOwnershipForm({ ...ownershipForm, agreement: e.target.value })}
-                disabled={ownershipForm.type === "Farm Owned"}
-                rows={3}
-                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-40 disabled:bg-slate-100"
-              />
-            </div>
-
-            <div className="flex gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowOwnershipModal(false)}
-                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow transition"
-              >
-                Save Ownership
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* CREATE ANIMAL NOTE MODAL */}
-      {showAddAnimalNoteModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4 animate-in fade-in">
-          <form 
-            onSubmit={handleCreateAnimalNoteSubmit}
-            className="bg-white w-full max-w-md rounded-2xl p-6 space-y-4 shadow-2xl"
-          >
-            <div className="flex items-center justify-between border-b pb-2">
-              <h3 className="font-extrabold text-sm text-slate-900">Add Animal Note</h3>
-              <button 
-                type="button" 
-                onClick={() => !isSubmittingAnimalNote && setShowAddAnimalNoteModal(false)} 
-                disabled={isSubmittingAnimalNote}
-                className="text-slate-400 hover:text-slate-600 p-1 disabled:opacity-50"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            <p className="text-[11px] text-slate-500">
-              Note for: <strong className="text-emerald-800">{hasCustomName ? `${animal.name} (${animal.animal_code})` : animal.animal_code}</strong>
-            </p>
-
-            <div>
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
-                Note <span className="text-red-500">*</span>
-              </label>
-              <textarea
-                placeholder="e.g. Small white patch on forehead, less active today, eating normally..."
-                value={noteContentText}
-                onChange={(e) => setNoteContentText(e.target.value)}
-                disabled={isSubmittingAnimalNote}
-                rows={4}
-                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-60"
-                required
-              />
-            </div>
-
-            <div className="flex gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowAddAnimalNoteModal(false)}
-                disabled={isSubmittingAnimalNote}
-                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isSubmittingAnimalNote}
-                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow transition disabled:opacity-60 flex items-center justify-center gap-1.5"
-              >
-                {isSubmittingAnimalNote ? (
-                  <>
-                    <Loader2 size={14} className="animate-spin" />
-                    <span>Saving...</span>
-                  </>
-                ) : (
-                  "Save Note"
-                )}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* VIEW/EDIT ANIMAL NOTE MODAL */}
-      {selectedAnimalNote && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-white w-full max-w-md rounded-2xl p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b pb-2">
-              <h3 className="font-extrabold text-sm text-slate-900">
-                {isEditingAnimalNote ? "Edit Animal Note" : "Animal Note"}
-              </h3>
-              <button 
-                type="button" 
-                onClick={() => !isSavingAnimalNoteEdit && setSelectedAnimalNote(null)} 
-                disabled={isSavingAnimalNoteEdit}
-                className="text-slate-400 hover:text-slate-600 p-1 disabled:opacity-50"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            {!isEditingAnimalNote ? (
-              <div className="space-y-4">
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                  <p className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">
-                    {selectedAnimalNote.content}
-                  </p>
-                </div>
-
-                <div className="text-[11px] text-slate-500 space-y-0.5 border-t pt-3">
-                  <p>Added by <strong className="text-slate-700">{selectedAnimalNote.created_by || "Operator"}</strong></p>
-                  <p>{new Date(selectedAnimalNote.created_at).toLocaleDateString("en-US", {
-                    month: "long",
-                    day: "numeric",
-                    year: "numeric"
-                  })} at {new Date(selectedAnimalNote.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                </div>
-
-                <div className="flex gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsEditingAnimalNote(true)}
-                    className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5"
-                  >
-                    <Edit size={14} /> Edit
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteAnimalNoteTrigger(selectedAnimalNote.id)}
-                    className="flex-1 py-2 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5"
-                  >
-                    <Trash2 size={14} /> Delete
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <form onSubmit={handleUpdateAnimalNoteSubmit} className="space-y-4">
-                <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Note Content</label>
-                  <textarea
-                    value={noteContentText}
-                    onChange={(e) => setNoteContentText(e.target.value)}
-                    disabled={isSavingAnimalNoteEdit}
-                    rows={4}
-                    className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-60"
-                    required
-                  />
-                </div>
-
-                <div className="flex gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsEditingAnimalNote(false)}
-                    disabled={isSavingAnimalNoteEdit}
-                    className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isSavingAnimalNoteEdit}
-                    className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow transition disabled:opacity-60 flex items-center justify-center gap-1.5"
-                  >
-                    {isSavingAnimalNoteEdit ? (
-                      <>
-                        <Loader2 size={14} className="animate-spin" />
-                        <span>Saving...</span>
-                      </>
-                    ) : (
-                      "Save Changes"
-                    )}
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* GLOBAL FULLSCREEN PHOTO VIEWER MODAL WITH DOWNLOAD */}
-      {fullscreenPhoto && (
-        <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-md flex flex-col items-center justify-center p-4">
-          <button
-            onClick={() => setFullscreenPhoto(null)}
-            className="absolute top-6 right-6 w-12 h-12 bg-white/10 hover:bg-white/20 text-white rounded-full flex items-center justify-center text-xl transition"
-          >
-            ✕
-          </button>
-
-          <div className="max-w-3xl max-h-[80vh] overflow-hidden rounded-2xl border border-white/10 shadow-2xl relative">
-            <img src={fullscreenPhoto} className="w-full h-full object-contain" alt="Enlarged" />
-          </div>
-
-          <div className="mt-6 flex gap-4">
-            <button
-              onClick={handleDownloadFullscreen}
-              className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-lg transition flex items-center gap-2"
-            >
-              <Download size={16} /> Download Photo
-            </button>
-            <button
-              onClick={() => setFullscreenPhoto(null)}
-              className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white font-bold text-xs rounded-xl transition border border-white/10"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* UNIVERSAL CONFIRMATION DIALOG MODAL */}
-      {pendingConfirm && (
-        <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-white max-w-sm w-full rounded-3xl p-6 space-y-4 border border-slate-100 shadow-2xl">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-amber-50 rounded-xl text-amber-600">
-                <HelpCircle size={22} />
-              </div>
-              <h3 className="font-black text-sm text-slate-900">{pendingConfirm.title}</h3>
-            </div>
-            <p className="text-xs text-slate-500 leading-relaxed">{pendingConfirm.message}</p>
-            <div className="pt-2 flex gap-2">
-              <button
-                onClick={() => !isDeletingAnimalNote && setPendingConfirm(null)}
-                disabled={isDeletingAnimalNote}
-                className="flex-1 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold transition border disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={pendingConfirm.onConfirm}
-                disabled={isDeletingAnimalNote}
-                className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold transition shadow disabled:opacity-60 flex items-center justify-center gap-1.5"
-              >
-                {isDeletingAnimalNote ? (
-                  <>
-                    <Loader2 size={14} className="animate-spin" />
-                    <span>Deleting...</span>
-                  </>
-                ) : (
-                  "Confirm Act"
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* EDIT MODAL DIALOG */}
-      {showEditModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
-          <form 
-            onSubmit={triggerEditConfirm}
-            className="bg-white w-full max-w-md rounded-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto"
-          >
-            <div className="flex items-center justify-between border-b pb-2">
-              <h3 className="font-extrabold text-sm text-slate-900">Update Animal Record</h3>
-              <button type="button" onClick={() => setShowEditModal(false)} className="text-slate-400 hover:text-slate-600">✕</button>
-            </div>
-
-            <div>
-              <label className="text-[10px] font-bold text-slate-500 block">Animal Custom Name</label>
-              <input
-                type="text"
-                placeholder="e.g. Aisha"
-                value={editForm.name}
-                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 block">Breed</label>
-                <input
-                  type="text"
-                  value={editForm.breed}
-                  onChange={(e) => setEditForm({ ...editForm, breed: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 block">Sex</label>
-                <select
-                  value={editForm.sex}
-                  onChange={(e) => setEditForm({ ...editForm, sex: e.target.value as any })}
-                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
-                >
-                  <option value="Male">Male</option>
-                  <option value="Female">Female</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 block">Date of Birth</label>
-                <input
-                  type="date"
-                  value={editForm.dob}
-                  onChange={(e) => setEditForm({ ...editForm, dob: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
-                />
-              </div>
-
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 block">Source Origin</label>
-                <select
-                  value={editForm.source}
-                  onChange={(e) => setEditForm({ ...editForm, source: e.target.value as any })}
-                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
-                >
-                  <option value="Born on farm">Born on farm</option>
-                  <option value="Purchased">Purchased</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label className="text-[10px] font-bold text-slate-500 block">Vital Status</label>
-              <select
-                value={editForm.status}
-                onChange={(e) => setEditForm({ ...editForm, status: e.target.value as any })}
-                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
-              >
-                {["Healthy", "Monitoring", "Sick", "Under Treatment", "Pregnant", "Sold", "Deceased", "Retired"].map((st) => (
-                  <option key={st} value={st}>{st}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="text-[10px] font-bold text-slate-500 block">Paddock Bio notes</label>
-              <textarea
-                value={editForm.notes}
-                onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
-                rows={3}
-                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="w-full bg-emerald-600 text-white font-bold text-xs py-3 rounded-xl shadow transition"
-            >
-              Save Record updates
-            </button>
-          </form>
-        </div>
-      )}
-
-      {/* ACTION 1: HEALTH RECORD MODAL */}
-      {showAddHealth && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
-          <form 
-            onSubmit={triggerHealthConfirm}
-            className="bg-white w-full max-w-md rounded-2xl p-6 space-y-4"
-          >
-            <div className="flex items-center justify-between border-b pb-2">
-              <h3 className="font-extrabold text-sm text-slate-900">Log Health Action</h3>
-              <button type="button" onClick={() => setShowAddHealth(false)} className="text-slate-400 hover:text-slate-600">✕</button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 block">Type</label>
-                <select
-                  value={newHealth.type}
-                  onChange={(e) => setNewHealth({ ...newHealth, type: e.target.value as any })}
-                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
-                >
-                  <option value="Observation">Observation</option>
-                  <option value="Diagnosis">Diagnosis</option>
-                  <option value="Vaccination">Vaccination</option>
-                  <option value="Treatment">Treatment</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 block">Recorded By</label>
-                <input
-                  type="text"
-                  value={newHealth.recordedBy}
-                  onChange={(e) => setNewHealth({ ...newHealth, recordedBy: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
-                  required
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="text-[10px] font-bold text-slate-500 block">Symptoms / Diagnostic logs</label>
-              <textarea
-                value={newHealth.details}
-                onChange={(e) => setNewHealth({ ...newHealth, details: e.target.value })}
-                rows={3}
-                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
-                required
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="w-full bg-emerald-600 text-white font-bold text-xs py-3 rounded-xl shadow"
-            >
-              Commit Health Event
-            </button>
-          </form>
-        </div>
-      )}
-
-      {/* ACTION 2: MEDICAL TREATMENT PLAN MODAL */}
-      {showAddTreatment && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
-          <form 
-            onSubmit={triggerTreatmentConfirm}
-            className="bg-white w-full max-w-md rounded-2xl p-6 space-y-4"
-          >
-            <div className="flex items-center justify-between border-b pb-2">
-              <h3 className="font-extrabold text-sm text-slate-900">Initiate Medical Action plan</h3>
-              <button type="button" onClick={() => setShowAddTreatment(false)} className="text-slate-400 hover:text-slate-600">✕</button>
-            </div>
-
-            <div>
-              <label className="text-[10px] font-bold text-slate-500 block">Condition</label>
-              <input
-                type="text"
-                placeholder="e.g. Coughing / Low appetite"
-                value={newTreatment.condition}
-                onChange={(e) => setNewTreatment({ ...newTreatment, condition: e.target.value })}
-                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="text-[10px] font-bold text-slate-500 block">Medication</label>
-              <input
-                type="text"
-                placeholder="e.g. Copper Sulfate Spray / PPR booster"
-                value={newTreatment.medication}
-                onChange={(e) => setNewTreatment({ ...newTreatment, medication: e.target.value })}
-                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
-                required
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="w-full bg-emerald-600 text-white font-bold text-xs py-3 rounded-xl shadow"
-            >
-              Commence Treatment Route
-            </button>
-          </form>
-        </div>
-      )}
-
-      {/* ACTION 3: RECORD WEIGHT MODAL */}
-      {showAddWeight && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
-          <form 
-            onSubmit={triggerWeightConfirm}
-            className="bg-white w-full max-w-md rounded-2xl p-6 space-y-4"
-          >
-            <div className="flex items-center justify-between border-b pb-2">
-              <h3 className="font-extrabold text-sm text-slate-900">Record Paddock Weight Mass</h3>
-              <button type="button" onClick={() => setShowAddWeight(false)} className="text-slate-400 hover:text-slate-600">✕</button>
-            </div>
-
-            <div>
-              <label className="text-[10px] font-bold text-slate-500 block">Current Weight (kg)</label>
-              <input
-                type="text"
-                placeholder="e.g. 45.2"
-                value={newWeight.weight}
-                onChange={(e) => setNewWeight({ ...newWeight, weight: e.target.value })}
-                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="text-[10px] font-bold text-slate-500 block">Measurement Date</label>
-              <input
-                type="date"
-                value={newWeight.date}
-                onChange={(e) => setNewWeight({ ...newWeight, date: e.target.value })}
-                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
-                required
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="w-full bg-emerald-600 text-white font-bold text-xs py-3 rounded-xl shadow"
-            >
-              Commit Weight Mass
-            </button>
-          </form>
-        </div>
-      )}
-
-      {/* ACTION 4: BREEDING RECORD MODAL */}
-      {showAddBreeding && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
-          <form 
-            onSubmit={triggerBreedingConfirm}
-            className="bg-white w-full max-w-md rounded-2xl p-6 space-y-4"
-          >
-            <div className="flex items-center justify-between border-b pb-2">
-              <h3 className="font-extrabold text-sm text-slate-900">Log Heat Breeding run</h3>
-              <button type="button" onClick={() => setShowAddBreeding(false)} className="text-slate-400 hover:text-slate-600">✕</button>
-            </div>
-
-            <div>
-              <label className="text-[10px] font-bold text-slate-500 block">Select Stud Partner</label>
-              <select
-                value={newBreeding.partnerId}
-                onChange={(e) => setNewBreeding({ ...newBreeding, partnerId: e.target.value })}
-                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
-                required
-              >
-                <option value="">-- Choose Partner --</option>
-                {animals
-                  .filter(a => a.sex !== animal.sex && a.species === animal.species)
-                  .map(a => (
-                    <option key={a.id} value={a.id}>{a.animal_code} - {a.name || a.animal_code}</option>
-                  ))}
-              </select>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 block">Breeding Date</label>
-                <input
-                  type="date"
-                  value={newBreeding.date}
-                  onChange={(e) => setNewBreeding({ ...newBreeding, date: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
-                />
-              </div>
-
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 block">Breeding Status</label>
-                <select
-                  value={newBreeding.status}
-                  onChange={(e) => setNewBreeding({ ...newBreeding, status: e.target.value as any })}
-                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
-                >
-                  <option value="Bred">Bred</option>
-                  <option value="Pregnant">Pregnant</option>
-                  <option value="Gave Birth">Gave Birth</option>
-                  <option value="Resting">Resting</option>
-                </select>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              className="w-full bg-emerald-600 text-white font-bold text-xs py-3 rounded-xl shadow"
-            >
-              Commit Breeding Run
-            </button>
-          </form>
-        </div>
-      )}
-
-      {/* ACTION 5: LINK OFFSPRING MODAL */}
-      {showAddOffspring && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
-          <form 
-            onSubmit={triggerOffspringConfirm}
-            className="bg-white w-full max-w-md rounded-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto"
-          >
-            <div className="flex items-center justify-between border-b pb-2">
-              <h3 className="font-extrabold text-sm text-slate-900">Link Born Offspring</h3>
-              <button type="button" onClick={() => setShowAddOffspring(false)} className="text-slate-400 hover:text-slate-600">✕</button>
-            </div>
-
-            {/* Photo upload + Portrait file selector */}
-            <div className="space-y-2">
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block">Take/Upload Offspring Portrait</label>
-              
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => offspringCameraInputRef.current?.click()}
-                  className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 rounded-xl text-xs font-bold flex items-center gap-1.5 border border-emerald-200 transition"
-                >
-                  <Camera size={14} className="text-emerald-700" /> Snap Photo
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => offspringFileInputRef.current?.click()}
-                  className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold flex items-center gap-1.5 border border-slate-200 transition"
-                >
-                  <Upload size={14} className="text-slate-600" /> Upload Image
-                </button>
-
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  ref={offspringCameraInputRef}
-                  onChange={handleOffspringPhotoUpload}
-                  className="hidden"
-                />
-
-                <input
-                  type="file"
-                  accept="image/*"
-                  ref={offspringFileInputRef}
-                  onChange={handleOffspringPhotoUpload}
-                  className="hidden"
-                />
-              </div>
-
-              {/* Quick preset portraits */}
-              <div className="flex gap-1.5 mt-2">
-                <button
-                  type="button"
-                  onClick={() => handleSimulateOffspringPhoto("goat")}
-                  className="px-2 py-1 bg-emerald-50 text-emerald-800 text-[10px] font-extrabold rounded-lg"
-                >
-                  Preset Kid
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSimulateOffspringPhoto("ram")}
-                  className="px-2 py-1 bg-blue-50 text-blue-800 text-[10px] font-extrabold rounded-lg"
-                >
-                  Preset Lamb
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSimulateOffspringPhoto("chicken")}
-                  className="px-2 py-1 bg-purple-50 text-purple-800 text-[10px] font-extrabold rounded-lg"
-                >
-                  Preset Chick
-                </button>
-              </div>
-
-              {newOffspring.primaryPhoto && (
-                <<dyad-write path="src/pages/AnimalProfilePage.tsx" description="Completing full AnimalProfilePage with Ownership section, edit modal, and image preview.">
+<dyad-write path="src/pages/AnimalProfilePage.tsx" description="Writing complete and clean AnimalProfilePage component.">
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
@@ -2228,7 +1462,7 @@ export const AnimalProfilePage: React.FC = () => {
         <AlertCircle size={48} className="text-amber-600 mb-2" />
         <h2 className="text-xl font-black text-slate-900">Livestock Record Not Found</h2>
         <p className="text-slate-500 text-xs mt-1 max-w-xs">
-          The animal profile with ID "{id}" does not exist or was deleted from the secure database records.
+          The animal profile with ID "{id}" does not exist or was deleted.
         </p>
         <button
           onClick={() => navigate("/")}
@@ -2251,7 +1485,7 @@ export const AnimalProfilePage: React.FC = () => {
         if (typeof reader.result === "string") {
           const updatedPhotos = [...(animal.photos || []), reader.result];
           updateAnimal(animal.id, { photos: updatedPhotos });
-          showSuccess("New photograph added to gallery!");
+          showSuccess("New photo added!");
         }
       };
       reader.readAsDataURL(file);
@@ -2278,29 +1512,29 @@ export const AnimalProfilePage: React.FC = () => {
     if (type === "ram") url = "https://images.unsplash.com/photo-1484557985045-edf25e08da73?w=500&auto=format&fit=crop&q=80";
     if (type === "chicken") url = "https://images.unsplash.com/photo-1548550023-2bdb3c5beed7?w=500&auto=format&fit=crop&q=80";
     setNewOffspring(prev => ({ ...prev, primaryPhoto: url }));
-    showSuccess("Preset animal portrait selected!");
+    showSuccess("Preset photo selected!");
   };
 
   const setPhotoAsPrimary = (photoUrl: string) => {
     setPendingConfirm({
       title: "Set Primary Portrait?",
-      message: "Are you sure you want to designate this photo as the main ID card face?",
+      message: "Set this photo as the primary portrait?",
       onConfirm: () => {
         updateAnimal(animal.id, { primaryPhoto: photoUrl });
         setPendingConfirm(null);
-        showSuccess("Primary identification portrait updated!");
+        showSuccess("Primary portrait updated!");
       }
     });
   };
 
   const deletePhoto = (photoUrl: string) => {
     if (animal.photos.length <= 1) {
-      showError("At least one profile identifier portrait must remain.");
+      showError("At least one profile photo must remain.");
       return;
     }
     setPendingConfirm({
       title: "Delete Photo?",
-      message: "Are you sure you want to permanently remove this photograph from the pedigree album?",
+      message: "Permanently remove this photo?",
       onConfirm: () => {
         const updated = animal.photos.filter(p => p !== photoUrl);
         const updates: Partial<Animal> = { photos: updated };
@@ -2309,7 +1543,7 @@ export const AnimalProfilePage: React.FC = () => {
         }
         updateAnimal(animal.id, updates);
         setPendingConfirm(null);
-        showSuccess("Photograph removed successfully.");
+        showSuccess("Photo removed.");
       }
     });
   };
@@ -2348,7 +1582,6 @@ export const AnimalProfilePage: React.FC = () => {
             <tr><th>Ownership</th><td>${animal.ownershipType || "Farm Owned"}${animal.ownerName ? ` (${animal.ownerName})` : ''}</td></tr>
             <tr><th>Birth date</th><td>${animal.dob}</td></tr>
             <tr><th>Source</th><td>${animal.source}</td></tr>
-            <tr><th>Vitals History Count</th><td>${animalHealth.length} items logged</td></tr>
             <tr><th>Current notes</th><td>${animal.notes || "No extra bio."}</td></tr>
           </table>
         </body>
@@ -2374,10 +1607,8 @@ export const AnimalProfilePage: React.FC = () => {
         iframe.contentWindow?.focus();
         iframe.contentWindow?.print();
         document.body.removeChild(iframe);
-        showSuccess("Print passport opened successfully!");
+        showSuccess("Print passport opened!");
       }, 500);
-    } else {
-      showError("Could not initialize printing passport frame.");
     }
   };
 
@@ -2406,10 +1637,7 @@ export const AnimalProfilePage: React.FC = () => {
 
   const handleCreateAnimalNoteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!noteContentText.trim()) {
-      showError("Note content is required.");
-      return;
-    }
+    if (!noteContentText.trim()) return;
 
     setIsSubmittingAnimalNote(true);
     try {
@@ -2473,7 +1701,7 @@ export const AnimalProfilePage: React.FC = () => {
     e.preventDefault();
     setPendingConfirm({
       title: "Save Profile Changes?",
-      message: "Verify information parameters before overwriting database logs.",
+      message: "Save changes to this animal profile?",
       onConfirm: () => {
         updateAnimal(animal.id, {
           name: editForm.name,
@@ -2511,9 +1739,9 @@ export const AnimalProfilePage: React.FC = () => {
   const triggerOwnershipConfirm = (e: React.FormEvent) => {
     e.preventDefault();
     setPendingConfirm({
-      title: "Update Livestock Ownership?",
+      title: "Update Ownership?",
       message: ownershipForm.type === "Farm Owned" 
-        ? "Changing ownership to Farm Owned will clear client owner, custodian, and agreement records. Confirm?"
+        ? "Changing to Farm Owned will clear client owner, custodian, and agreement details. Confirm?"
         : `Set ownership to Client Owned for '${ownershipForm.ownerName || 'Client'}'?`,
       onConfirm: () => {
         updateAnimal(animal.id, {
@@ -2532,7 +1760,7 @@ export const AnimalProfilePage: React.FC = () => {
     e.preventDefault();
     setPendingConfirm({
       title: "Submit Clinical Event?",
-      message: "Are you sure you want to write this observation to the animal's permanent health timeline?",
+      message: "Add this health record?",
       onConfirm: () => {
         addHealthRecord({
           animal_id: animal.id,
@@ -2559,7 +1787,7 @@ export const AnimalProfilePage: React.FC = () => {
     e.preventDefault();
     setPendingConfirm({
       title: "Activate Medical Treatment?",
-      message: "This records an active prescription, changing status to 'Under Treatment'. Confirm?",
+      message: "Record active prescription treatment?",
       onConfirm: () => {
         addTreatment({
           animal_id: animal.id,
@@ -2573,27 +1801,16 @@ export const AnimalProfilePage: React.FC = () => {
         });
         setShowAddTreatment(false);
         setPendingConfirm(null);
-        setNewTreatment({
-          condition: "",
-          medication: "",
-          startDate: new Date().toISOString().split("T")[0],
-          endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-          notes: "",
-          followUpDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-        });
       }
     });
   };
 
   const triggerWeightConfirm = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newWeight.weight || isNaN(Number(newWeight.weight))) {
-      showError("Please enter a valid numeric weight.");
-      return;
-    }
+    if (!newWeight.weight || isNaN(Number(newWeight.weight))) return;
     setPendingConfirm({
-      title: "Commit New Mass?",
-      message: `Log ${newWeight.weight} kg on ${newWeight.date} for growth progression metrics?`,
+      title: "Log Weight?",
+      message: `Log ${newWeight.weight} kg for growth metrics?`,
       onConfirm: () => {
         addWeightRecord({
           animal_id: animal.id,
@@ -2603,11 +1820,6 @@ export const AnimalProfilePage: React.FC = () => {
         });
         setShowAddWeight(false);
         setPendingConfirm(null);
-        setNewWeight({
-          weight: "",
-          date: new Date().toISOString().split("T")[0],
-          notes: "",
-        });
       }
     });
   };
@@ -2615,8 +1827,8 @@ export const AnimalProfilePage: React.FC = () => {
   const triggerBreedingConfirm = (e: React.FormEvent) => {
     e.preventDefault();
     setPendingConfirm({
-      title: "Record Breeding Cross?",
-      message: "Link stud mating relationship into permanent history maps?",
+      title: "Record Breeding?",
+      message: "Log breeding event?",
       onConfirm: () => {
         addBreedingRecord({
           female_id: animal.sex === "Female" ? animal.id : newBreeding.partnerId,
@@ -2627,12 +1839,6 @@ export const AnimalProfilePage: React.FC = () => {
         });
         setShowAddBreeding(false);
         setPendingConfirm(null);
-        setNewBreeding({
-          partnerId: "",
-          date: new Date().toISOString().split("T")[0],
-          status: "Bred",
-          notes: "",
-        });
       }
     });
   };
@@ -2640,8 +1846,8 @@ export const AnimalProfilePage: React.FC = () => {
   const triggerOffspringConfirm = (e: React.FormEvent) => {
     e.preventDefault();
     setPendingConfirm({
-      title: "Register New Born Offspring?",
-      message: `This automatically binds ${newOffspring.name || "Offspring"} to ${displayName}'s pedigree maps. Confirm?`,
+      title: "Register Offspring?",
+      message: `Register offspring and link to ${displayName}?`,
       onConfirm: () => {
         addAnimal({
           name: newOffspring.name,
@@ -2662,15 +1868,6 @@ export const AnimalProfilePage: React.FC = () => {
         });
         setShowAddOffspring(false);
         setPendingConfirm(null);
-        setNewOffspring({
-          name: "",
-          species: animal.species,
-          breed: animal.breed,
-          sex: "Female",
-          dob: new Date().toISOString().split("T")[0],
-          notes: "",
-          primaryPhoto: "",
-        });
       }
     });
   };
@@ -2683,7 +1880,7 @@ export const AnimalProfilePage: React.FC = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    showSuccess("Image downloaded successfully!");
+    showSuccess("Image downloaded!");
   };
 
   const currentOwnershipType = animal.ownershipType || "Farm Owned";
@@ -2710,10 +1907,9 @@ export const AnimalProfilePage: React.FC = () => {
 
       <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6">
         
-        {/* DUAL DESKTOP GRID OR SINGLE STACK */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           
-          {/* COLUMN 1: HERO IDENTIFICATION PORTRAIT */}
+          {/* COLUMN 1: HERO PORTRAIT & OWNERSHIP CARD */}
           <div className="md:col-span-1 space-y-4">
             
             {/* Animal ID Card */}
@@ -2864,7 +2060,7 @@ export const AnimalProfilePage: React.FC = () => {
               </div>
             </div>
 
-            {/* QUICK ACTIONS SIDE MENU */}
+            {/* QUICK ACTIONS */}
             <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm space-y-2">
               <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Registry Shortcuts</h4>
               
@@ -2924,7 +2120,6 @@ export const AnimalProfilePage: React.FC = () => {
           {/* COLUMN 2 & 3: MAIN TABS AND RECORD VIEWS */}
           <div className="md:col-span-2 space-y-6">
             
-            {/* GRID DISPLAY FOR TAB SELECTORS */}
             <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 bg-slate-100 p-2 rounded-2xl">
               {[
                 { id: "overview", label: "Overview", icon: "📊" },
@@ -2955,7 +2150,6 @@ export const AnimalProfilePage: React.FC = () => {
             {activeTab === "overview" && (
               <div className="space-y-6">
                 
-                {/* Current Ongoing Prescription Action Card */}
                 {animalTreatments.filter(t => t.status === "Ongoing").map(tx => (
                   <div key={tx.id} className="bg-purple-50 border border-purple-100 rounded-2xl p-4 flex items-start justify-between shadow-sm animate-in zoom-in-95">
                     <div className="space-y-1">
@@ -2966,16 +2160,13 @@ export const AnimalProfilePage: React.FC = () => {
                       <p className="text-xs text-purple-800">
                         Prescription: <strong className="font-black">{tx.medication}</strong>
                       </p>
-                      <p className="text-[10px] text-purple-600">
-                        Duration: {tx.startDate} to {tx.endDate} (Followup: {tx.followUpDate || "N/A"})
-                      </p>
                     </div>
 
                     <button
                       onClick={() => {
                         setPendingConfirm({
                           title: "Mark Treatment Complete?",
-                          message: "This records treatment end, reverting livestock to 'Healthy' status. Confirm?",
+                          message: "Revert livestock to 'Healthy' status?",
                           onConfirm: () => {
                             updateTreatmentStatus(tx.id, "Completed");
                             setPendingConfirm(null);
@@ -2989,7 +2180,6 @@ export const AnimalProfilePage: React.FC = () => {
                   </div>
                 ))}
 
-                {/* Parentage Lineage Hierarchy tree */}
                 <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm space-y-4">
                   <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wider text-slate-400 flex items-center gap-2">
                     <span className="text-emerald-600 text-base">🧬</span>
@@ -2997,7 +2187,6 @@ export const AnimalProfilePage: React.FC = () => {
                   </h3>
                   
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* Mother */}
                     <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl bg-slate-200 overflow-hidden shrink-0">
                         {mother ? (
@@ -3018,7 +2207,6 @@ export const AnimalProfilePage: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Father */}
                     <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl bg-slate-200 overflow-hidden shrink-0">
                         {father ? (
@@ -3041,7 +2229,6 @@ export const AnimalProfilePage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Progeny / Offspring section */}
                 <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wider text-slate-400">
@@ -3075,7 +2262,6 @@ export const AnimalProfilePage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Growth and weight charting */}
                 <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wider text-slate-400">
@@ -3102,7 +2288,7 @@ export const AnimalProfilePage: React.FC = () => {
                     </div>
                   ) : (
                     <div className="p-4 bg-slate-50 rounded-xl text-center text-xs text-slate-500 italic">
-                      Insufficient records for a growth chart yet. Graph displays once at least 2 historical weighings are captured.
+                      Insufficient records for a growth chart yet.
                     </div>
                   )}
 
@@ -3122,7 +2308,6 @@ export const AnimalProfilePage: React.FC = () => {
             {/* 2. HEALTH LOGS TAB */}
             {activeTab === "health" && (
               <div className="space-y-6">
-                
                 <div className="flex items-center justify-between">
                   <h3 className="font-bold text-slate-900 text-sm">Clinical Incident Log</h3>
                   <button
@@ -3145,30 +2330,25 @@ export const AnimalProfilePage: React.FC = () => {
                       <p className="text-xs text-slate-700 leading-relaxed">{h.details}</p>
                       {h.medication && (
                         <p className="text-[11px] text-purple-700 bg-purple-50 p-1.5 rounded-lg mt-2 font-semibold">
-                          Medication Applied: {h.medication}
+                          Medication: {h.medication}
                         </p>
                       )}
-                      <div className="pt-2 border-t mt-2 flex justify-between text-[10px] text-slate-400">
-                        <span>Recorded by: {h.recordedBy}</span>
-                      </div>
                     </div>
                   ))}
                   {animalHealth.length === 0 && (
                     <div className="text-center py-12 bg-white rounded-3xl border border-dashed text-slate-400 text-xs">
-                      No clinical logs on file. Click "+ Log Health Record" to write diagnostic logs.
+                      No clinical health logs recorded.
                     </div>
                   )}
                 </div>
-
               </div>
             )}
 
             {/* 3. BREEDING RECORDS TAB */}
             {activeTab === "breeding" && (
               <div className="space-y-6">
-                
                 <div className="flex items-center justify-between">
-                  <h3 className="font-bold text-slate-900 text-sm">Breeding runs & Reproductive History</h3>
+                  <h3 className="font-bold text-slate-900 text-sm">Breeding History</h3>
                   <button
                     onClick={() => setShowAddBreeding(true)}
                     className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold"
@@ -3187,29 +2367,24 @@ export const AnimalProfilePage: React.FC = () => {
                         <span className="text-[10px] text-slate-400">{b.date}</span>
                       </div>
                       <p className="text-xs text-slate-700 mt-1 leading-relaxed">
-                        Line cross of Dam ID: <strong>{b.female_id}</strong> & Sire ID: <strong>{b.male_id}</strong>
+                        Line cross of Dam: <strong>{b.female_id}</strong> & Sire: <strong>{b.male_id}</strong>
                       </p>
-                      {b.notes && (
-                        <p className="text-[11px] text-slate-500 italic mt-2">Notes: {b.notes}</p>
-                      )}
                     </div>
                   ))}
                   {animalBreeding.length === 0 && (
                     <div className="text-center py-12 bg-white rounded-3xl border border-dashed text-slate-400 text-xs">
-                      No breeding cycles logged. Ideal for tracking heat calendars.
+                      No breeding cycles logged.
                     </div>
                   )}
                 </div>
-
               </div>
             )}
 
             {/* 4. PHOTOS GALLERY TAB */}
             {activeTab === "photos" && (
               <div className="space-y-6">
-                
                 <div className="flex items-center justify-between">
-                  <h3 className="font-bold text-slate-900 text-sm">Livestock Image Portfolio</h3>
+                  <h3 className="font-bold text-slate-900 text-sm">Photos</h3>
                   <button
                     onClick={() => fileInputRef.current?.click()}
                     className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold"
@@ -3234,7 +2409,6 @@ export const AnimalProfilePage: React.FC = () => {
                         className="h-36 w-full object-cover cursor-zoom-in" 
                         onClick={() => setFullscreenPhoto(ph)}
                       />
-                      
                       <div className="p-2 flex gap-1.5 justify-between">
                         <button
                           onClick={() => setPhotoAsPrimary(ph)}
@@ -3244,10 +2418,9 @@ export const AnimalProfilePage: React.FC = () => {
                         >
                           {animal.primaryPhoto === ph ? "Active ID" : "Set Primary"}
                         </button>
-
                         <button
                           onClick={() => deletePhoto(ph)}
-                          className="p-1 hover:bg-red-50 text-red-500 rounded"
+                          className="p-1 hover:bg-red-50 text-red-500 rounded text-xs"
                         >
                           🗑️
                         </button>
@@ -3255,18 +2428,16 @@ export const AnimalProfilePage: React.FC = () => {
                     </div>
                   ))}
                 </div>
-
               </div>
             )}
 
             {/* 5. ANIMAL NOTES TAB */}
             {activeTab === "notes" && (
               <div className="space-y-6">
-                
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="font-bold text-slate-900 text-sm">Animal Notes</h3>
-                    <p className="text-[10px] text-slate-400">Specific observations for {displayName}</p>
+                    <p className="text-[10px] text-slate-400">Specific notes for {displayName}</p>
                   </div>
                   <button
                     onClick={handleOpenAddNoteModal}
@@ -3277,48 +2448,36 @@ export const AnimalProfilePage: React.FC = () => {
                 </div>
 
                 <div className="space-y-2.5">
-                  {currentAnimalNotes.map((note) => {
-                    const formattedDate = new Date(note.created_at).toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric"
-                    });
-
-                    return (
-                      <div 
-                        key={note.id}
-                        onClick={() => handleSelectAnimalNote(note)}
-                        className="p-4 bg-white rounded-2xl border border-slate-100 shadow-sm hover:border-emerald-300 transition cursor-pointer group"
-                      >
-                        <p className="text-xs text-slate-700 font-medium leading-relaxed line-clamp-2">
-                          {note.content}
-                        </p>
-                        <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-slate-50 text-[10px] text-slate-400">
-                          <span>{formattedDate} · {note.created_by || "Operator"}</span>
-                          <span className="text-emerald-600 font-bold opacity-0 group-hover:opacity-100 transition">View details →</span>
-                        </div>
+                  {currentAnimalNotes.map((note) => (
+                    <div 
+                      key={note.id}
+                      onClick={() => handleSelectAnimalNote(note)}
+                      className="p-4 bg-white rounded-2xl border border-slate-100 shadow-sm hover:border-emerald-300 transition cursor-pointer group"
+                    >
+                      <p className="text-xs text-slate-700 font-medium leading-relaxed line-clamp-2">
+                        {note.content}
+                      </p>
+                      <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-slate-50 text-[10px] text-slate-400">
+                        <span>{new Date(note.created_at).toLocaleDateString()} · {note.created_by || "Operator"}</span>
+                        <span className="text-emerald-600 font-bold opacity-0 group-hover:opacity-100 transition">View details →</span>
                       </div>
-                    );
-                  })}
+                    </div>
+                  ))}
 
                   {currentAnimalNotes.length === 0 && (
                     <div className="text-center py-12 bg-white rounded-3xl border border-dashed text-slate-400 text-xs space-y-1">
                       <FileText size={28} className="mx-auto text-slate-300" />
                       <p className="font-semibold">No animal notes on record.</p>
-                      <p className="text-[11px] text-slate-400">Record specific physical traits, standing behavior or medication responses.</p>
                     </div>
                   )}
                 </div>
-
               </div>
             )}
 
             {/* 6. SYSTEM ACTIVITY TAB */}
             {activeTab === "activity" && (
               <div className="space-y-6">
-                
-                <h3 className="font-bold text-slate-900 text-sm">Livestock System Trace</h3>
-                
+                <h3 className="font-bold text-slate-900 text-sm">System Trace</h3>
                 <div className="space-y-3 relative before:absolute before:inset-y-1 before:left-3 before:w-[1px] before:bg-slate-100">
                   {animalLogs.map(l => (
                     <div key={l.id} className="flex gap-3 text-xs relative pl-6">
@@ -3336,11 +2495,10 @@ export const AnimalProfilePage: React.FC = () => {
                   ))}
                   {animalLogs.length === 0 && (
                     <div className="text-center py-12 bg-white rounded-3xl border border-dashed text-slate-400 text-xs">
-                      No system events generated. Normal audit streams recorded at startup.
+                      No system events recorded for this animal.
                     </div>
                   )}
                 </div>
-
               </div>
             )}
 
@@ -3416,7 +2574,7 @@ export const AnimalProfilePage: React.FC = () => {
                 Agreement Details (Optional)
               </label>
               <textarea
-                placeholder="e.g. 50% breeding profit share, Boarding fee paid monthly..."
+                placeholder="e.g. Boarding fee paid monthly..."
                 value={ownershipForm.agreement}
                 onChange={(e) => setOwnershipForm({ ...ownershipForm, agreement: e.target.value })}
                 disabled={ownershipForm.type === "Farm Owned"}
@@ -3463,16 +2621,12 @@ export const AnimalProfilePage: React.FC = () => {
               </button>
             </div>
 
-            <p className="text-[11px] text-slate-500">
-              Note for: <strong className="text-emerald-800">{hasCustomName ? `${animal.name} (${animal.animal_code})` : animal.animal_code}</strong>
-            </p>
-
             <div>
               <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
                 Note <span className="text-red-500">*</span>
               </label>
               <textarea
-                placeholder="e.g. Small white patch on forehead, less active today, eating normally..."
+                placeholder="e.g. Behavior observation..."
                 value={noteContentText}
                 onChange={(e) => setNoteContentText(e.target.value)}
                 disabled={isSubmittingAnimalNote}
@@ -3536,15 +2690,6 @@ export const AnimalProfilePage: React.FC = () => {
                   </p>
                 </div>
 
-                <div className="text-[11px] text-slate-500 space-y-0.5 border-t pt-3">
-                  <p>Added by <strong className="text-slate-700">{selectedAnimalNote.created_by || "Operator"}</strong></p>
-                  <p>{new Date(selectedAnimalNote.created_at).toLocaleDateString("en-US", {
-                    month: "long",
-                    day: "numeric",
-                    year: "numeric"
-                  })} at {new Date(selectedAnimalNote.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                </div>
-
                 <div className="flex gap-2 pt-2">
                   <button
                     type="button"
@@ -3606,7 +2751,7 @@ export const AnimalProfilePage: React.FC = () => {
         </div>
       )}
 
-      {/* GLOBAL FULLSCREEN PHOTO VIEWER MODAL WITH DOWNLOAD */}
+      {/* FULLSCREEN PHOTO VIEWER */}
       {fullscreenPhoto && (
         <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-md flex flex-col items-center justify-center p-4">
           <button
@@ -3675,7 +2820,7 @@ export const AnimalProfilePage: React.FC = () => {
         </div>
       )}
 
-      {/* EDIT MODAL DIALOG */}
+      {/* EDIT ANIMAL MODAL */}
       {showEditModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
           <form 
@@ -3688,7 +2833,7 @@ export const AnimalProfilePage: React.FC = () => {
             </div>
 
             <div>
-              <label className="text-[10px] font-bold text-slate-500 block">Animal Custom Name</label>
+              <label className="text-[10px] font-bold text-slate-500 block">Animal Name</label>
               <input
                 type="text"
                 placeholder="e.g. Aisha"
@@ -3723,33 +2868,8 @@ export const AnimalProfilePage: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 block">Date of Birth</label>
-                <input
-                  type="date"
-                  value={editForm.dob}
-                  onChange={(e) => setEditForm({ ...editForm, dob: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
-                />
-              </div>
-
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 block">Source Origin</label>
-                <select
-                  value={editForm.source}
-                  onChange={(e) => setEditForm({ ...editForm, source: e.target.value as any })}
-                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
-                >
-                  <option value="Born on farm">Born on farm</option>
-                  <option value="Purchased">Purchased</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-            </div>
-
             <div>
-              <label className="text-[10px] font-bold text-slate-500 block">Vital Status</label>
+              <label className="text-[10px] font-bold text-slate-500 block">Status</label>
               <select
                 value={editForm.status}
                 onChange={(e) => setEditForm({ ...editForm, status: e.target.value as any })}
@@ -3761,27 +2881,17 @@ export const AnimalProfilePage: React.FC = () => {
               </select>
             </div>
 
-            <div>
-              <label className="text-[10px] font-bold text-slate-500 block">Paddock Bio notes</label>
-              <textarea
-                value={editForm.notes}
-                onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
-                rows={3}
-                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
-              />
-            </div>
-
             <button
               type="submit"
               className="w-full bg-emerald-600 text-white font-bold text-xs py-3 rounded-xl shadow transition"
             >
-              Save Record updates
+              Save Changes
             </button>
           </form>
         </div>
       )}
 
-      {/* ACTION 1: HEALTH RECORD MODAL */}
+      {/* HEALTH MODAL */}
       {showAddHealth && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
           <form 
@@ -3793,35 +2903,8 @@ export const AnimalProfilePage: React.FC = () => {
               <button type="button" onClick={() => setShowAddHealth(false)} className="text-slate-400 hover:text-slate-600">✕</button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 block">Type</label>
-                <select
-                  value={newHealth.type}
-                  onChange={(e) => setNewHealth({ ...newHealth, type: e.target.value as any })}
-                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
-                >
-                  <option value="Observation">Observation</option>
-                  <option value="Diagnosis">Diagnosis</option>
-                  <option value="Vaccination">Vaccination</option>
-                  <option value="Treatment">Treatment</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 block">Recorded By</label>
-                <input
-                  type="text"
-                  value={newHealth.recordedBy}
-                  onChange={(e) => setNewHealth({ ...newHealth, recordedBy: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
-                  required
-                />
-              </div>
-            </div>
-
             <div>
-              <label className="text-[10px] font-bold text-slate-500 block">Symptoms / Diagnostic logs</label>
+              <label className="text-[10px] font-bold text-slate-500 block">Diagnostic logs</label>
               <textarea
                 value={newHealth.details}
                 onChange={(e) => setNewHealth({ ...newHealth, details: e.target.value })}
@@ -3841,7 +2924,7 @@ export const AnimalProfilePage: React.FC = () => {
         </div>
       )}
 
-      {/* ACTION 2: MEDICAL TREATMENT PLAN MODAL */}
+      {/* TREATMENT MODAL */}
       {showAddTreatment && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
           <form 
@@ -3849,7 +2932,7 @@ export const AnimalProfilePage: React.FC = () => {
             className="bg-white w-full max-w-md rounded-2xl p-6 space-y-4"
           >
             <div className="flex items-center justify-between border-b pb-2">
-              <h3 className="font-extrabold text-sm text-slate-900">Initiate Medical Action plan</h3>
+              <h3 className="font-extrabold text-sm text-slate-900">Initiate Medical Action</h3>
               <button type="button" onClick={() => setShowAddTreatment(false)} className="text-slate-400 hover:text-slate-600">✕</button>
             </div>
 
@@ -3857,7 +2940,6 @@ export const AnimalProfilePage: React.FC = () => {
               <label className="text-[10px] font-bold text-slate-500 block">Condition</label>
               <input
                 type="text"
-                placeholder="e.g. Coughing / Low appetite"
                 value={newTreatment.condition}
                 onChange={(e) => setNewTreatment({ ...newTreatment, condition: e.target.value })}
                 className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
@@ -3869,7 +2951,6 @@ export const AnimalProfilePage: React.FC = () => {
               <label className="text-[10px] font-bold text-slate-500 block">Medication</label>
               <input
                 type="text"
-                placeholder="e.g. Copper Sulfate Spray / PPR booster"
                 value={newTreatment.medication}
                 onChange={(e) => setNewTreatment({ ...newTreatment, medication: e.target.value })}
                 className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
@@ -3881,13 +2962,13 @@ export const AnimalProfilePage: React.FC = () => {
               type="submit"
               className="w-full bg-emerald-600 text-white font-bold text-xs py-3 rounded-xl shadow"
             >
-              Commence Treatment Route
+              Commence Treatment
             </button>
           </form>
         </div>
       )}
 
-      {/* ACTION 3: RECORD WEIGHT MODAL */}
+      {/* WEIGHT MODAL */}
       {showAddWeight && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
           <form 
@@ -3895,12 +2976,12 @@ export const AnimalProfilePage: React.FC = () => {
             className="bg-white w-full max-w-md rounded-2xl p-6 space-y-4"
           >
             <div className="flex items-center justify-between border-b pb-2">
-              <h3 className="font-extrabold text-sm text-slate-900">Record Paddock Weight Mass</h3>
+              <h3 className="font-extrabold text-sm text-slate-900">Record Weight Mass</h3>
               <button type="button" onClick={() => setShowAddWeight(false)} className="text-slate-400 hover:text-slate-600">✕</button>
             </div>
 
             <div>
-              <label className="text-[10px] font-bold text-slate-500 block">Current Weight (kg)</label>
+              <label className="text-[10px] font-bold text-slate-500 block">Weight (kg)</label>
               <input
                 type="text"
                 placeholder="e.g. 45.2"
@@ -3911,28 +2992,17 @@ export const AnimalProfilePage: React.FC = () => {
               />
             </div>
 
-            <div>
-              <label className="text-[10px] font-bold text-slate-500 block">Measurement Date</label>
-              <input
-                type="date"
-                value={newWeight.date}
-                onChange={(e) => setNewWeight({ ...newWeight, date: e.target.value })}
-                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
-                required
-              />
-            </div>
-
             <button
               type="submit"
               className="w-full bg-emerald-600 text-white font-bold text-xs py-3 rounded-xl shadow"
             >
-              Commit Weight Mass
+              Save Weight
             </button>
           </form>
         </div>
       )}
 
-      {/* ACTION 4: BREEDING RECORD MODAL */}
+      {/* BREEDING MODAL */}
       {showAddBreeding && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
           <form 
@@ -3940,7 +3010,7 @@ export const AnimalProfilePage: React.FC = () => {
             className="bg-white w-full max-w-md rounded-2xl p-6 space-y-4"
           >
             <div className="flex items-center justify-between border-b pb-2">
-              <h3 className="font-extrabold text-sm text-slate-900">Log Heat Breeding run</h3>
+              <h3 className="font-extrabold text-sm text-slate-900">Log Breeding Run</h3>
               <button type="button" onClick={() => setShowAddBreeding(false)} className="text-slate-400 hover:text-slate-600">✕</button>
             </div>
 
@@ -3961,43 +3031,17 @@ export const AnimalProfilePage: React.FC = () => {
               </select>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 block">Breeding Date</label>
-                <input
-                  type="date"
-                  value={newBreeding.date}
-                  onChange={(e) => setNewBreeding({ ...newBreeding, date: e.target.value })}
-                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
-                />
-              </div>
-
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 block">Breeding Status</label>
-                <select
-                  value={newBreeding.status}
-                  onChange={(e) => setNewBreeding({ ...newBreeding, status: e.target.value as any })}
-                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
-                >
-                  <option value="Bred">Bred</option>
-                  <option value="Pregnant">Pregnant</option>
-                  <option value="Gave Birth">Gave Birth</option>
-                  <option value="Resting">Resting</option>
-                </select>
-              </div>
-            </div>
-
             <button
               type="submit"
               className="w-full bg-emerald-600 text-white font-bold text-xs py-3 rounded-xl shadow"
             >
-              Commit Breeding Run
+              Save Breeding Run
             </button>
           </form>
         </div>
       )}
 
-      {/* ACTION 5: LINK OFFSPRING MODAL */}
+      {/* OFFSPRING MODAL */}
       {showAddOffspring && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
           <form 
@@ -4009,80 +3053,8 @@ export const AnimalProfilePage: React.FC = () => {
               <button type="button" onClick={() => setShowAddOffspring(false)} className="text-slate-400 hover:text-slate-600">✕</button>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block">Take/Upload Offspring Portrait</label>
-              
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => offspringCameraInputRef.current?.click()}
-                  className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 rounded-xl text-xs font-bold flex items-center gap-1.5 border border-emerald-200 transition"
-                >
-                  <Camera size={14} className="text-emerald-700" /> Snap Photo
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => offspringFileInputRef.current?.click()}
-                  className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold flex items-center gap-1.5 border border-slate-200 transition"
-                >
-                  <Upload size={14} className="text-slate-600" /> Upload Image
-                </button>
-
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  ref={offspringCameraInputRef}
-                  onChange={handleOffspringPhotoUpload}
-                  className="hidden"
-                />
-
-                <input
-                  type="file"
-                  accept="image/*"
-                  ref={offspringFileInputRef}
-                  onChange={handleOffspringPhotoUpload}
-                  className="hidden"
-                />
-              </div>
-
-              <div className="flex gap-1.5 mt-2">
-                <button
-                  type="button"
-                  onClick={() => handleSimulateOffspringPhoto("goat")}
-                  className="px-2 py-1 bg-emerald-50 text-emerald-800 text-[10px] font-extrabold rounded-lg"
-                >
-                  Preset Kid
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSimulateOffspringPhoto("ram")}
-                  className="px-2 py-1 bg-blue-50 text-blue-800 text-[10px] font-extrabold rounded-lg"
-                >
-                  Preset Lamb
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSimulateOffspringPhoto("chicken")}
-                  className="px-2 py-1 bg-purple-50 text-purple-800 text-[10px] font-extrabold rounded-lg"
-                >
-                  Preset Chick
-                </button>
-              </div>
-
-              {newOffspring.primaryPhoto && (
-                <div className="relative h-28 w-full rounded-2xl overflow-hidden border border-emerald-100 mt-2">
-                  <img src={newOffspring.primaryPhoto} alt="Offspring snapshot preview" className="w-full h-full object-cover" />
-                  <span className="absolute bottom-2 right-2 bg-black/50 text-white text-[9px] px-2 py-0.5 rounded-full font-bold">
-                    Portrait Attached
-                  </span>
-                </div>
-              )}
-            </div>
-
             <div>
-              <label className="text-[10px] font-bold text-slate-500 block">Offspring Custom Name (Optional)</label>
+              <label className="text-[10px] font-bold text-slate-500 block">Offspring Name (Optional)</label>
               <input
                 type="text"
                 placeholder="e.g. Baby Aisha"
@@ -4117,21 +3089,11 @@ export const AnimalProfilePage: React.FC = () => {
               </div>
             </div>
 
-            <div>
-              <label className="text-[10px] font-bold text-slate-500 block">Birth Date</label>
-              <input
-                type="date"
-                value={newOffspring.dob}
-                onChange={(e) => setNewOffspring({ ...newOffspring, dob: e.target.value })}
-                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
-              />
-            </div>
-
             <button
               type="submit"
               className="w-full bg-emerald-600 text-white font-bold text-xs py-3 rounded-xl shadow"
             >
-              Generate Offspring Passport
+              Generate Offspring Record
             </button>
           </form>
         </div>
