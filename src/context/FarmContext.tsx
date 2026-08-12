@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { showSuccess, showError } from "@/utils/toast";
 import { supabase } from "@/lib/supabaseClient";
 
-export const DEFAULT_ANIMAL_PHOTO = "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=400";
+export const DEFAULT_ANIMAL_PHOTO = "/placeholder.svg";
 
 export interface Animal {
   id: string;
@@ -232,6 +232,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoadingData, setIsLoadingData] = useState<boolean>(true);
 
   const fetchingDashboardRef = useRef<boolean>(false);
+  const fetchingAnimalsRef = useRef<boolean>(false);
+  const fetchingAnimalProfileRef = useRef<string | null>(null);
   const isLoggingOutRef = useRef<boolean>(false);
   
   const [farmProfile, setFarmProfile] = useState<FarmProfile>({
@@ -239,7 +241,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     description: "Agricultural production unit.",
     ownerName: "Operator",
     location: "Kano, Nigeria",
-    image: "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=600&auto=format&fit=crop&q=80",
+    image: "/placeholder.svg",
   });
 
   const [session, setSession] = useState<UserSession>({
@@ -263,6 +265,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // 1. LIGHTWEIGHT DASHBOARD DATA LOADER (Summary info only)
   const loadDashboardData = useCallback(async () => {
+    if (!session.userId) return;
     if (fetchingDashboardRef.current) return;
     fetchingDashboardRef.current = true;
     setIsLoadingData(true);
@@ -277,13 +280,13 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         resFarmNotes,
         resLogs
       ] = await Promise.all([
-        supabase.from("accounts").select("farm_name, operator_name, location").limit(1).maybeSingle(),
-        supabase.from("animals").select("id, animal_code, name, species, sex, status, health_status"),
-        supabase.from("treatments").select("id, animal_id, condition, medication, start_date, end_date, status, follow_up_date").eq("status", "Ongoing"),
-        supabase.from("inventory").select("id, name, category, quantity, unit, min_stock"),
-        supabase.from("reminders").select("id, title, type, due_date, animal_id, completed, notes").eq("completed", false),
-        supabase.from("farm_notes").select("id, farm_id, title, content, created_by, created_at, updated_at").order("created_at", { ascending: false }).limit(5),
-        supabase.from("activity_logs").select("id, type, description, date, actor, target_id").order("date", { ascending: false }).limit(10)
+        supabase.from("accounts").select("farm_name, operator_name, location").eq("user_id", session.userId).limit(1).maybeSingle(),
+        supabase.from("animals").select("id, animal_code, name, species, sex, status, health_status").eq("user_id", session.userId),
+        supabase.from("treatments").select("id, animal_id, condition, medication, start_date, end_date, status, follow_up_date").eq("user_id", session.userId).eq("status", "Ongoing"),
+        supabase.from("inventory").select("id, name, category, quantity, unit, min_stock").eq("user_id", session.userId),
+        supabase.from("reminders").select("id, title, type, due_date, animal_id, completed, notes").eq("user_id", session.userId).eq("completed", false),
+        supabase.from("farm_notes").select("id, farm_id, title, content, created_by, created_at, updated_at").eq("user_id", session.userId).order("created_at", { ascending: false }).limit(5),
+        supabase.from("activity_logs").select("id, type, description, date, actor, target_id").eq("user_id", session.userId).order("date", { ascending: false }).limit(10)
       ]);
 
       if (acctRes.data) {
@@ -380,153 +383,170 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       fetchingDashboardRef.current = false;
       setIsLoadingData(false);
     }
-  }, []);
+  }, [session.userId]);
 
   // OWNED BY /animals ROUTE ONLY
   const loadAnimals = useCallback(async () => {
-    const { data, error } = await supabase
-      .from("animals")
-      .select("id, animal_code, name, species, breed, sex, dob, purchase_date, source, status, health_status, primary_photo, photos, mother_id, father_id, notes, created_at")
-      .order("created_at", { ascending: false });
+    if (!session.userId) return;
+    if (fetchingAnimalsRef.current) return;
+    fetchingAnimalsRef.current = true;
 
-    if (!error && data) {
-      setAnimals(data.map((a: any) => ({
-        id: a.id,
-        animal_code: a.animal_code,
-        name: a.name || "",
-        species: a.species,
-        breed: a.breed,
-        sex: a.sex,
-        dob: a.dob,
-        purchaseDate: a.purchase_date,
-        source: a.source,
-        status: a.status,
-        healthStatus: a.health_status,
-        primaryPhoto: a.primary_photo || DEFAULT_ANIMAL_PHOTO,
-        photos: (a.photos && a.photos.length > 0) ? a.photos : [DEFAULT_ANIMAL_PHOTO],
-        notes: a.notes || "",
-        parents: { motherId: a.mother_id, fatherId: a.father_id },
-        created_at: a.created_at
-      })));
+    try {
+      const { data, error } = await supabase
+        .from("animals")
+        .select("id, animal_code, name, species, breed, sex, dob, purchase_date, source, status, health_status, primary_photo, photos, mother_id, father_id, notes, created_at")
+        .eq("user_id", session.userId)
+        .order("created_at", { ascending: false });
+
+      if (!error && data) {
+        setAnimals(data.map((a: any) => ({
+          id: a.id,
+          animal_code: a.animal_code,
+          name: a.name || "",
+          species: a.species,
+          breed: a.breed,
+          sex: a.sex,
+          dob: a.dob,
+          purchaseDate: a.purchase_date,
+          source: a.source,
+          status: a.status,
+          healthStatus: a.health_status,
+          primaryPhoto: a.primary_photo || DEFAULT_ANIMAL_PHOTO,
+          photos: (a.photos && a.photos.length > 0) ? a.photos : [DEFAULT_ANIMAL_PHOTO],
+          notes: a.notes || "",
+          parents: { motherId: a.mother_id, fatherId: a.father_id },
+          created_at: a.created_at
+        })));
+      }
+    } finally {
+      fetchingAnimalsRef.current = false;
     }
-  }, []);
+  }, [session.userId]);
 
   // OWNED BY /animals/:id ROUTE ONLY
   const loadAnimalProfile = useCallback(async (animalId: string) => {
-    if (!animalId) return;
+    if (!animalId || !session.userId) return;
+    if (fetchingAnimalProfileRef.current === animalId) return;
+    fetchingAnimalProfileRef.current = animalId;
 
-    const [resAnimal, resHealth, resTreatments, resWeights, resBreeding, resNotes, resLogs] = await Promise.all([
-      supabase.from("animals").select("*").eq("id", animalId).maybeSingle(),
-      supabase.from("health_records").select("*").eq("animal_id", animalId).order("date", { ascending: false }),
-      supabase.from("treatments").select("*").eq("animal_id", animalId).order("start_date", { ascending: false }),
-      supabase.from("weight_records").select("*").eq("animal_id", animalId).order("date", { ascending: true }),
-      supabase.from("breeding_records").select("*").or(`female_id.eq.${animalId},male_id.eq.${animalId}`).order("date", { ascending: false }),
-      supabase.from("animal_notes").select("*").eq("animal_id", animalId).order("created_at", { ascending: false }),
-      supabase.from("activity_logs").select("*").eq("target_id", animalId).order("date", { ascending: false }).limit(20)
-    ]);
+    try {
+      const [resAnimal, resHealth, resTreatments, resWeights, resBreeding, resNotes, resLogs] = await Promise.all([
+        supabase.from("animals").select("*").eq("id", animalId).eq("user_id", session.userId).maybeSingle(),
+        supabase.from("health_records").select("*").eq("animal_id", animalId).eq("user_id", session.userId).order("date", { ascending: false }),
+        supabase.from("treatments").select("*").eq("animal_id", animalId).eq("user_id", session.userId).order("start_date", { ascending: false }),
+        supabase.from("weight_records").select("*").eq("animal_id", animalId).eq("user_id", session.userId).order("date", { ascending: true }),
+        supabase.from("breeding_records").select("*").eq("user_id", session.userId).or(`female_id.eq.${animalId},male_id.eq.${animalId}`).order("date", { ascending: false }),
+        supabase.from("animal_notes").select("*").eq("animal_id", animalId).eq("user_id", session.userId).order("created_at", { ascending: false }),
+        supabase.from("activity_logs").select("*").eq("target_id", animalId).eq("user_id", session.userId).order("date", { ascending: false }).limit(20)
+      ]);
 
-    if (resAnimal.data) {
-      const a = resAnimal.data;
-      const loadedAnimal: Animal = {
-        id: a.id,
-        animal_code: a.animal_code,
-        name: a.name || "",
-        species: a.species,
-        breed: a.breed,
-        sex: a.sex,
-        dob: a.dob,
-        purchaseDate: a.purchase_date,
-        source: a.source,
-        status: a.status,
-        healthStatus: a.health_status,
-        primaryPhoto: a.primary_photo || DEFAULT_ANIMAL_PHOTO,
-        photos: (a.photos && a.photos.length > 0) ? a.photos : [DEFAULT_ANIMAL_PHOTO],
-        notes: a.notes || "",
-        parents: { motherId: a.mother_id, fatherId: a.father_id },
-        created_at: a.created_at
-      };
+      if (resAnimal.data) {
+        const a = resAnimal.data;
+        const loadedAnimal: Animal = {
+          id: a.id,
+          animal_code: a.animal_code,
+          name: a.name || "",
+          species: a.species,
+          breed: a.breed,
+          sex: a.sex,
+          dob: a.dob,
+          purchaseDate: a.purchase_date,
+          source: a.source,
+          status: a.status,
+          healthStatus: a.health_status,
+          primaryPhoto: a.primary_photo || DEFAULT_ANIMAL_PHOTO,
+          photos: (a.photos && a.photos.length > 0) ? a.photos : [DEFAULT_ANIMAL_PHOTO],
+          notes: a.notes || "",
+          parents: { motherId: a.mother_id, fatherId: a.father_id },
+          created_at: a.created_at
+        };
 
-      setAnimals(prev => {
-        const exists = prev.some(item => item.id === animalId);
-        if (exists) return prev.map(item => item.id === animalId ? loadedAnimal : item);
-        return [...prev, loadedAnimal];
-      });
+        setAnimals(prev => {
+          const exists = prev.some(item => item.id === animalId);
+          if (exists) return prev.map(item => item.id === animalId ? loadedAnimal : item);
+          return [...prev, loadedAnimal];
+        });
+      }
+
+      if (resHealth.data) {
+        setHealthRecords(resHealth.data.map((h: any) => ({
+          id: h.id,
+          animal_id: h.animal_id,
+          type: h.type,
+          date: h.date,
+          details: h.details,
+          medication: h.medication,
+          recordedBy: h.recorded_by
+        })));
+      }
+
+      if (resTreatments.data) {
+        setTreatments(resTreatments.data.map((t: any) => ({
+          id: t.id,
+          animal_id: t.animal_id,
+          condition: t.condition,
+          medication: t.medication,
+          startDate: t.start_date,
+          endDate: t.end_date,
+          status: t.status,
+          notes: t.notes,
+          followUpDate: t.follow_up_date
+        })));
+      }
+
+      if (resWeights.data) {
+        setWeightRecords(resWeights.data.map((w: any) => ({
+          id: w.id,
+          animal_id: w.animal_id,
+          weight: parseFloat(w.weight),
+          date: w.date,
+          notes: w.notes
+        })));
+      }
+
+      if (resBreeding.data) {
+        setBreedingRecords(resBreeding.data.map((b: any) => ({
+          id: b.id,
+          female_id: b.female_id,
+          male_id: b.male_id,
+          date: b.date,
+          status: b.status,
+          notes: b.notes
+        })));
+      }
+
+      if (resNotes.data) {
+        setAnimalNotes(resNotes.data.map((an: any) => ({
+          id: an.id,
+          animal_id: an.animal_id,
+          content: an.content,
+          created_by: an.created_by || "Operator",
+          created_at: an.created_at || new Date().toISOString(),
+          updated_at: an.updated_at || new Date().toISOString()
+        })));
+      }
+
+      if (resLogs.data) {
+        setActivityLogs(resLogs.data.map((l: any) => ({
+          id: l.id,
+          type: l.type,
+          description: l.description,
+          date: l.date,
+          actor: l.actor,
+          targetId: l.target_id
+        })));
+      }
+    } finally {
+      fetchingAnimalProfileRef.current = null;
     }
-
-    if (resHealth.data) {
-      setHealthRecords(resHealth.data.map((h: any) => ({
-        id: h.id,
-        animal_id: h.animal_id,
-        type: h.type,
-        date: h.date,
-        details: h.details,
-        medication: h.medication,
-        recordedBy: h.recorded_by
-      })));
-    }
-
-    if (resTreatments.data) {
-      setTreatments(resTreatments.data.map((t: any) => ({
-        id: t.id,
-        animal_id: t.animal_id,
-        condition: t.condition,
-        medication: t.medication,
-        startDate: t.start_date,
-        endDate: t.end_date,
-        status: t.status,
-        notes: t.notes,
-        followUpDate: t.follow_up_date
-      })));
-    }
-
-    if (resWeights.data) {
-      setWeightRecords(resWeights.data.map((w: any) => ({
-        id: w.id,
-        animal_id: w.animal_id,
-        weight: parseFloat(w.weight),
-        date: w.date,
-        notes: w.notes
-      })));
-    }
-
-    if (resBreeding.data) {
-      setBreedingRecords(resBreeding.data.map((b: any) => ({
-        id: b.id,
-        female_id: b.female_id,
-        male_id: b.male_id,
-        date: b.date,
-        status: b.status,
-        notes: b.notes
-      })));
-    }
-
-    if (resNotes.data) {
-      setAnimalNotes(resNotes.data.map((an: any) => ({
-        id: an.id,
-        animal_id: an.animal_id,
-        content: an.content,
-        created_by: an.created_by || "Operator",
-        created_at: an.created_at || new Date().toISOString(),
-        updated_at: an.updated_at || new Date().toISOString()
-      })));
-    }
-
-    if (resLogs.data) {
-      setActivityLogs(resLogs.data.map((l: any) => ({
-        id: l.id,
-        type: l.type,
-        description: l.description,
-        date: l.date,
-        actor: l.actor,
-        targetId: l.target_id
-      })));
-    }
-  }, []);
+  }, [session.userId]);
 
   const loadInventory = useCallback(async () => {
+    if (!session.userId) return;
     const { data, error } = await supabase
       .from("inventory")
-      .select("id, name, category, quantity, unit, min_stock, expiry_date, notes");
+      .select("id, name, category, quantity, unit, min_stock, expiry_date, notes")
+      .eq("user_id", session.userId);
 
     if (!error && data) {
       setInventory(data.map((i: any) => ({
@@ -540,12 +560,14 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         notes: i.notes
       })));
     }
-  }, []);
+  }, [session.userId]);
 
   const loadFarmNotes = useCallback(async () => {
+    if (!session.userId) return;
     const { data, error } = await supabase
       .from("farm_notes")
       .select("id, farm_id, title, content, created_by, created_at, updated_at")
+      .eq("user_id", session.userId)
       .order("created_at", { ascending: false });
 
     if (!error && data) {
@@ -559,12 +581,14 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updated_at: fn.updated_at || new Date().toISOString()
       })));
     }
-  }, []);
+  }, [session.userId]);
 
   const loadContacts = useCallback(async () => {
+    if (!session.userId) return;
     const { data, error } = await supabase
       .from("contacts")
-      .select("id, name, role, phone, whatsapp, email, address, notes");
+      .select("id, name, role, phone, whatsapp, email, address, notes")
+      .eq("user_id", session.userId);
 
     if (!error && data) {
       setContacts(data.map((c: any) => ({
@@ -578,7 +602,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         notes: c.notes
       })));
     }
-  }, []);
+  }, [session.userId]);
 
   const reloadFarmData = useCallback(async () => {
     if (session.userId) {
@@ -651,6 +675,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       } else if (event === "SIGNED_OUT") {
         fetchingDashboardRef.current = false;
+        fetchingAnimalsRef.current = false;
+        fetchingAnimalProfileRef.current = null;
         setSession({
           userId: undefined,
           email: "",
@@ -685,6 +711,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [session.isAuthenticated, session.userId, loadDashboardData]);
 
   const logActivity = async (type: string, description: string, actor: string, targetId?: string) => {
+    const newId = "l_" + Date.now();
     const newLog = {
       id: "l_" + Date.now(),
       type,
@@ -842,6 +869,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       isLoggingOutRef.current = false;
       fetchingDashboardRef.current = false;
+      fetchingAnimalsRef.current = false;
+      fetchingAnimalProfileRef.current = null;
       setSession({ userId: undefined, email: "", name: "", isAuthenticated: false });
       setAnimals([]);
       setHealthRecords([]);

@@ -66,7 +66,7 @@ export const Dashboard: React.FC = () => {
   const [isDeletingNote, setIsDeletingNote] = useState(false);
 
   // Fallback priority logic
-  const farmHeaderImage = farmProfile.image || "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=1200&auto=format&fit=crop&q=80";
+  const farmHeaderImage = farmProfile.image || "/placeholder.svg";
 
   // Filter out Sold and Deceased livestock from active counts
   const activeAnimals = animals.filter(a => a.status !== "Sold" && a.status !== "Deceased");
@@ -163,7 +163,7 @@ export const Dashboard: React.FC = () => {
 
     setIsSavingNoteEdit(true);
     try {
-      const success = await updateFarmNote(selectedFarmNote.id, {
+      const success = await updateFarmNote(selectedNote.id, {
         title: noteTitle.trim() || undefined,
         content: noteContent.trim(),
       });
