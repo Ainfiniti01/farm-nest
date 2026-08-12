@@ -13,8 +13,7 @@ import {
   X,
   Edit,
   Plus,
-  FileText,
-  Loader2
+  FileText
 } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
@@ -62,11 +61,6 @@ export const AnimalProfilePage: React.FC = () => {
   const [selectedAnimalNote, setSelectedAnimalNote] = useState<AnimalNote | null>(null);
   const [isEditingAnimalNote, setIsEditingAnimalNote] = useState(false);
   const [noteContentText, setNoteContentText] = useState("");
-
-  // Loading states for Animal Notes
-  const [isSubmittingAnimalNote, setIsSubmittingAnimalNote] = useState(false);
-  const [isSavingAnimalNoteEdit, setIsSavingAnimalNoteEdit] = useState(false);
-  const [isDeletingAnimalNote, setIsDeletingAnimalNote] = useState(false);
 
   // CONFIRMATION POPUP STATES
   const [pendingConfirm, setPendingConfirm] = useState<{
@@ -302,20 +296,13 @@ export const AnimalProfilePage: React.FC = () => {
       return;
     }
 
-    setIsSubmittingAnimalNote(true);
-    try {
-      const success = await addAnimalNote({
-        animal_id: animal.id,
-        content: noteContentText.trim()
-      });
+    await addAnimalNote({
+      animal_id: animal.id,
+      content: noteContentText.trim()
+    });
 
-      if (success) {
-        setShowAddAnimalNoteModal(false);
-        setNoteContentText("");
-      }
-    } finally {
-      setIsSubmittingAnimalNote(false);
-    }
+    setShowAddAnimalNoteModal(false);
+    setNoteContentText("");
   };
 
   const handleSelectAnimalNote = (note: AnimalNote) => {
@@ -328,17 +315,9 @@ export const AnimalProfilePage: React.FC = () => {
     e.preventDefault();
     if (!selectedAnimalNote || !noteContentText.trim()) return;
 
-    setIsSavingAnimalNoteEdit(true);
-    try {
-      const success = await updateAnimalNote(selectedAnimalNote.id, noteContentText.trim());
-      if (success) {
-        setSelectedAnimalNote(null);
-        setIsEditingAnimalNote(false);
-        setNoteContentText("");
-      }
-    } finally {
-      setIsSavingAnimalNoteEdit(false);
-    }
+    await updateAnimalNote(selectedAnimalNote.id, noteContentText.trim());
+    setSelectedAnimalNote(prev => prev ? { ...prev, content: noteContentText.trim() } : null);
+    setIsEditingAnimalNote(false);
   };
 
   const handleDeleteAnimalNoteTrigger = (noteId: string) => {
@@ -346,16 +325,9 @@ export const AnimalProfilePage: React.FC = () => {
       title: "Delete this note?",
       message: "This action cannot be undone.",
       onConfirm: async () => {
-        setIsDeletingAnimalNote(true);
-        try {
-          const success = await deleteAnimalNote(noteId);
-          if (success) {
-            setPendingConfirm(null);
-            setSelectedAnimalNote(null);
-          }
-        } finally {
-          setIsDeletingAnimalNote(false);
-        }
+        await deleteAnimalNote(noteId);
+        setPendingConfirm(null);
+        setSelectedAnimalNote(null);
       }
     });
   };
@@ -1145,12 +1117,7 @@ export const AnimalProfilePage: React.FC = () => {
           >
             <div className="flex items-center justify-between border-b pb-2">
               <h3 className="font-extrabold text-sm text-slate-900">Add Animal Note</h3>
-              <button 
-                type="button" 
-                onClick={() => !isSubmittingAnimalNote && setShowAddAnimalNoteModal(false)} 
-                disabled={isSubmittingAnimalNote}
-                className="text-slate-400 hover:text-slate-600 p-1 disabled:opacity-50"
-              >
+              <button type="button" onClick={() => setShowAddAnimalNoteModal(false)} className="text-slate-400 hover:text-slate-600 p-1">
                 <X size={16} />
               </button>
             </div>
@@ -1167,9 +1134,8 @@ export const AnimalProfilePage: React.FC = () => {
                 placeholder="e.g. Small white patch on forehead, less active today, eating normally..."
                 value={noteContentText}
                 onChange={(e) => setNoteContentText(e.target.value)}
-                disabled={isSubmittingAnimalNote}
                 rows={4}
-                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-60"
+                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none focus:ring-1 focus:ring-emerald-500"
                 required
               />
             </div>
@@ -1178,24 +1144,15 @@ export const AnimalProfilePage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowAddAnimalNoteModal(false)}
-                disabled={isSubmittingAnimalNote}
-                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition disabled:opacity-50"
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                disabled={isSubmittingAnimalNote}
-                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow transition disabled:opacity-60 flex items-center justify-center gap-1.5"
+                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow transition"
               >
-                {isSubmittingAnimalNote ? (
-                  <>
-                    <Loader2 size={14} className="animate-spin" />
-                    <span>Saving...</span>
-                  </>
-                ) : (
-                  "Save Note"
-                )}
+                Save Note
               </button>
             </div>
           </form>
@@ -1210,12 +1167,7 @@ export const AnimalProfilePage: React.FC = () => {
               <h3 className="font-extrabold text-sm text-slate-900">
                 {isEditingAnimalNote ? "Edit Animal Note" : "Animal Note"}
               </h3>
-              <button 
-                type="button" 
-                onClick={() => !isSavingAnimalNoteEdit && setSelectedAnimalNote(null)} 
-                disabled={isSavingAnimalNoteEdit}
-                className="text-slate-400 hover:text-slate-600 p-1 disabled:opacity-50"
-              >
+              <button type="button" onClick={() => setSelectedAnimalNote(null)} className="text-slate-400 hover:text-slate-600 p-1">
                 <X size={16} />
               </button>
             </div>
@@ -1261,9 +1213,8 @@ export const AnimalProfilePage: React.FC = () => {
                   <textarea
                     value={noteContentText}
                     onChange={(e) => setNoteContentText(e.target.value)}
-                    disabled={isSavingAnimalNoteEdit}
                     rows={4}
-                    className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-60"
+                    className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none focus:ring-1 focus:ring-emerald-500"
                     required
                   />
                 </div>
@@ -1272,24 +1223,15 @@ export const AnimalProfilePage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setIsEditingAnimalNote(false)}
-                    disabled={isSavingAnimalNoteEdit}
-                    className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition disabled:opacity-50"
+                    className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    disabled={isSavingAnimalNoteEdit}
-                    className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow transition disabled:opacity-60 flex items-center justify-center gap-1.5"
+                    className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow transition"
                   >
-                    {isSavingAnimalNoteEdit ? (
-                      <>
-                        <Loader2 size={14} className="animate-spin" />
-                        <span>Saving...</span>
-                      </>
-                    ) : (
-                      "Save Changes"
-                    )}
+                    Save Changes
                   </button>
                 </div>
               </form>
@@ -1342,25 +1284,16 @@ export const AnimalProfilePage: React.FC = () => {
             <p className="text-xs text-slate-500 leading-relaxed">{pendingConfirm.message}</p>
             <div className="pt-2 flex gap-2">
               <button
-                onClick={() => !isDeletingAnimalNote && setPendingConfirm(null)}
-                disabled={isDeletingAnimalNote}
-                className="flex-1 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold transition border disabled:opacity-50"
+                onClick={() => setPendingConfirm(null)}
+                className="flex-1 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold transition border"
               >
                 Cancel
               </button>
               <button
                 onClick={pendingConfirm.onConfirm}
-                disabled={isDeletingAnimalNote}
-                className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold transition shadow disabled:opacity-60 flex items-center justify-center gap-1.5"
+                className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold transition shadow"
               >
-                {isDeletingAnimalNote ? (
-                  <>
-                    <Loader2 size={14} className="animate-spin" />
-                    <span>Deleting...</span>
-                  </>
-                ) : (
-                  "Confirm Act"
-                )}
+                Confirm Act
               </button>
             </div>
           </div>

@@ -13,10 +13,9 @@ import {
   HelpCircle,
   Calendar,
   User,
-  X,
-  Loader2
+  X
 } from "lucide-react";
-import { showError } from "@/utils/toast";
+import { showSuccess, showError } from "@/utils/toast";
 
 export const FarmNotesPage: React.FC = () => {
   const { farmNotes, addFarmNote, updateFarmNote, deleteFarmNote } = useFarm();
@@ -29,11 +28,6 @@ export const FarmNotesPage: React.FC = () => {
   // Form states for creation / editing
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
-
-  // Loading states
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSavingEdit, setIsSavingEdit] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
 
   // Confirmation dialog state
   const [pendingConfirm, setPendingConfirm] = useState<{
@@ -55,21 +49,14 @@ export const FarmNotesPage: React.FC = () => {
       return;
     }
 
-    setIsSubmitting(true);
-    try {
-      const success = await addFarmNote({
-        title: title.trim() || undefined,
-        content: content.trim(),
-      });
+    await addFarmNote({
+      title: title.trim() || undefined,
+      content: content.trim(),
+    });
 
-      if (success) {
-        setShowAddModal(false);
-        setTitle("");
-        setContent("");
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
+    setShowAddModal(false);
+    setTitle("");
+    setContent("");
   };
 
   const handleOpenNoteModal = (note: FarmNote) => {
@@ -87,22 +74,14 @@ export const FarmNotesPage: React.FC = () => {
       return;
     }
 
-    setIsSavingEdit(true);
-    try {
-      const success = await updateFarmNote(selectedNote.id, {
-        title: title.trim() || undefined,
-        content: content.trim(),
-      });
+    await updateFarmNote(selectedNote.id, {
+      title: title.trim() || undefined,
+      content: content.trim(),
+    });
 
-      if (success) {
-        setSelectedNote(null);
-        setIsEditing(false);
-        setTitle("");
-        setContent("");
-      }
-    } finally {
-      setIsSavingEdit(false);
-    }
+    // Update local selected note representation
+    setSelectedNote(prev => prev ? { ...prev, title: title.trim() || undefined, content: content.trim() } : null);
+    setIsEditing(false);
   };
 
   const handleDeleteTrigger = (noteId: string) => {
@@ -110,16 +89,9 @@ export const FarmNotesPage: React.FC = () => {
       title: "Delete this note?",
       message: "This action cannot be undone.",
       onConfirm: async () => {
-        setIsDeleting(true);
-        try {
-          const success = await deleteFarmNote(noteId);
-          if (success) {
-            setPendingConfirm(null);
-            setSelectedNote(null);
-          }
-        } finally {
-          setIsDeleting(false);
-        }
+        await deleteFarmNote(noteId);
+        setPendingConfirm(null);
+        setSelectedNote(null);
       }
     });
   };
@@ -235,9 +207,8 @@ export const FarmNotesPage: React.FC = () => {
               <h3 className="font-extrabold text-sm text-slate-900">Add Farm Note</h3>
               <button 
                 type="button" 
-                onClick={() => !isSubmitting && setShowAddModal(false)} 
-                disabled={isSubmitting}
-                className="text-slate-400 hover:text-slate-600 p-1 disabled:opacity-50"
+                onClick={() => setShowAddModal(false)} 
+                className="text-slate-400 hover:text-slate-600 p-1"
               >
                 <X size={16} />
               </button>
@@ -252,8 +223,7 @@ export const FarmNotesPage: React.FC = () => {
                 placeholder="e.g. Started adding salt to feed"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                disabled={isSubmitting}
-                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-60"
+                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none focus:ring-1 focus:ring-emerald-500"
               />
             </div>
 
@@ -265,9 +235,8 @@ export const FarmNotesPage: React.FC = () => {
                 placeholder="Describe general farm activities, schedule shifts, or feed adjustments..."
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
-                disabled={isSubmitting}
                 rows={4}
-                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-60"
+                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none focus:ring-1 focus:ring-emerald-500"
                 required
               />
             </div>
@@ -276,24 +245,15 @@ export const FarmNotesPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowAddModal(false)}
-                disabled={isSubmitting}
-                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition disabled:opacity-50"
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                disabled={isSubmitting}
-                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow transition disabled:opacity-60 flex items-center justify-center gap-1.5"
+                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow transition"
               >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 size={14} className="animate-spin" />
-                    <span>Saving...</span>
-                  </>
-                ) : (
-                  "Save Note"
-                )}
+                Save Note
               </button>
             </div>
           </form>
@@ -310,9 +270,8 @@ export const FarmNotesPage: React.FC = () => {
               </h3>
               <button 
                 type="button" 
-                onClick={() => !isSavingEdit && setSelectedNote(null)} 
-                disabled={isSavingEdit}
-                className="text-slate-400 hover:text-slate-600 p-1 disabled:opacity-50"
+                onClick={() => setSelectedNote(null)} 
+                className="text-slate-400 hover:text-slate-600 p-1"
               >
                 <X size={16} />
               </button>
@@ -368,8 +327,7 @@ export const FarmNotesPage: React.FC = () => {
                     type="text"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    disabled={isSavingEdit}
-                    className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-60"
+                    className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none focus:ring-1 focus:ring-emerald-500"
                   />
                 </div>
 
@@ -380,9 +338,8 @@ export const FarmNotesPage: React.FC = () => {
                   <textarea
                     value={content}
                     onChange={(e) => setContent(e.target.value)}
-                    disabled={isSavingEdit}
                     rows={4}
-                    className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-60"
+                    className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none focus:ring-1 focus:ring-emerald-500"
                     required
                   />
                 </div>
@@ -391,24 +348,15 @@ export const FarmNotesPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setIsEditing(false)}
-                    disabled={isSavingEdit}
-                    className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition disabled:opacity-50"
+                    className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    disabled={isSavingEdit}
-                    className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow transition disabled:opacity-60 flex items-center justify-center gap-1.5"
+                    className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow transition"
                   >
-                    {isSavingEdit ? (
-                      <>
-                        <Loader2 size={14} className="animate-spin" />
-                        <span>Saving...</span>
-                      </>
-                    ) : (
-                      "Save Changes"
-                    )}
+                    Save Changes
                   </button>
                 </div>
               </form>
@@ -430,25 +378,16 @@ export const FarmNotesPage: React.FC = () => {
             <p className="text-xs text-slate-500 leading-relaxed">{pendingConfirm.message}</p>
             <div className="pt-2 flex gap-2">
               <button
-                onClick={() => !isDeleting && setPendingConfirm(null)}
-                disabled={isDeleting}
-                className="flex-1 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold transition border disabled:opacity-50"
+                onClick={() => setPendingConfirm(null)}
+                className="flex-1 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold transition border"
               >
                 Cancel
               </button>
               <button
                 onClick={pendingConfirm.onConfirm}
-                disabled={isDeleting}
-                className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-extrabold transition shadow disabled:opacity-60 flex items-center justify-center gap-1.5"
+                className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-extrabold transition shadow"
               >
-                {isDeleting ? (
-                  <>
-                    <Loader2 size={14} className="animate-spin" />
-                    <span>Deleting...</span>
-                  </>
-                ) : (
-                  "Confirm Delete"
-                )}
+                Delete
               </button>
             </div>
           </div>
