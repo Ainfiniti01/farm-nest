@@ -875,8 +875,23 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addAnimal = async (animalData: Omit<Animal, "id" | "animal_code" | "created_at">) => {
     const prefix = animalData.species.toUpperCase();
-    const speciesCount = animals.filter(a => a.species === animalData.species).length + 1;
-    const generatedCode = `${prefix}-${speciesCount.toString().padStart(4, "0")}`;
+    
+    // Query Database directly for existing animal_codes to prevent duplicate key constraint violations
+    let dbCodesQuery = supabase.from("animals").select("animal_code").ilike("animal_code", `${prefix}-%`);
+    if (session.userId) {
+      dbCodesQuery = dbCodesQuery.eq("user_id", session.userId);
+    }
+    const { data: existingRows } = await dbCodesQuery;
+    const existingCodeSet = new Set((existingRows || []).map((r: any) => r.animal_code));
+
+    let countNumber = (existingRows?.length || 0) + 1;
+    let generatedCode = `${prefix}-${countNumber.toString().padStart(4, "0")}`;
+
+    while (existingCodeSet.has(generatedCode)) {
+      countNumber++;
+      generatedCode = `${prefix}-${countNumber.toString().padStart(4, "0")}`;
+    }
+
     const newId = "a_" + Date.now();
 
     const dbPayload = {
