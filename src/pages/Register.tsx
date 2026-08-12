@@ -62,7 +62,7 @@ export const Register: React.FC = () => {
       
       <div className="max-w-md w-full bg-slate-800/80 backdrop-blur-md p-8 rounded-3xl border border-slate-700/60 shadow-2xl z-10 space-y-6 max-h-[90vh] overflow-y-auto">
         <div className="text-center space-y-1">
-          <span className="text-4xl block">🌾</span>
+          <span className="text-4xl block">👨🏽‍🌾</span>
           <h2 className="text-2xl font-black tracking-tight text-white">Setup FarmNest Profile</h2>
           <p className="text-slate-400 text-xs">Create your digital identifier credentials as primary administrator.</p>
         </div>

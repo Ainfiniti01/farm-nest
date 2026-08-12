@@ -104,7 +104,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-9 h-9 bg-emerald-600 rounded-xl flex items-center justify-center text-white font-bold text-lg">
-              🌾
+              👨🏽‍🌾
             </div>
             <div>
               <h1 className="font-extrabold text-emerald-950 text-sm leading-none">FarmNest</h1>

@@ -352,12 +352,6 @@ export const Animals: React.FC = () => {
                 />
               </div>
 
-              <div className="flex gap-1.5 mt-1">
-                <button type="button" onClick={() => handleSimulatePhoto("goat")} className="px-2.5 py-1 bg-emerald-50 text-emerald-800 text-[10px] font-bold rounded">Goat Preset</button>
-                <button type="button" onClick={() => handleSimulatePhoto("ram")} className="px-2.5 py-1 bg-blue-50 text-blue-800 text-[10px] font-bold rounded">Ram Preset</button>
-                <button type="button" onClick={() => handleSimulatePhoto("chicken")} className="px-2.5 py-1 bg-purple-50 text-purple-800 text-[10px] font-bold rounded">Hen Preset</button>
-              </div>
-
               {newAnimal.primaryPhoto && (
                 <div className="relative h-24 w-24 rounded-xl overflow-hidden border">
                   <img src={newAnimal.primaryPhoto} className="w-full h-full object-cover" />

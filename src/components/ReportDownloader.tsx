@@ -51,7 +51,7 @@ export const ReportDownloader: React.FC = () => {
           </style>
         </head>
         <body>
-          <h1>🌾 Farm Master Report — V1 MVP</h1>
+          <h1>👨🏽‍🌾 Farm Master Report — V1 MVP</h1>
           <p>Generated on: ${new Date().toLocaleDateString()}</p>
           <p>Total Registered Livestock: <strong>${animals.length}</strong></p>
 

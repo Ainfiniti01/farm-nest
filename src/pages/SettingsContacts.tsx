@@ -160,7 +160,7 @@ export const SettingsContacts: React.FC = () => {
                   className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
                 >
                   <option value="Veterinarian">Veterinarian 🩺</option>
-                  <option value="Farm Manager">Farm Manager 🌾</option>
+                  <option value="Farm Manager">Farm Manager 👨🏽‍🌾</option>
                   <option value="Worker">Worker</option>
                   <option value="Feed Supplier">Feed Supplier</option>
                   <option value="Medication Supplier">Drug Supplier</option>
