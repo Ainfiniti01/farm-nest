@@ -45,7 +45,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
           {/* Brand header */}
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-white/10 rounded-2xl flex items-center justify-center text-xl shadow border border-white/20">
-              🌾
+              👨🏽‍🌾
             </div>
             <div>
               <h2 className="font-extrabold text-base leading-none text-white tracking-wide">FarmNest</h2>
