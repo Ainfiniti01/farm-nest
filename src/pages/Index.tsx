@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useFarm, Animal, HealthRecord, Treatment, InventoryItem, Contact, Reminder } from "@/context/FarmContext";
@@ -760,7 +762,7 @@ const Index = () => {
                 <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
                 <input
                   type="text"
-                  placeholder="Search tag (e.g. GOAT-0024, Aisha)..."
+                  placeholder="Search tag (e.g. ADG001, Aisha)..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-1 focus:ring-emerald-500 outline-none transition"
@@ -808,6 +810,9 @@ const Index = () => {
             {/* Animals Grid List */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-2">
               {filteredAnimals.map((animal) => {
+                const hasCustomName = Boolean(animal.name && animal.name.trim().length > 0);
+                const displayName = hasCustomName ? animal.name : animal.animal_code;
+
                 return (
                   <div
                     key={animal.id}
@@ -817,7 +822,7 @@ const Index = () => {
                     <div className="relative h-32 bg-slate-100">
                       <img
                         src={animal.primaryPhoto}
-                        alt={animal.name}
+                        alt={displayName}
                         onClick={() => setFullscreenPhoto(animal.primaryPhoto)}
                         className="w-full h-full object-cover group-hover:scale-105 transition duration-300 cursor-zoom-in"
                       />
@@ -843,10 +848,14 @@ const Index = () => {
                           <span className="text-[10px] font-bold text-slate-400">{animal.species}</span>
                           <span className="text-[10px] text-slate-500">{animal.sex === "Female" ? "♀️" : "♂️"}</span>
                         </div>
-                        <h4 className="font-extrabold text-xs text-slate-900 mt-0.5">
-                          {animal.name || "Unnamed"}
+                        <h4 className="font-extrabold text-xs text-slate-900 mt-0.5 truncate">
+                          {displayName}
                         </h4>
-                        <p className="text-[10px] font-mono text-slate-500 mt-0.5">{animal.animal_code}</p>
+                        {hasCustomName && (
+                          <p className="text-[10px] font-mono text-slate-500 mt-0.5 truncate">
+                            {animal.animal_code}
+                          </p>
+                        )}
                       </div>
 
                       <div className="pt-2 border-t border-slate-50 flex items-center justify-between mt-2">
@@ -870,7 +879,7 @@ const Index = () => {
         {/* TAB 3: FARM AI */}
         {activeTab === "ai" && (
           <div className="space-y-6">
-            <div className="text-center p-6 bg-emerald-950 text-white rounded-3xl relative overflow-hidden shadow-xl">
+            <div className="text-center p-6 bg-emerald-95 text-white rounded-3xl relative overflow-hidden shadow-xl">
               <div className="w-12 h-12 bg-white/10 backdrop-blur-md rounded-2xl mx-auto flex items-center justify-center text-2xl mb-3 border border-white/20">
                 🤖
               </div>

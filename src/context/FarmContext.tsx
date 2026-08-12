@@ -322,7 +322,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch (err) {
       console.error("[FarmContext] Account fetch error:", err);
-    } finally {
+    } fontally {
       fetchingAccountRef.current = false;
     }
   }, [session.isAuthenticated]);
@@ -1023,12 +1023,13 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     let dbCodesQuery = supabase.from("animals").select("animal_code").ilike("animal_code", `${codePrefix}%`);
     const { data: existingRows } = await dbCodesQuery;
-    const existingCodeSet = new Set((existingRows || []).map((r: any) => r.animal_code));
+    const dbCodeSet = new Set((existingRows || []).map((r: any) => r.animal_code));
+    const localCodeSet = new Set(animals.map(a => a.animal_code));
 
     let countNumber = 1;
     let generatedCode = `${codePrefix}${countNumber.toString().padStart(3, "0")}`;
 
-    while (existingCodeSet.has(generatedCode)) {
+    while (dbCodeSet.has(generatedCode) || localCodeSet.has(generatedCode)) {
       countNumber++;
       generatedCode = `${codePrefix}${countNumber.toString().padStart(3, "0")}`;
     }

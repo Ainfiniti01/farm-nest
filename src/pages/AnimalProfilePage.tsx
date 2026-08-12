@@ -175,6 +175,9 @@ export const AnimalProfilePage: React.FC = () => {
     );
   }
 
+  const hasCustomName = Boolean(animal.name && animal.name.trim().length > 0);
+  const displayName = hasCustomName ? animal.name : animal.animal_code;
+
   // Photo handlers
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -251,7 +254,8 @@ export const AnimalProfilePage: React.FC = () => {
           <img class="photo" src="${animal.primaryPhoto}" />
           <table>
             <tr><th>Attribute</th><td>Details</td></tr>
-            <tr><th>Identifier Name</th><td>${animal.name || "Unnamed"}</td></tr>
+            <tr><th>Identifier Name</th><td>${displayName}</td></tr>
+            <tr><th>Code</th><td>${animal.animal_code}</td></tr>
             <tr><th>Species Class</th><td>${animal.species}</td></tr>
             <tr><th>Breed</th><td>${animal.breed}</td></tr>
             <tr><th>Sex Type</th><td>${animal.sex}</td></tr>
@@ -517,7 +521,7 @@ export const AnimalProfilePage: React.FC = () => {
     e.preventDefault();
     setPendingConfirm({
       title: "Register New Born Offspring?",
-      message: `This automatically binds ${newOffspring.name || "Unnamed"} to ${animal.name || animal.animal_code}'s pedigree maps. Confirm?`,
+      message: `This automatically binds ${newOffspring.name || "Offspring"} to ${displayName}'s pedigree maps. Confirm?`,
       onConfirm: () => {
         addAnimal({
           name: newOffspring.name,
@@ -528,8 +532,8 @@ export const AnimalProfilePage: React.FC = () => {
           source: "Born on farm",
           status: "Healthy",
           healthStatus: "Healthy",
-          primaryPhoto: newOffspring.primaryPhoto || MOCK_IMAGES.goat1,
-          photos: [newOffspring.primaryPhoto || MOCK_IMAGES.goat1],
+          primaryPhoto: newOffspring.primaryPhoto || DEFAULT_ANIMAL_PHOTO,
+          photos: [newOffspring.primaryPhoto || DEFAULT_ANIMAL_PHOTO],
           notes: newOffspring.notes || "Offspring of parent lineage.",
           parents: {
             motherId: animal.sex === "Female" ? animal.id : undefined,
@@ -598,7 +602,7 @@ export const AnimalProfilePage: React.FC = () => {
               >
                 <img
                   src={animal.primaryPhoto}
-                  alt={animal.name}
+                  alt={displayName}
                   className="w-full h-full object-cover"
                 />
                 
@@ -622,9 +626,11 @@ export const AnimalProfilePage: React.FC = () => {
                     {animal.species} • {animal.breed}
                   </span>
                   <h2 className="text-xl font-black text-slate-900 mt-1">
-                    {animal.name || "Unnamed Head"}
+                    {displayName}
                   </h2>
-                  <p className="text-xs font-mono text-slate-500 font-semibold mt-0.5">{animal.animal_code}</p>
+                  {hasCustomName && (
+                    <p className="text-xs font-mono text-slate-500 font-semibold mt-0.5">{animal.animal_code}</p>
+                  )}
                 </div>
 
                 <div className="pt-3 border-t border-slate-50 grid grid-cols-2 gap-2 text-xs">
@@ -816,7 +822,7 @@ export const AnimalProfilePage: React.FC = () => {
                         <span className="text-[9px] font-bold text-slate-400 block">Mother (Dam)</span>
                         {mother ? (
                           <Link to={`/animals/${mother.id}`} className="font-black text-xs text-emerald-800 hover:underline block truncate">
-                            {mother.name || "Dam"} ({mother.animal_code})
+                            {mother.name || mother.animal_code} ({mother.animal_code})
                           </Link>
                         ) : (
                           <span className="text-xs text-slate-500 font-semibold block">Unrecorded</span>
@@ -837,7 +843,7 @@ export const AnimalProfilePage: React.FC = () => {
                         <span className="text-[9px] font-bold text-slate-400 block">Father (Sire)</span>
                         {father ? (
                           <Link to={`/animals/${father.id}`} className="font-black text-xs text-emerald-800 hover:underline block truncate">
-                            {father.name || "Sire"} ({father.animal_code})
+                            {father.name || father.animal_code} ({father.animal_code})
                           </Link>
                         ) : (
                           <span className="text-xs text-slate-500 font-semibold block">Unrecorded</span>
@@ -871,7 +877,7 @@ export const AnimalProfilePage: React.FC = () => {
                         <div className="w-10 h-10 rounded-full bg-slate-100 overflow-hidden mx-auto mb-1.5">
                           <img src={child.primaryPhoto} className="w-full h-full object-cover" />
                         </div>
-                        <p className="font-bold text-[11px] text-slate-950 truncate">{child.name || "Unnamed Offspring"}</p>
+                        <p className="font-bold text-[11px] text-slate-950 truncate">{child.name || child.animal_code}</p>
                         <span className="text-[9px] font-mono text-slate-500">{child.animal_code}</span>
                       </Link>
                     ))}
@@ -1072,7 +1078,7 @@ export const AnimalProfilePage: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="font-bold text-slate-900 text-sm">Animal Notes</h3>
-                    <p className="text-[10px] text-slate-400">Specific observations for {animal.name || animal.animal_code}</p>
+                    <p className="text-[10px] text-slate-400">Specific observations for {displayName}</p>
                   </div>
                   <button
                     onClick={handleOpenAddNoteModal}
@@ -1176,7 +1182,7 @@ export const AnimalProfilePage: React.FC = () => {
             </div>
 
             <p className="text-[11px] text-slate-500">
-              Note for: <strong className="text-emerald-800">{animal.name ? `${animal.name} (${animal.animal_code})` : animal.animal_code}</strong>
+              Note for: <strong className="text-emerald-800">{hasCustomName ? `${animal.name} (${animal.animal_code})` : animal.animal_code}</strong>
             </p>
 
             <div>
@@ -1400,9 +1406,10 @@ export const AnimalProfilePage: React.FC = () => {
             </div>
 
             <div>
-              <label className="text-[10px] font-bold text-slate-500 block">Animal Name</label>
+              <label className="text-[10px] font-bold text-slate-500 block">Animal Custom Name</label>
               <input
                 type="text"
+                placeholder="e.g. Aisha"
                 value={editForm.name}
                 onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
                 className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
@@ -1667,7 +1674,7 @@ export const AnimalProfilePage: React.FC = () => {
                 {animals
                   .filter(a => a.sex !== animal.sex && a.species === animal.species)
                   .map(a => (
-                    <option key={a.id} value={a.id}>{a.animal_code} - {a.name || "Unnamed"}</option>
+                    <option key={a.id} value={a.id}>{a.animal_code} - {a.name || a.animal_code}</option>
                   ))}
               </select>
             </div>
@@ -1721,14 +1728,13 @@ export const AnimalProfilePage: React.FC = () => {
             </div>
 
             <div>
-              <label className="text-[10px] font-bold text-slate-500 block">Offspring Identifier Name</label>
+              <label className="text-[10px] font-bold text-slate-500 block">Offspring Custom Name (Optional)</label>
               <input
                 type="text"
                 placeholder="e.g. Baby Aisha"
                 value={newOffspring.name}
                 onChange={(e) => setNewOffspring({ ...newOffspring, name: e.target.value })}
                 className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
-                required
               />
             </div>
 
