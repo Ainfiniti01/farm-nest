@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { showSuccess, showError } from "@/utils/toast";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -185,12 +185,12 @@ interface FarmContextType {
   deleteContact: (id: string) => Promise<void>;
   addReminder: (reminder: Omit<Reminder, "id" | "completed">) => Promise<void>;
   toggleReminder: (id: string) => Promise<void>;
-  addFarmNote: (note: { title?: string; content: string }) => Promise<void>;
-  updateFarmNote: (id: string, updates: { title?: string; content: string }) => Promise<void>;
-  deleteFarmNote: (id: string) => Promise<void>;
-  addAnimalNote: (note: { animal_id: string; content: string }) => Promise<void>;
-  updateAnimalNote: (id: string, content: string) => Promise<void>;
-  deleteAnimalNote: (id: string) => Promise<void>;
+  addFarmNote: (note: { title?: string; content: string }) => Promise<boolean>;
+  updateFarmNote: (id: string, updates: { title?: string; content: string }) => Promise<boolean>;
+  deleteFarmNote: (id: string) => Promise<boolean>;
+  addAnimalNote: (note: { animal_id: string; content: string }) => Promise<boolean>;
+  updateAnimalNote: (id: string, content: string) => Promise<boolean>;
+  deleteAnimalNote: (id: string) => Promise<boolean>;
   logActivity: (type: string, description: string, actor: string, targetId?: string) => Promise<void>;
   updateFarmProfile: (profile: FarmProfile) => Promise<void>;
   incrementAiUsage: (type: "text" | "image") => void;
@@ -222,6 +222,11 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   
   const [isAuthReady, setIsAuthReady] = useState<boolean>(false);
   const [isLoadingData, setIsLoadingData] = useState<boolean>(true);
+
+  // Guards against concurrent duplicate fetch streams
+  const isFetchingRef = useRef<boolean>(false);
+  const lastFetchedUserIdRef = useRef<string | null>(null);
+  const isLoggingOutRef = useRef<boolean>(false);
   
   const [farmProfile, setFarmProfile] = useState<FarmProfile>({
     name: "My Farm",
@@ -250,23 +255,32 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem("farm_v2_onboarding_completed", JSON.stringify(val));
   };
 
-  // Fetch complete farm dataset from Supabase PostgreSQL
-  const reloadFarmData = useCallback(async () => {
+  // Single consolidated concurrent fetch for accounts profile + all farm tables
+  const loadUserProfileAndData = useCallback(async (userId: string, userMetadata?: any) => {
+    if (isFetchingRef.current && lastFetchedUserIdRef.current === userId) {
+      return;
+    }
+
+    isFetchingRef.current = true;
+    lastFetchedUserIdRef.current = userId;
     setIsLoadingData(true);
+
     try {
       const [
-        { data: resAnimals },
-        { data: resHealth },
-        { data: resTreatments },
-        { data: resWeights },
-        { data: resBreeding },
-        { data: resInventory },
-        { data: resContacts },
-        { data: resReminders },
-        { data: resFarmNotes },
-        { data: resAnimalNotes },
-        { data: resLogs }
+        acctRes,
+        resAnimals,
+        resHealth,
+        resTreatments,
+        resWeights,
+        resBreeding,
+        resInventory,
+        resContacts,
+        resReminders,
+        resFarmNotes,
+        resAnimalNotes,
+        resLogs
       ] = await Promise.all([
+        supabase.from("accounts").select("farm_name, operator_name, location").eq("user_id", userId).maybeSingle(),
         supabase.from("animals").select("*"),
         supabase.from("health_records").select("*"),
         supabase.from("treatments").select("*"),
@@ -277,11 +291,29 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         supabase.from("reminders").select("*"),
         supabase.from("farm_notes").select("*").order("created_at", { ascending: false }),
         supabase.from("animal_notes").select("*").order("created_at", { ascending: false }),
-        supabase.from("activity_logs").select("*").order("date", { ascending: false }).limit(50)
+        supabase.from("activity_logs").select("*").order("date", { ascending: false }).limit(25)
       ]);
 
-      if (resAnimals) {
-        setAnimals(resAnimals.map((a: any) => ({
+      // 1. Process Farm Account Profile
+      if (acctRes.data) {
+        setFarmProfile(prev => ({
+          ...prev,
+          name: acctRes.data.farm_name || prev.name,
+          ownerName: acctRes.data.operator_name || prev.ownerName,
+          location: acctRes.data.location || prev.location
+        }));
+      } else if (userMetadata?.farmName) {
+        setFarmProfile(prev => ({
+          ...prev,
+          name: userMetadata.farmName,
+          ownerName: userMetadata.name || prev.ownerName,
+          location: userMetadata.location || prev.location
+        }));
+      }
+
+      // 2. Process Table Datasets safely
+      if (resAnimals.data) {
+        setAnimals(resAnimals.data.map((a: any) => ({
           id: a.id,
           animal_code: a.animal_code,
           name: a.name || "",
@@ -301,8 +333,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })));
       }
 
-      if (resHealth) {
-        setHealthRecords(resHealth.map((h: any) => ({
+      if (resHealth.data) {
+        setHealthRecords(resHealth.data.map((h: any) => ({
           id: h.id,
           animal_id: h.animal_id,
           type: h.type,
@@ -313,8 +345,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })));
       }
 
-      if (resTreatments) {
-        setTreatments(resTreatments.map((t: any) => ({
+      if (resTreatments.data) {
+        setTreatments(resTreatments.data.map((t: any) => ({
           id: t.id,
           animal_id: t.animal_id,
           condition: t.condition,
@@ -327,8 +359,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })));
       }
 
-      if (resWeights) {
-        setWeightRecords(resWeights.map((w: any) => ({
+      if (resWeights.data) {
+        setWeightRecords(resWeights.data.map((w: any) => ({
           id: w.id,
           animal_id: w.animal_id,
           weight: parseFloat(w.weight),
@@ -337,8 +369,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })));
       }
 
-      if (resBreeding) {
-        setBreedingRecords(resBreeding.map((b: any) => ({
+      if (resBreeding.data) {
+        setBreedingRecords(resBreeding.data.map((b: any) => ({
           id: b.id,
           female_id: b.female_id,
           male_id: b.male_id,
@@ -348,8 +380,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })));
       }
 
-      if (resInventory) {
-        setInventory(resInventory.map((i: any) => ({
+      if (resInventory.data) {
+        setInventory(resInventory.data.map((i: any) => ({
           id: i.id,
           name: i.name,
           category: i.category,
@@ -361,8 +393,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })));
       }
 
-      if (resContacts) {
-        setContacts(resContacts.map((c: any) => ({
+      if (resContacts.data) {
+        setContacts(resContacts.data.map((c: any) => ({
           id: c.id,
           name: c.name,
           role: c.role,
@@ -374,8 +406,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })));
       }
 
-      if (resReminders) {
-        setReminders(resReminders.map((r: any) => ({
+      if (resReminders.data) {
+        setReminders(resReminders.data.map((r: any) => ({
           id: r.id,
           title: r.title,
           type: r.type,
@@ -386,8 +418,9 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })));
       }
 
-      if (resFarmNotes) {
-        setFarmNotes(resFarmNotes.map((fn: any) => ({
+      // Handle Farm Notes gracefully if table exists or is empty
+      if (resFarmNotes.data && !resFarmNotes.error) {
+        setFarmNotes(resFarmNotes.data.map((fn: any) => ({
           id: fn.id,
           farm_id: fn.farm_id,
           title: fn.title,
@@ -398,8 +431,9 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })));
       }
 
-      if (resAnimalNotes) {
-        setAnimalNotes(resAnimalNotes.map((an: any) => ({
+      // Handle Animal Notes gracefully if table exists or is empty
+      if (resAnimalNotes.data && !resAnimalNotes.error) {
+        setAnimalNotes(resAnimalNotes.data.map((an: any) => ({
           id: an.id,
           animal_id: an.animal_id,
           content: an.content,
@@ -409,8 +443,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })));
       }
 
-      if (resLogs) {
-        setActivityLogs(resLogs.map((l: any) => ({
+      if (resLogs.data) {
+        setActivityLogs(resLogs.data.map((l: any) => ({
           id: l.id,
           type: l.type,
           description: l.description,
@@ -423,41 +457,18 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       console.error("[FarmContext] Data reload error from Supabase:", err);
     } finally {
+      isFetchingRef.current = false;
       setIsLoadingData(false);
     }
   }, []);
 
-  const loadUserProfileAndData = useCallback(async (userId: string, userMetadata?: any) => {
-    try {
-      const { data: acct } = await supabase
-        .from("accounts")
-        .select("farm_name, operator_name, location")
-        .eq("user_id", userId)
-        .maybeSingle();
-
-      if (acct) {
-        setFarmProfile(prev => ({
-          ...prev,
-          name: acct.farm_name || prev.name,
-          ownerName: acct.operator_name || prev.ownerName,
-          location: acct.location || prev.location
-        }));
-      } else if (userMetadata?.farmName) {
-        setFarmProfile(prev => ({
-          ...prev,
-          name: userMetadata.farmName,
-          ownerName: userMetadata.name || prev.ownerName,
-          location: userMetadata.location || prev.location
-        }));
-      }
-    } catch (e) {
-      console.warn("[FarmContext] Profile lookup exception", e);
+  const reloadFarmData = useCallback(async () => {
+    if (session.userId) {
+      await loadUserProfileAndData(session.userId);
     }
+  }, [loadUserProfileAndData, session.userId]);
 
-    await reloadFarmData();
-  }, [reloadFarmData]);
-
-  // Monitor and initialize Supabase Authentication State cleanly on startup
+  // Fast Authentication Restoration Loop
   useEffect(() => {
     let isMounted = true;
 
@@ -477,7 +488,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
               name: sbSession.user.user_metadata?.name || "Operator",
               isAuthenticated: true
             });
-            await loadUserProfileAndData(sbSession.user.id, sbSession.user.user_metadata);
+            setIsAuthReady(true);
+            loadUserProfileAndData(sbSession.user.id, sbSession.user.user_metadata);
           } else {
             setSession({
               userId: undefined,
@@ -485,11 +497,12 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
               name: "",
               isAuthenticated: false
             });
+            setIsAuthReady(true);
+            setIsLoadingData(false);
           }
         }
       } catch (err) {
         console.error("[FarmContext] Auth restoration error:", err);
-      } finally {
         if (isMounted) {
           setIsAuthReady(true);
           setIsLoadingData(false);
@@ -499,7 +512,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     initAuth();
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, sbSession) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, sbSession) => {
       if (!isMounted) return;
 
       if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
@@ -510,15 +523,19 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
             name: sbSession.user.user_metadata?.name || "Operator",
             isAuthenticated: true
           });
-          await loadUserProfileAndData(sbSession.user.id, sbSession.user.user_metadata);
+          setIsAuthReady(true);
+          loadUserProfileAndData(sbSession.user.id, sbSession.user.user_metadata);
         }
       } else if (event === "SIGNED_OUT") {
+        lastFetchedUserIdRef.current = null;
         setSession({
           userId: undefined,
           email: "",
           name: "",
           isAuthenticated: false
         });
+        setIsAuthReady(true);
+        setIsLoadingData(false);
         setAnimals([]);
         setHealthRecords([]);
         setTreatments([]);
@@ -530,9 +547,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setFarmNotes([]);
         setAnimalNotes([]);
       }
-
-      setIsAuthReady(true);
-      setIsLoadingData(false);
     });
 
     return () => {
@@ -689,20 +703,31 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return false;
   };
 
+  // Safe local sign-out to prevent 403 Forbidden loops on global auth logout
   const logout = async () => {
-    await supabase.auth.signOut();
-    setSession({ userId: undefined, email: "", name: "", isAuthenticated: false });
-    setAnimals([]);
-    setHealthRecords([]);
-    setTreatments([]);
-    setWeightRecords([]);
-    setBreedingRecords([]);
-    setInventory([]);
-    setContacts([]);
-    setReminders([]);
-    setFarmNotes([]);
-    setAnimalNotes([]);
-    showSuccess("Signed out successfully.");
+    if (isLoggingOutRef.current) return;
+    isLoggingOutRef.current = true;
+
+    try {
+      await supabase.auth.signOut({ scope: "local" });
+    } catch (e) {
+      console.warn("[FarmContext] Local signout warning", e);
+    } finally {
+      isLoggingOutRef.current = false;
+      lastFetchedUserIdRef.current = null;
+      setSession({ userId: undefined, email: "", name: "", isAuthenticated: false });
+      setAnimals([]);
+      setHealthRecords([]);
+      setTreatments([]);
+      setWeightRecords([]);
+      setBreedingRecords([]);
+      setInventory([]);
+      setContacts([]);
+      setReminders([]);
+      setFarmNotes([]);
+      setAnimalNotes([]);
+      showSuccess("Signed out successfully.");
+    }
   };
 
   const addAnimal = async (animalData: Omit<Animal, "id" | "animal_code" | "created_at">) => {
@@ -1029,8 +1054,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await logActivity("Reminder Completed", `Completed task: ${target.title}`, farmProfile.ownerName, target.animal_id);
   };
 
-  // FARM NOTES ACTIONS
-  const addFarmNote = async (note: { title?: string; content: string }) => {
+  // FARM NOTES ACTIONS (Return boolean success indicator)
+  const addFarmNote = async (note: { title?: string; content: string }): Promise<boolean> => {
     const newId = "fn_" + Date.now();
     const newRecord: FarmNote = {
       id: newId,
@@ -1041,8 +1066,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       updated_at: new Date().toISOString()
     };
 
-    setFarmNotes(prev => [newRecord, ...prev]);
-
     try {
       const { error } = await supabase.from("farm_notes").insert([{
         id: newRecord.id,
@@ -1051,61 +1074,70 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         created_by: newRecord.created_by,
         user_id: session.userId || null
       }]);
-      if (error) {
-        console.warn("[FarmContext] farm_notes table insert warn", error);
-      }
-    } catch (e) {
-      console.warn("[FarmContext] farm_notes table write exception", e);
-    }
 
-    await reloadFarmData();
-    await logActivity("Farm Note Added", `Added farm note: "${(note.title || note.content).slice(0, 35)}..."`, farmProfile.ownerName);
-    showSuccess("Farm note recorded!");
+      if (error) {
+        showError("Couldn't save note: " + error.message);
+        return false;
+      }
+
+      setFarmNotes(prev => [newRecord, ...prev]);
+      await logActivity("Farm Note Added", `Added farm note: "${(note.title || note.content).slice(0, 35)}..."`, farmProfile.ownerName);
+      showSuccess("Farm note saved");
+      return true;
+    } catch (e: any) {
+      showError("Couldn't save note: " + (e?.message || "Unknown error"));
+      return false;
+    }
   };
 
-  const updateFarmNote = async (id: string, updates: { title?: string; content: string }) => {
+  const updateFarmNote = async (id: string, updates: { title?: string; content: string }): Promise<boolean> => {
     const payload = {
       title: updates.title?.trim() || null,
       content: updates.content.trim(),
       updated_at: new Date().toISOString()
     };
 
-    setFarmNotes(prev => prev.map(fn => fn.id === id ? { ...fn, title: updates.title, content: updates.content, updated_at: payload.updated_at } : fn));
-
     try {
       const { error } = await supabase.from("farm_notes").update(payload).eq("id", id);
-      if (error) {
-        console.warn("[FarmContext] farm_notes table update warn", error);
-      }
-    } catch (e) {
-      console.warn("[FarmContext] farm_notes table update exception", e);
-    }
 
-    await reloadFarmData();
-    await logActivity("Farm Note Updated", `Edited farm note "${(updates.title || updates.content).slice(0, 30)}..."`, farmProfile.ownerName);
-    showSuccess("Farm note updated!");
+      if (error) {
+        showError("Couldn't update note: " + error.message);
+        return false;
+      }
+
+      setFarmNotes(prev => prev.map(fn => fn.id === id ? { ...fn, title: updates.title, content: updates.content, updated_at: payload.updated_at } : fn));
+      await logActivity("Farm Note Updated", `Edited farm note "${(updates.title || updates.content).slice(0, 30)}..."`, farmProfile.ownerName);
+      showSuccess("Farm note updated");
+      return true;
+    } catch (e: any) {
+      showError("Couldn't update note: " + (e?.message || "Unknown error"));
+      return false;
+    }
   };
 
-  const deleteFarmNote = async (id: string) => {
+  const deleteFarmNote = async (id: string): Promise<boolean> => {
     const target = farmNotes.find(f => f.id === id);
-    setFarmNotes(prev => prev.filter(f => f.id !== id));
 
     try {
       const { error } = await supabase.from("farm_notes").delete().eq("id", id);
-      if (error) {
-        console.warn("[FarmContext] farm_notes delete warn", error);
-      }
-    } catch (e) {
-      console.warn("[FarmContext] farm_notes delete exception", e);
-    }
 
-    await reloadFarmData();
-    await logActivity("Farm Note Deleted", `Deleted farm note: "${(target?.title || target?.content || '').slice(0, 30)}"`, farmProfile.ownerName);
-    showSuccess("Farm note deleted!");
+      if (error) {
+        showError("Couldn't delete note: " + error.message);
+        return false;
+      }
+
+      setFarmNotes(prev => prev.filter(f => f.id !== id));
+      await logActivity("Farm Note Deleted", `Deleted farm note: "${(target?.title || target?.content || '').slice(0, 30)}"`, farmProfile.ownerName);
+      showSuccess("Farm note deleted");
+      return true;
+    } catch (e: any) {
+      showError("Couldn't delete note: " + (e?.message || "Unknown error"));
+      return false;
+    }
   };
 
-  // ANIMAL NOTES ACTIONS
-  const addAnimalNote = async (note: { animal_id: string; content: string }) => {
+  // ANIMAL NOTES ACTIONS (Return boolean success indicator)
+  const addAnimalNote = async (note: { animal_id: string; content: string }): Promise<boolean> => {
     const newId = "an_" + Date.now();
     const newRecord: AnimalNote = {
       id: newId,
@@ -1116,8 +1148,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       updated_at: new Date().toISOString()
     };
 
-    setAnimalNotes(prev => [newRecord, ...prev]);
-
     try {
       const { error } = await supabase.from("animal_notes").insert([{
         id: newRecord.id,
@@ -1126,57 +1156,66 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         created_by: newRecord.created_by,
         user_id: session.userId || null
       }]);
-      if (error) {
-        console.warn("[FarmContext] animal_notes table insert warn", error);
-      }
-    } catch (e) {
-      console.warn("[FarmContext] animal_notes table write exception", e);
-    }
 
-    await reloadFarmData();
-    const animalObj = animals.find(a => a.id === note.animal_id);
-    await logActivity("Animal Note Added", `Logged note for ${animalObj?.animal_code || 'livestock'}: "${note.content.slice(0, 30)}..."`, farmProfile.ownerName, note.animal_id);
-    showSuccess("Animal note recorded!");
+      if (error) {
+        showError("Couldn't save note: " + error.message);
+        return false;
+      }
+
+      setAnimalNotes(prev => [newRecord, ...prev]);
+      const animalObj = animals.find(a => a.id === note.animal_id);
+      await logActivity("Animal Note Added", `Logged note for ${animalObj?.animal_code || 'livestock'}: "${note.content.slice(0, 30)}..."`, farmProfile.ownerName, note.animal_id);
+      showSuccess("Animal note saved");
+      return true;
+    } catch (e: any) {
+      showError("Couldn't save note: " + (e?.message || "Unknown error"));
+      return false;
+    }
   };
 
-  const updateAnimalNote = async (id: string, content: string) => {
+  const updateAnimalNote = async (id: string, content: string): Promise<boolean> => {
     const payload = {
       content: content.trim(),
       updated_at: new Date().toISOString()
     };
 
-    setAnimalNotes(prev => prev.map(an => an.id === id ? { ...an, content: content.trim(), updated_at: payload.updated_at } : an));
-
     try {
       const { error } = await supabase.from("animal_notes").update(payload).eq("id", id);
-      if (error) {
-        console.warn("[FarmContext] animal_notes table update warn", error);
-      }
-    } catch (e) {
-      console.warn("[FarmContext] animal_notes table update exception", e);
-    }
 
-    await reloadFarmData();
-    await logActivity("Animal Note Updated", `Edited animal note: "${content.slice(0, 30)}..."`, farmProfile.ownerName);
-    showSuccess("Animal note updated!");
+      if (error) {
+        showError("Couldn't update note: " + error.message);
+        return false;
+      }
+
+      setAnimalNotes(prev => prev.map(an => an.id === id ? { ...an, content: content.trim(), updated_at: payload.updated_at } : an));
+      await logActivity("Animal Note Updated", `Edited animal note: "${content.slice(0, 30)}..."`, farmProfile.ownerName);
+      showSuccess("Animal note updated");
+      return true;
+    } catch (e: any) {
+      showError("Couldn't update note: " + (e?.message || "Unknown error"));
+      return false;
+    }
   };
 
-  const deleteAnimalNote = async (id: string) => {
+  const deleteAnimalNote = async (id: string): Promise<boolean> => {
     const target = animalNotes.find(a => a.id === id);
-    setAnimalNotes(prev => prev.filter(a => a.id !== id));
 
     try {
       const { error } = await supabase.from("animal_notes").delete().eq("id", id);
-      if (error) {
-        console.warn("[FarmContext] animal_notes delete warn", error);
-      }
-    } catch (e) {
-      console.warn("[FarmContext] animal_notes delete exception", e);
-    }
 
-    await reloadFarmData();
-    await logActivity("Animal Note Deleted", `Deleted animal note`, farmProfile.ownerName, target?.animal_id);
-    showSuccess("Animal note deleted!");
+      if (error) {
+        showError("Couldn't delete note: " + error.message);
+        return false;
+      }
+
+      setAnimalNotes(prev => prev.filter(a => a.id !== id));
+      await logActivity("Animal Note Deleted", `Deleted animal note`, farmProfile.ownerName, target?.animal_id);
+      showSuccess("Animal note deleted");
+      return true;
+    } catch (e: any) {
+      showError("Couldn't delete note: " + (e?.message || "Unknown error"));
+      return false;
+    }
   };
 
   const updateFarmProfile = async (profile: FarmProfile) => {
