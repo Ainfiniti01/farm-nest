@@ -230,7 +230,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoadingData, setIsLoadingData] = useState<boolean>(true);
 
   const fetchingDashboardRef = useRef<boolean>(false);
-  const lastFetchedUserIdRef = useRef<string | null>(null);
   const isLoggingOutRef = useRef<boolean>(false);
   
   const [farmProfile, setFarmProfile] = useState<FarmProfile>({
@@ -260,17 +259,10 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem("farm_v2_onboarding_completed", JSON.stringify(val));
   };
 
-  // 1. FAST LIGHTWEIGHT DASHBOARD DATA LOADER
+  // 1. LIGHTWEIGHT DASHBOARD DATA LOADER (Summary info only)
   const loadDashboardData = useCallback(async () => {
-    const targetUserId = session.userId;
-    if (!targetUserId) return;
-
-    if (fetchingDashboardRef.current && lastFetchedUserIdRef.current === targetUserId) {
-      return;
-    }
-
+    if (fetchingDashboardRef.current) return;
     fetchingDashboardRef.current = true;
-    lastFetchedUserIdRef.current = targetUserId;
     setIsLoadingData(true);
 
     try {
@@ -283,13 +275,14 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         resFarmNotes,
         resLogs
       ] = await Promise.all([
-        supabase.from("accounts").select("farm_name, operator_name, location").eq("user_id", targetUserId).maybeSingle(),
-        supabase.from("animals").select("id, animal_code, name, species, breed, sex, status, health_status, primary_photo, created_at").eq("user_id", targetUserId),
-        supabase.from("treatments").select("id, animal_id, condition, medication, start_date, end_date, status, follow_up_date").eq("user_id", targetUserId).eq("status", "Ongoing"),
-        supabase.from("inventory").select("id, name, category, quantity, unit, min_stock").eq("user_id", targetUserId),
-        supabase.from("reminders").select("id, title, type, due_date, animal_id, completed, notes").eq("user_id", targetUserId).eq("completed", false),
-        supabase.from("farm_notes").select("id, farm_id, title, content, created_by, created_at, updated_at").eq("user_id", targetUserId).order("created_at", { ascending: false }).limit(5),
-        supabase.from("activity_logs").select("id, type, description, date, actor, target_id").eq("user_id", targetUserId).order("date", { ascending: false }).limit(10)
+        supabase.from("accounts").select("farm_name, operator_name, location").limit(1).maybeSingle(),
+        // Minimal fields required for dashboard counts and dropdowns
+        supabase.from("animals").select("id, animal_code, name, species, sex, status, health_status"),
+        supabase.from("treatments").select("id, animal_id, condition, medication, start_date, end_date, status, follow_up_date").eq("status", "Ongoing"),
+        supabase.from("inventory").select("id, name, category, quantity, unit, min_stock"),
+        supabase.from("reminders").select("id, title, type, due_date, animal_id, completed, notes").eq("completed", false),
+        supabase.from("farm_notes").select("id, farm_id, title, content, created_by, created_at, updated_at").order("created_at", { ascending: false }).limit(5),
+        supabase.from("activity_logs").select("id, type, description, date, actor, target_id").order("date", { ascending: false }).limit(10)
       ]);
 
       if (acctRes.data) {
@@ -307,16 +300,16 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
           animal_code: a.animal_code,
           name: a.name || "",
           species: a.species,
-          breed: a.breed,
+          breed: "",
           sex: a.sex,
-          dob: a.dob || "",
-          source: a.source || "Born on farm",
+          dob: "",
+          source: "Born on farm",
           status: a.status,
           healthStatus: a.health_status,
-          primaryPhoto: a.primary_photo || "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=400",
-          photos: [a.primary_photo || "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=400"],
+          primaryPhoto: "",
+          photos: [],
           notes: "",
-          created_at: a.created_at || new Date().toISOString()
+          created_at: new Date().toISOString()
         })));
       }
 
@@ -386,16 +379,15 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       fetchingDashboardRef.current = false;
       setIsLoadingData(false);
     }
-  }, [session.userId]);
+  }, []);
 
   // 2. PAGE-SPECIFIC TARGETED FETCHERS
 
+  // OWNED BY /animals ROUTE ONLY
   const loadAnimals = useCallback(async () => {
-    if (!session.userId) return;
     const { data, error } = await supabase
       .from("animals")
       .select("id, animal_code, name, species, breed, sex, dob, purchase_date, source, status, health_status, primary_photo, photos, mother_id, father_id, notes, created_at")
-      .eq("user_id", session.userId)
       .order("created_at", { ascending: false });
 
     if (!error && data) {
@@ -418,10 +410,11 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         created_at: a.created_at
       })));
     }
-  }, [session.userId]);
+  }, []);
 
+  // OWNED BY /animals/:id ROUTE ONLY
   const loadAnimalProfile = useCallback(async (animalId: string) => {
-    if (!session.userId || !animalId) return;
+    if (!animalId) return;
 
     const [resAnimal, resHealth, resTreatments, resWeights, resBreeding, resNotes, resLogs] = await Promise.all([
       supabase.from("animals").select("*").eq("id", animalId).maybeSingle(),
@@ -529,14 +522,12 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         targetId: l.target_id
       })));
     }
-  }, [session.userId]);
+  }, []);
 
   const loadInventory = useCallback(async () => {
-    if (!session.userId) return;
     const { data, error } = await supabase
       .from("inventory")
-      .select("id, name, category, quantity, unit, min_stock, expiry_date, notes")
-      .eq("user_id", session.userId);
+      .select("id, name, category, quantity, unit, min_stock, expiry_date, notes");
 
     if (!error && data) {
       setInventory(data.map((i: any) => ({
@@ -550,14 +541,12 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         notes: i.notes
       })));
     }
-  }, [session.userId]);
+  }, []);
 
   const loadFarmNotes = useCallback(async () => {
-    if (!session.userId) return;
     const { data, error } = await supabase
       .from("farm_notes")
       .select("id, farm_id, title, content, created_by, created_at, updated_at")
-      .eq("user_id", session.userId)
       .order("created_at", { ascending: false });
 
     if (!error && data) {
@@ -571,14 +560,12 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updated_at: fn.updated_at || new Date().toISOString()
       })));
     }
-  }, [session.userId]);
+  }, []);
 
   const loadContacts = useCallback(async () => {
-    if (!session.userId) return;
     const { data, error } = await supabase
       .from("contacts")
-      .select("id, name, role, phone, whatsapp, email, address, notes")
-      .eq("user_id", session.userId);
+      .select("id, name, role, phone, whatsapp, email, address, notes");
 
     if (!error && data) {
       setContacts(data.map((c: any) => ({
@@ -592,7 +579,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         notes: c.notes
       })));
     }
-  }, [session.userId]);
+  }, []);
 
   const reloadFarmData = useCallback(async () => {
     if (session.userId) {
@@ -664,7 +651,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setIsAuthReady(true);
         }
       } else if (event === "SIGNED_OUT") {
-        lastFetchedUserIdRef.current = null;
         fetchingDashboardRef.current = false;
         setSession({
           userId: undefined,
@@ -856,7 +842,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.warn("[FarmContext] Local signout warning", e);
     } finally {
       isLoggingOutRef.current = false;
-      lastFetchedUserIdRef.current = null;
       fetchingDashboardRef.current = false;
       setSession({ userId: undefined, email: "", name: "", isAuthenticated: false });
       setAnimals([]);
@@ -876,11 +861,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const addAnimal = async (animalData: Omit<Animal, "id" | "animal_code" | "created_at">) => {
     const prefix = animalData.species.toUpperCase();
     
-    // Query Database directly for existing animal_codes to prevent duplicate key constraint violations
     let dbCodesQuery = supabase.from("animals").select("animal_code").ilike("animal_code", `${prefix}-%`);
-    if (session.userId) {
-      dbCodesQuery = dbCodesQuery.eq("user_id", session.userId);
-    }
     const { data: existingRows } = await dbCodesQuery;
     const existingCodeSet = new Set((existingRows || []).map((r: any) => r.animal_code));
 
@@ -1406,13 +1387,11 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updateFarmProfile = async (profile: FarmProfile) => {
     setFarmProfile(profile);
-    if (session.userId) {
-      await supabase.from("accounts").update({
-        farm_name: profile.name,
-        operator_name: profile.ownerName,
-        location: profile.location
-      }).eq("user_id", session.userId);
-    }
+    await supabase.from("accounts").update({
+      farm_name: profile.name,
+      operator_name: profile.ownerName,
+      location: profile.location
+    }).limit(1);
     await logActivity("Farm Profile Updated", `Updated farm details for ${profile.name}`, profile.ownerName);
     showSuccess("Farm profile updated");
   };
