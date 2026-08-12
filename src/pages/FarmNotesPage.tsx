@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useFarm, FarmNote } from "@/context/FarmContext";
 import { 
@@ -19,7 +19,11 @@ import {
 import { showError } from "@/utils/toast";
 
 export const FarmNotesPage: React.FC = () => {
-  const { farmNotes, addFarmNote, updateFarmNote, deleteFarmNote } = useFarm();
+  const { farmNotes, addFarmNote, updateFarmNote, deleteFarmNote, loadFarmNotes } = useFarm();
+
+  useEffect(() => {
+    loadFarmNotes();
+  }, [loadFarmNotes]);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);

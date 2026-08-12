@@ -1,12 +1,16 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useFarm, InventoryItem } from "@/context/FarmContext";
 import { Plus, Boxes, Search, Trash2, HelpCircle } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 
 export const Inventory: React.FC = () => {
-  const { inventory, addInventoryItem, updateInventoryStock } = useFarm();
+  const { inventory, addInventoryItem, updateInventoryStock, loadInventory } = useFarm();
+
+  useEffect(() => {
+    loadInventory();
+  }, [loadInventory]);
 
   const [showAddInventory, setShowAddInventory] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -25,12 +29,6 @@ export const Inventory: React.FC = () => {
   const [adjustQty, setAdjustQty] = useState(1);
   const [adjustType, setAdjustType] = useState<"add" | "remove">("add");
   const [adjustNotes, setAdjustNotes] = useState("");
-
-  const [pendingConfirm, setPendingConfirm] = useState<{
-    title: string;
-    message: string;
-    onConfirm: () => void;
-  } | null>(null);
 
   const handleCreateInventory = (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,7 +49,6 @@ export const Inventory: React.FC = () => {
       minStock: 2,
       notes: "",
     });
-    showSuccess("New storage item created!");
   };
 
   const handleAdjustStockSubmit = (e: React.FormEvent) => {

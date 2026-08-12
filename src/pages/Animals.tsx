@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useFarm, Animal } from "@/context/FarmContext";
 import { 
@@ -17,7 +17,11 @@ import { showSuccess, showError } from "@/utils/toast";
 
 export const Animals: React.FC = () => {
   const navigate = useNavigate();
-  const { animals, addAnimal } = useFarm();
+  const { animals, addAnimal, loadAnimals } = useFarm();
+
+  useEffect(() => {
+    loadAnimals();
+  }, [loadAnimals]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -111,7 +115,6 @@ export const Animals: React.FC = () => {
           motherId: "",
           fatherId: "",
         });
-        showSuccess("New animal registered!");
       }
     });
   };
@@ -318,7 +321,6 @@ export const Animals: React.FC = () => {
                   <Upload size={14} className="text-slate-600" /> Upload Image
                 </button>
 
-                {/* Hidden input for camera capture */}
                 <input
                   type="file"
                   accept="image/*"
@@ -328,7 +330,6 @@ export const Animals: React.FC = () => {
                   className="hidden"
                 />
 
-                {/* Hidden input for device file upload */}
                 <input
                   type="file"
                   accept="image/*"

@@ -1,13 +1,17 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useFarm, Contact } from "@/context/FarmContext";
 import { ArrowLeft, Trash2, HelpCircle, Phone, Plus } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 
 export const SettingsContacts: React.FC = () => {
-  const { contacts, addContact, deleteContact } = useFarm();
+  const { contacts, addContact, deleteContact, loadContacts } = useFarm();
+
+  useEffect(() => {
+    loadContacts();
+  }, [loadContacts]);
 
   const [showAddContact, setShowAddContact] = useState(false);
   const [newContact, setNewContact] = useState({
@@ -47,7 +51,6 @@ export const SettingsContacts: React.FC = () => {
       address: "",
       notes: "",
     });
-    showSuccess("Contact saved successfully.");
   };
 
   return (
