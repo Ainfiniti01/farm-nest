@@ -2,6 +2,257 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { showSuccess, showError } from "@/utils/toast";
 import { supabase } from "@/lib/supabaseClient";
 
+export const DEFAULT_ANIMAL_PHOTO = "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=400";
+
+export interface Animal {
+  id: string;
+  animal_code: string;
+  name: string;
+  species: "Goat" | "Ram" | "Chicken" | "Other";
+  breed: string;
+  sex: "Male" | "Female";
+  dob: string;
+  purchaseDate?: string;
+  source: "Born on farm" | "Purchased" | "Other";
+  status: "Active" | "Healthy" | "Monitoring" | "Sick" | "Under Treatment" | "Pregnant" | "Sold" | "Deceased" | "Retired";
+  healthStatus: "Healthy" | "Monitoring" | "Sick" | "Under Treatment";
+  primaryPhoto: string;
+  photos: string[];
+  parents?: { motherId?: string; fatherId?: string };
+  offspring?: string[];
+  notes: string;
+  created_at: string;
+}
+
+export interface HealthRecord {
+  id: string;
+  animal_id: string;
+  type: "Observation" | "Diagnosis" | "Treatment" | "Vaccination" | "Vet Visit";
+  date: string;
+  details: string;
+  medication?: string;
+  recordedBy: string;
+}
+
+export interface Treatment {
+  id: string;
+  animal_id: string;
+  condition: string;
+  medication: string;
+  startDate: string;
+  endDate: string;
+  status: "Ongoing" | "Completed" | "Stopped";
+  notes: string;
+  followUpDate?: string;
+}
+
+export interface WeightRecord {
+  id: string;
+  animal_id: string;
+  weight: number;
+  date: string;
+  notes?: string;
+}
+
+export interface BreedingRecord {
+  id: string;
+  female_id: string;
+  male_id: string;
+  date: string;
+  status: "Bred" | "Pregnant" | "Gave Birth" | "Resting" | "Failed";
+  notes: string;
+}
+
+export interface InventoryItem {
+  id: string;
+  name: string;
+  category: "Feed" | "Medication" | "Equipment" | "Other";
+  quantity: number;
+  unit: string;
+  minStock: number;
+  expiryDate?: string;
+  notes?: string;
+}
+
+export interface InventoryTransaction {
+  id: string;
+  item_id: string;
+  quantity: number;
+  type: "add" | "remove" | "adjust";
+  date: string;
+  notes: string;
+  recordedBy: string;
+}
+
+export interface Contact {
+  id: string;
+  name: string;
+  role: "Veterinarian" | "Farm Manager" | "Worker" | "Feed Supplier" | "Medication Supplier" | "Owner" | "Other";
+  phone: string;
+  whatsapp?: string;
+  email?: string;
+  address?: string;
+  notes?: string;
+}
+
+export interface Reminder {
+  id: string;
+  title: string;
+  type: "Vaccination" | "Treatment" | "Breeding" | "Birth" | "Other";
+  dueDate: string;
+  animal_id?: string;
+  completed: boolean;
+  notes?: string;
+}
+
+export interface FarmNote {
+  id: string;
+  farm_id?: string;
+  title?: string;
+  content: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AnimalNote {
+  id: string;
+  animal_id: string;
+  content: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ActivityLog {
+  id: string;
+  type: string;
+  description: string;
+  date: string;
+  actor: string;
+  targetId?: string;
+}
+
+export interface FarmProfile {
+  name: string;
+  description: string;
+  ownerName: string;
+  location: string;
+  image: string;
+}
+
+export interface UserSession {
+  userId?: string;
+  email: string;
+  name: string;
+  isAuthenticated: boolean;
+}
+
+interface FarmContextType {
+  animals: Animal[];
+  healthRecords: HealthRecord[];
+  treatments: Treatment[];
+  weightRecords: WeightRecord[];
+  breedingRecords: BreedingRecord[];
+  inventory: InventoryItem[];
+  inventoryTransactions: InventoryTransaction[];
+  contacts: Contact[];
+  reminders: Reminder[];
+  farmNotes: FarmNote[];
+  animalNotes: AnimalNote[];
+  activityLogs: ActivityLog[];
+  farmProfile: FarmProfile;
+  session: UserSession;
+  onboardingCompleted: boolean;
+  isLoadingData: boolean;
+  isAuthReady: boolean;
+  aiUsage: {
+    questionsUsed: number;
+    questionsLimit: number;
+    imageUsed: number;
+    imageLimit: number;
+  };
+  loadDashboardData: () => Promise<void>;
+  loadAnimals: () => Promise<void>;
+  loadAnimalProfile: (animalId: string) => Promise<void>;
+  loadInventory: () => Promise<void>;
+  loadFarmNotes: () => Promise<void>;
+  loadContacts: () => Promise<void>;
+  addAnimal: (animal: Omit<Animal, "id" | "animal_code" | "created_at">) => Promise<void>;
+  updateAnimal: (id: string, updates: Partial<Animal>) => Promise<void>;
+  deleteAnimal: (id: string) => Promise<void>;
+  addHealthRecord: (record: Omit<HealthRecord, "id">) => Promise<void>;
+  addTreatment: (treatment: Omit<Treatment, "id">) => Promise<void>;
+  updateTreatmentStatus: (id: string, status: "Ongoing" | "Completed" | "Stopped") => Promise<void>;
+  addWeightRecord: (record: Omit<WeightRecord, "id">) => Promise<void>;
+  addBreedingRecord: (record: Omit<BreedingRecord, "id">) => Promise<void>;
+  addInventoryItem: (item: Omit<InventoryItem, "id">) => Promise<void>;
+  updateInventoryStock: (itemId: string, qtyChange: number, type: "add" | "remove" | "adjust", notes: string, recordedBy: string) => Promise<void>;
+  addContact: (contact: Omit<Contact, "id">) => Promise<void>;
+  updateContact: (id: string, updates: Partial<Contact>) => Promise<void>;
+  deleteContact: (id: string) => Promise<void>;
+  addReminder: (reminder: Omit<Reminder, "id" | "completed">) => Promise<void>;
+  toggleReminder: (id: string) => Promise<void>;
+  addFarmNote: (note: { title?: string; content: string }) => Promise<boolean>;
+  updateFarmNote: (id: string, updates: { title?: string; content: string }) => Promise<boolean>;
+  deleteFarmNote: (id: string) => Promise<boolean>;
+  addAnimalNote: (note: { animal_id: string; content: string }) => Promise<boolean>;
+  updateAnimalNote: (id: string, content: string) => Promise<boolean>;
+  deleteAnimalNote: (id: string) => Promise<boolean>;
+  logActivity: (type: string, description: string, actor: string, targetId?: string) => Promise<void>;
+  updateFarmProfile: (profile: FarmProfile) => Promise<void>;
+  incrementAiUsage: (type: "text" | "image") => void;
+  setOnboardingCompleted: (val: boolean) => void;
+  login: (identifier: string, password: string) => Promise<boolean>;
+  signupAndSetup: (email: string, password: string, name: string, farmName: string, location: string) => Promise<boolean>;
+  logout: () => Promise<void>;
+  seedSampleData: () => void;
+  resetDatabase: () => void;
+  reloadFarmData: () => Promise<void>;
+}
+
+const FarmContext = createContext<FarmContextType | undefined>(undefined);
+
+export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [animals, setAnimals] = useState<Animal[]>([]);
+  const [healthRecords, setHealthRecords] = useState<HealthRecord[]>([]);
+  const [treatments, setTreatments] = useState<Treatment[]>([]);
+  const [weightRecords, setWeightRecords] = useState<WeightRecord[]>([]);
+  const [breedingRecords, setBreedingRecords] = useState<BreedingRecord[]>([]);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [inventoryTransactions, setInventoryTransactions] = useState<InventoryTransaction[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [farmNotes, setFarmNotes] = useState<FarmNote[]>([]);
+  const [animalNotes, setAnimalNotes] = useState<AnimalNote[]>([]);
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [onboardingCompleted, setOnboardingCompletedState] = useState<boolean>(false);
+  
+  const [isAuthReady, setIsAuthReady] = useState<boolean>(false);
+  const [isLoadingData, setIsLoadingData] = useState<boolean>(true);
+
+  const fetchingDashboardRef = useRef<boolean>(false);
+  const isLoggingOutRef = useRef<boolean>(false);
+  
+  const [farmProfile, setFarmProfile] = useState<FarmProfile>({
+    name: "My Farm",
+    description: "Agricultural production unit.",
+    ownerName: "Operator",
+    location: "Kano, Nigeria",
+    image: "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=600&auto=format&fit=crop&q=80",
+  });
+
+  const [session, setSession] = useState<UserSession>({
+    userId: undefined,
+    email: "",
+    name: "",
+    <dyad-write path="src/context/FarmContext.tsx" description="Completed full FarmContext with default image fallbacks to eliminate empty src attribute warnings and extra page re-fetches">
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
+import { showSuccess, showError } from "@/utils/toast";
+import { supabase } from "@/lib/supabaseClient";
+
+export const DEFAULT_ANIMAL_PHOTO = "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=400";
+
 export interface Animal {
   id: string;
   animal_code: string;
@@ -276,7 +527,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         resLogs
       ] = await Promise.all([
         supabase.from("accounts").select("farm_name, operator_name, location").limit(1).maybeSingle(),
-        // Minimal fields required for dashboard counts and dropdowns
         supabase.from("animals").select("id, animal_code, name, species, sex, status, health_status"),
         supabase.from("treatments").select("id, animal_id, condition, medication, start_date, end_date, status, follow_up_date").eq("status", "Ongoing"),
         supabase.from("inventory").select("id, name, category, quantity, unit, min_stock"),
@@ -306,8 +556,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
           source: "Born on farm",
           status: a.status,
           healthStatus: a.health_status,
-          primaryPhoto: "",
-          photos: [],
+          primaryPhoto: DEFAULT_ANIMAL_PHOTO,
+          photos: [DEFAULT_ANIMAL_PHOTO],
           notes: "",
           created_at: new Date().toISOString()
         })));
@@ -381,8 +631,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-  // 2. PAGE-SPECIFIC TARGETED FETCHERS
-
   // OWNED BY /animals ROUTE ONLY
   const loadAnimals = useCallback(async () => {
     const { data, error } = await supabase
@@ -403,8 +651,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         source: a.source,
         status: a.status,
         healthStatus: a.health_status,
-        primaryPhoto: a.primary_photo,
-        photos: a.photos || [],
+        primaryPhoto: a.primary_photo || DEFAULT_ANIMAL_PHOTO,
+        photos: (a.photos && a.photos.length > 0) ? a.photos : [DEFAULT_ANIMAL_PHOTO],
         notes: a.notes || "",
         parents: { motherId: a.mother_id, fatherId: a.father_id },
         created_at: a.created_at
@@ -440,8 +688,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         source: a.source,
         status: a.status,
         healthStatus: a.health_status,
-        primaryPhoto: a.primary_photo,
-        photos: a.photos || [],
+        primaryPhoto: a.primary_photo || DEFAULT_ANIMAL_PHOTO,
+        photos: (a.photos && a.photos.length > 0) ? a.photos : [DEFAULT_ANIMAL_PHOTO],
         notes: a.notes || "",
         parents: { motherId: a.mother_id, fatherId: a.father_id },
         created_at: a.created_at
@@ -887,8 +1135,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       source: animalData.source,
       status: animalData.status,
       health_status: animalData.healthStatus,
-      primary_photo: animalData.primaryPhoto,
-      photos: animalData.photos,
+      primary_photo: animalData.primaryPhoto || DEFAULT_ANIMAL_PHOTO,
+      photos: (animalData.photos && animalData.photos.length > 0) ? animalData.photos : [DEFAULT_ANIMAL_PHOTO],
       notes: animalData.notes,
       mother_id: animalData.parents?.motherId,
       father_id: animalData.parents?.fatherId,
@@ -913,8 +1161,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       source: animalData.source,
       status: animalData.status,
       healthStatus: animalData.healthStatus,
-      primaryPhoto: animalData.primaryPhoto,
-      photos: animalData.photos,
+      primaryPhoto: animalData.primaryPhoto || DEFAULT_ANIMAL_PHOTO,
+      photos: (animalData.photos && animalData.photos.length > 0) ? animalData.photos : [DEFAULT_ANIMAL_PHOTO],
       notes: animalData.notes,
       parents: animalData.parents,
       created_at: new Date().toISOString()
