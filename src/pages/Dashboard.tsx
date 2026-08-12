@@ -148,7 +148,7 @@ export const Dashboard: React.FC = () => {
         setNoteTitle("");
         setNoteContent("");
       }
-    } font-bold {
+    } finally {
       setIsSubmittingNote(false);
     }
   };
