@@ -10,7 +10,6 @@ export const normalizeFarmName = (name: string): string => {
   if (!name) return "";
   let trimmed = name.trim().replace(/\s+/g, " ");
   if (!trimmed) return "";
-  // Strip repetitive trailing "farm" (case insensitive)
   trimmed = trimmed.replace(/(\s+farm)+$/i, "");
   return `${trimmed} Farm`;
 };
@@ -477,6 +476,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [session.isAuthenticated, session.email]);
 
   // TARGETED LOADER 2: ANIMALS DIRECTORY
+  // Uses fallback query strategy to prevent 500 errors if legacy base64 photos array is oversized
   const loadAnimals = useCallback(async (force = false) => {
     if (!session.isAuthenticated) return;
     if (hasLoadedAnimalsRef.current && !force) return;
@@ -484,10 +484,35 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     fetchingAnimalsRef.current = true;
 
     try {
-      const { data, error } = await supabase
+      // Step 1: Attempt full selection with photos array
+      let { data, error } = await supabase
         .from("animals")
         .select("id, animal_code, name, species, breed, sex, dob, purchase_date, source, status, health_status, primary_photo, photos, mother_id, father_id, notes, created_at")
         .order("created_at", { ascending: false });
+
+      // Step 2: Fallback if query returns 500/error due to heavy photos array
+      if (error) {
+        console.warn("[FarmContext] Full animals query failed, attempting lightweight fallback query...", error.message);
+        const fallbackRes = await supabase
+          .from("animals")
+          .select("id, animal_code, name, species, breed, sex, dob, purchase_date, source, status, health_status, primary_photo, mother_id, father_id, notes, created_at")
+          .order("created_at", { ascending: false });
+
+        data = fallbackRes.data as any;
+        error = fallbackRes.error as any;
+      }
+
+      // Step 3: Emergency fallback if primary_photo is also problematic
+      if (error) {
+        console.warn("[FarmContext] Primary photo query failed, running emergency minimal query...", error.message);
+        const emergencyRes = await supabase
+          .from("animals")
+          .select("id, animal_code, name, species, breed, sex, dob, purchase_date, source, status, health_status, mother_id, father_id, notes, created_at")
+          .order("created_at", { ascending: false });
+
+        data = emergencyRes.data as any;
+        error = emergencyRes.error as any;
+      }
 
       if (!error && data) {
         setAnimals(data.map((a: any) => ({
@@ -495,21 +520,23 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
           animal_code: a.animal_code,
           name: a.name || "",
           species: a.species,
-          breed: a.breed,
+          breed: a.breed || "Local Breed",
           sex: a.sex,
-          dob: a.dob,
+          dob: a.dob || "",
           purchaseDate: a.purchase_date,
-          source: a.source,
-          status: a.status,
-          healthStatus: a.health_status,
+          source: a.source || "Born on farm",
+          status: a.status || "Healthy",
+          healthStatus: a.health_status || "Healthy",
           primaryPhoto: a.primary_photo || DEFAULT_ANIMAL_PHOTO,
-          photos: (a.photos && a.photos.length > 0) ? a.photos : [DEFAULT_ANIMAL_PHOTO],
+          photos: (a.photos && Array.isArray(a.photos) && a.photos.length > 0) ? a.photos : [a.primary_photo || DEFAULT_ANIMAL_PHOTO],
           notes: a.notes || "",
           parents: { motherId: a.mother_id, fatherId: a.father_id },
-          created_at: a.created_at
+          created_at: a.created_at || new Date().toISOString()
         })));
         hasLoadedAnimalsRef.current = true;
       }
+    } catch (err) {
+      console.error("[FarmContext] Load animals unexpected error:", err);
     } finally {
       fetchingAnimalsRef.current = false;
     }
@@ -1042,7 +1069,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const newEmail = (profile.email || session.email).trim();
 
     try {
-      // 1. If email has changed, update Supabase Auth User email
       if (newEmail && newEmail.toLowerCase() !== session.email.toLowerCase()) {
         const { error: emailErr } = await supabase.auth.updateUser({ email: newEmail });
         if (emailErr) {
@@ -1052,7 +1078,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         showSuccess("Account email update requested. Check inbox for confirmation if required.");
       }
 
-      // 2. Update metadata (farmName, name, location)
       const { error: metaErr } = await supabase.auth.updateUser({
         data: {
           farmName: normalizedFarmName,
@@ -1066,7 +1091,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return false;
       }
 
-      // 3. Update public.accounts table
       let targetAccountId = accountId;
       if (!targetAccountId) {
         const { data: acct } = await supabase.from("accounts").select("id").limit(1).maybeSingle();
