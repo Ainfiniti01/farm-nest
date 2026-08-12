@@ -2,21 +2,27 @@
 
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { useFarm } from "@/context/FarmContext";
-import { showError } from "@/utils/toast";
+import { useFarm, normalizeFarmName } from "@/context/FarmContext";
+import { showError, showSuccess } from "@/utils/toast";
+import { KeyRound, HelpCircle, Loader2, ArrowLeft } from "lucide-react";
 
 export const Login: React.FC = () => {
   const navigate = useNavigate();
-  const { login } = useFarm();
+  const { login, requestPasswordReset } = useFarm();
   
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
+  // Forgot Password Modal State
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [resetInput, setResetInput] = useState("");
+  const [isSendingReset, setIsSendingReset] = useState(false);
+
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!identifier || !password) {
-      showError("Please enter your farm name/email and password.");
+      showError("Please enter your farm name or email, and password.");
       return;
     }
 
@@ -33,6 +39,25 @@ export const Login: React.FC = () => {
     }
   };
 
+  const handleResetSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetInput.trim()) {
+      showError("Please enter your email or Farm Name.");
+      return;
+    }
+
+    setIsSendingReset(true);
+    try {
+      const success = await requestPasswordReset(resetInput);
+      if (success) {
+        setShowForgotModal(false);
+        setResetInput("");
+      }
+    } finally {
+      setIsSendingReset(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center text-center p-6 text-white relative">
@@ -41,7 +66,7 @@ export const Login: React.FC = () => {
           <div className="w-16 h-16 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
           <div>
             <h2 className="text-xl font-black text-emerald-400 tracking-tight">Authenticating operator credentials...</h2>
-            <p className="text-slate-400 text-xs mt-2 italic font-serif">"Connecting to FarmNest database."</p>
+            <p className="text-slate-400 text-xs mt-2 italic font-serif">"Connecting to shared farm registry."</p>
           </div>
         </div>
       </div>
@@ -56,24 +81,43 @@ export const Login: React.FC = () => {
         <div className="text-center space-y-1">
           <span className="text-4xl block">🌾</span>
           <h2 className="text-2xl font-black tracking-tight text-white">Sign Into FarmNest</h2>
-          <p className="text-slate-400 text-xs">Access your livestock logs and active veterinary prescriptions.</p>
+          <p className="text-slate-400 text-xs">Shared access account for all farm operators.</p>
         </div>
 
         <form onSubmit={handleLoginSubmit} className="space-y-4">
           <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Email Address or Farm Name</label>
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+              Farm Name or Email Address
+            </label>
             <input
               type="text"
-              placeholder="e.g. operator@farmnest.com or Adam Farms"
+              placeholder="e.g. Adam Farm or operator@farmnest.com"
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
               className="w-full p-3 bg-slate-700/60 border border-slate-600 rounded-xl text-xs text-white focus:ring-1 focus:ring-emerald-500 outline-none"
               required
             />
+            {identifier && !identifier.includes("@") && (
+              <p className="text-[10px] text-emerald-400 mt-1 font-semibold">
+                Will match: <strong className="underline">{normalizeFarmName(identifier)}</strong>
+              </p>
+            )}
           </div>
 
           <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Password</label>
+            <div className="flex justify-between items-center mb-1">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Password</label>
+              <button
+                type="button"
+                onClick={() => {
+                  setResetInput(identifier);
+                  setShowForgotModal(true);
+                }}
+                className="text-[10px] font-bold text-emerald-400 hover:underline"
+              >
+                Forgot Password?
+              </button>
+            </div>
             <input
               type="password"
               placeholder="••••••••"
@@ -93,12 +137,71 @@ export const Login: React.FC = () => {
         </form>
 
         <p className="text-center text-xs text-slate-400">
-          New administrator?{" "}
+          New farm profile?{" "}
           <Link to="/register" className="text-emerald-400 hover:underline font-bold">
-            Create Farm Profile
+            Create Farm Account
           </Link>
         </p>
       </div>
+
+      {/* FORGOT PASSWORD MODAL */}
+      {showForgotModal && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <form 
+            onSubmit={handleResetSubmit}
+            className="bg-slate-800 border border-slate-700 w-full max-w-sm rounded-3xl p-6 space-y-4 text-white shadow-2xl"
+          >
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-emerald-950 text-emerald-400 rounded-xl border border-emerald-800">
+                <KeyRound size={20} />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-sm text-white">Reset Account Password</h3>
+                <p className="text-[10px] text-slate-400">Recovery link will be sent to the farm's account email</p>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                Farm Name or Account Email
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Adam Farm or operator@farmnest.com"
+                value={resetInput}
+                onChange={(e) => setResetInput(e.target.value)}
+                className="w-full p-3 bg-slate-700/60 border border-slate-600 rounded-xl text-xs text-white outline-none focus:ring-1 focus:ring-emerald-500"
+                required
+              />
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => !isSendingReset && setShowForgotModal(false)}
+                disabled={isSendingReset}
+                className="flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-300 font-bold text-xs rounded-xl transition disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSendingReset}
+                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow transition disabled:opacity-60 flex items-center justify-center gap-1.5"
+              >
+                {isSendingReset ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    <span>Sending...</span>
+                  </>
+                ) : (
+                  "Send Reset Email"
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 };

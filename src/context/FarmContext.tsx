@@ -6,6 +6,15 @@ import { supabase } from "@/lib/supabaseClient";
 
 export const DEFAULT_ANIMAL_PHOTO = "/placeholder.svg";
 
+export const normalizeFarmName = (name: string): string => {
+  if (!name) return "";
+  let trimmed = name.trim().replace(/\s+/g, " ");
+  if (!trimmed) return "";
+  // Strip repetitive trailing "farm" (case insensitive)
+  trimmed = trimmed.replace(/(\s+farm)+$/i, "");
+  return `${trimmed} Farm`;
+};
+
 export interface Animal {
   id: string;
   animal_code: string;
@@ -141,6 +150,7 @@ export interface FarmProfile {
   ownerName: string;
   location: string;
   image: string;
+  email?: string;
 }
 
 export interface UserSession {
@@ -203,7 +213,9 @@ interface FarmContextType {
   updateAnimalNote: (id: string, content: string) => Promise<boolean>;
   deleteAnimalNote: (id: string) => Promise<boolean>;
   logActivity: (type: string, description: string, actor: string, targetId?: string) => Promise<void>;
-  updateFarmProfile: (profile: FarmProfile) => Promise<void>;
+  updateFarmProfile: (profile: FarmProfile) => Promise<boolean>;
+  changeAccountPassword: (newPassword: string) => Promise<boolean>;
+  requestPasswordReset: (identifierOrEmail: string) => Promise<boolean>;
   incrementAiUsage: (type: "text" | "image") => void;
   setOnboardingCompleted: (val: boolean) => void;
   login: (identifier: string, password: string) => Promise<boolean>;
@@ -259,6 +271,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     ownerName: "Operator",
     location: "Kano, Nigeria",
     image: "/placeholder.svg",
+    email: "",
   });
 
   const [session, setSession] = useState<UserSession>({
@@ -307,7 +320,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const { data } = await supabase
         .from("accounts")
-        .select("id, farm_name, operator_name, location")
+        .select("id, farm_name, operator_name, email, location")
         .limit(1)
         .maybeSingle();
 
@@ -317,7 +330,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
           ...prev,
           name: data.farm_name || prev.name,
           ownerName: data.operator_name || prev.ownerName,
-          location: data.location || prev.location
+          location: data.location || prev.location,
+          email: data.email || session.email || prev.email
         }));
         hasLoadedAccountRef.current = true;
       }
@@ -326,7 +340,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       fetchingAccountRef.current = false;
     }
-  }, [session.isAuthenticated]);
+  }, [session.isAuthenticated, session.email]);
 
   // TARGETED LOADER 1: DASHBOARD DATA (prioritized for / and /dashboard)
   const loadDashboardData = useCallback(async (force = false) => {
@@ -345,7 +359,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         resFarmNotes,
         resLogs
       ] = await Promise.all([
-        supabase.from("accounts").select("id, farm_name, operator_name, location").limit(1).maybeSingle(),
+        supabase.from("accounts").select("id, farm_name, operator_name, email, location").limit(1).maybeSingle(),
         supabase.from("animals").select("id, animal_code, name, species, sex, status, health_status"),
         supabase.from("treatments").select("id, animal_id, condition, medication, start_date, end_date, status, follow_up_date").eq("status", "Ongoing"),
         supabase.from("inventory").select("id, name, category, quantity, unit, min_stock"),
@@ -360,7 +374,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
           ...prev,
           name: acctRes.data.farm_name || prev.name,
           ownerName: acctRes.data.operator_name || prev.ownerName,
-          location: acctRes.data.location || prev.location
+          location: acctRes.data.location || prev.location,
+          email: acctRes.data.email || session.email || prev.email
         }));
         hasLoadedAccountRef.current = true;
       }
@@ -459,9 +474,9 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       fetchingDashboardRef.current = false;
     }
-  }, [session.isAuthenticated]);
+  }, [session.isAuthenticated, session.email]);
 
-  // TARGETED LOADER 2: ANIMALS DIRECTORY (prioritized for /animals)
+  // TARGETED LOADER 2: ANIMALS DIRECTORY
   const loadAnimals = useCallback(async (force = false) => {
     if (!session.isAuthenticated) return;
     if (hasLoadedAnimalsRef.current && !force) return;
@@ -500,7 +515,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [session.isAuthenticated]);
 
-  // TARGETED LOADER 3: SINGLE ANIMAL PROFILE (prioritized for /animals/:id)
+  // TARGETED LOADER 3: SINGLE ANIMAL PROFILE
   const loadAnimalProfile = useCallback(async (animalId: string, force = false) => {
     if (!animalId || !session.isAuthenticated) return;
     if (fetchingAnimalProfileRef.current === animalId && !force) return;
@@ -622,7 +637,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [session.isAuthenticated]);
 
-  // TARGETED LOADER 4: INVENTORY (prioritized for /inventory)
+  // TARGETED LOADER 4: INVENTORY
   const loadInventory = useCallback(async (force = false) => {
     if (!session.isAuthenticated) return;
     if (hasLoadedInventoryRef.current && !force) return;
@@ -652,7 +667,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [session.isAuthenticated]);
 
-  // TARGETED LOADER 5: FARM NOTES (prioritized for /notes)
+  // TARGETED LOADER 5: FARM NOTES
   const loadFarmNotes = useCallback(async (force = false) => {
     if (!session.isAuthenticated) return;
     if (hasLoadedFarmNotesRef.current && !force) return;
@@ -682,7 +697,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [session.isAuthenticated]);
 
-  // TARGETED LOADER 6: CONTACTS (prioritized for /settings/contacts)
+  // TARGETED LOADER 6: CONTACTS
   const loadContacts = useCallback(async (force = false) => {
     if (!session.isAuthenticated) return;
     if (hasLoadedContactsRef.current && !force) return;
@@ -732,6 +747,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const { data: { session: sbSession } } = await supabase.auth.getSession();
         if (isMounted) {
           if (sbSession?.user) {
+            const rawFarmName = sbSession.user.user_metadata?.farmName || "My Farm";
+            const normalized = normalizeFarmName(rawFarmName);
             setSession({
               userId: sbSession.user.id,
               email: sbSession.user.email || "",
@@ -739,14 +756,13 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
               isAuthenticated: true
             });
             setIsAuthReady(true);
-            if (sbSession.user.user_metadata) {
-              setFarmProfile(prev => ({
-                ...prev,
-                name: sbSession.user.user_metadata.farmName || prev.name,
-                ownerName: sbSession.user.user_metadata.name || prev.ownerName,
-                location: sbSession.user.user_metadata.location || prev.location
-              }));
-            }
+            setFarmProfile(prev => ({
+              ...prev,
+              name: normalized,
+              ownerName: sbSession.user.user_metadata?.name || prev.ownerName,
+              location: sbSession.user.user_metadata?.location || prev.location,
+              email: sbSession.user.email || prev.email
+            }));
           } else {
             setSession({
               userId: undefined,
@@ -774,12 +790,19 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
         if (sbSession?.user) {
+          const rawFarmName = sbSession.user.user_metadata?.farmName || "My Farm";
+          const normalized = normalizeFarmName(rawFarmName);
           setSession({
             userId: sbSession.user.id,
             email: sbSession.user.email || "",
             name: sbSession.user.user_metadata?.name || "Operator",
             isAuthenticated: true
           });
+          setFarmProfile(prev => ({
+            ...prev,
+            name: normalized,
+            email: sbSession.user.email || prev.email
+          }));
           setIsAuthReady(true);
         }
       } else if (event === "SIGNED_OUT") {
@@ -859,19 +882,24 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (identifier: string, password: string): Promise<boolean> => {
     setIsLoadingData(true);
     try {
-      let emailToUse = identifier.trim();
+      const cleanInput = identifier.trim();
+      let emailToUse = cleanInput;
 
-      if (!emailToUse.includes("@")) {
+      if (!cleanInput.includes("@")) {
+        const normalizedInput = normalizeFarmName(cleanInput);
+        
+        // Case-insensitive query against public.accounts table for farm_name or raw identifier
         const { data: accountRow } = await supabase
           .from("accounts")
           .select("email, farm_name")
-          .ilike("farm_name", emailToUse)
+          .or(`farm_name.ilike.${cleanInput},farm_name.ilike.${normalizedInput}`)
+          .limit(1)
           .maybeSingle();
 
         if (accountRow?.email) {
           emailToUse = accountRow.email;
         } else {
-          showError(`No farm account registered under '${identifier}'.`);
+          showError(`No farm account registered under '${cleanInput}' or '${normalizedInput}'.`);
           setIsLoadingData(false);
           return false;
         }
@@ -883,20 +911,27 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       if (authError) {
-        showError("Incorrect email/farm name or password.");
+        showError("Incorrect password or login credentials.");
         setIsLoadingData(false);
         return false;
       }
 
       if (authData?.user) {
         clearSessionCache();
+        const rawFarmName = authData.user.user_metadata?.farmName || "My Farm";
+        const normalized = normalizeFarmName(rawFarmName);
         setSession({
           userId: authData.user.id,
           email: authData.user.email || "",
           name: authData.user.user_metadata?.name || "Operator",
           isAuthenticated: true
         });
-        showSuccess("Signed in successfully!");
+        setFarmProfile(prev => ({
+          ...prev,
+          name: normalized,
+          email: authData.user.email || prev.email
+        }));
+        showSuccess(`Signed into ${normalized}!`);
         return true;
       }
     } catch (err: any) {
@@ -907,17 +942,19 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return false;
   };
 
-  const signupAndSetup = async (email: string, password: string, name: string, farmName: string, location: string): Promise<boolean> => {
+  const signupAndSetup = async (email: string, password: string, name: string, rawFarmName: string, location: string): Promise<boolean> => {
     setIsLoadingData(true);
     try {
+      const normalizedFarmName = normalizeFarmName(rawFarmName);
+
       const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
+        email: email.trim(),
         password,
         options: {
           data: {
-            name,
-            farmName,
-            location
+            name: name.trim(),
+            farmName: normalizedFarmName,
+            location: location.trim()
           }
         }
       });
@@ -932,10 +969,10 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           const { data: newAcct } = await supabase.from("accounts").insert([{
             user_id: authData.user.id,
-            farm_name: farmName,
-            operator_name: name,
-            email: email,
-            location: location
+            farm_name: normalizedFarmName,
+            operator_name: name.trim(),
+            email: email.trim(),
+            location: location.trim()
           }]).select("id").single();
 
           if (newAcct?.id) {
@@ -947,9 +984,10 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         const newProfile = {
           ...farmProfile,
-          name: farmName,
-          ownerName: name,
-          location
+          name: normalizedFarmName,
+          ownerName: name.trim(),
+          location: location.trim(),
+          email: email.trim()
         };
         setFarmProfile(newProfile);
 
@@ -957,11 +995,11 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setSession({
           userId: authData.user.id,
           email: authData.user.email || "",
-          name: name,
+          name: name.trim(),
           isAuthenticated: true
         });
 
-        showSuccess(`Farm setup complete for ${farmName}!`);
+        showSuccess(`Farm setup complete for ${normalizedFarmName}!`);
         return true;
       }
     } catch (err: any) {
@@ -999,8 +1037,152 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const updateFarmProfile = async (profile: FarmProfile): Promise<boolean> => {
+    const normalizedFarmName = normalizeFarmName(profile.name);
+    const newEmail = (profile.email || session.email).trim();
+
+    try {
+      // 1. If email has changed, update Supabase Auth User email
+      if (newEmail && newEmail.toLowerCase() !== session.email.toLowerCase()) {
+        const { error: emailErr } = await supabase.auth.updateUser({ email: newEmail });
+        if (emailErr) {
+          showError("Failed to update authentication email: " + emailErr.message);
+          return false;
+        }
+        showSuccess("Account email update requested. Check inbox for confirmation if required.");
+      }
+
+      // 2. Update metadata (farmName, name, location)
+      const { error: metaErr } = await supabase.auth.updateUser({
+        data: {
+          farmName: normalizedFarmName,
+          name: profile.ownerName,
+          location: profile.location
+        }
+      });
+
+      if (metaErr) {
+        showError("Failed to update user auth metadata: " + metaErr.message);
+        return false;
+      }
+
+      // 3. Update public.accounts table
+      let targetAccountId = accountId;
+      if (!targetAccountId) {
+        const { data: acct } = await supabase.from("accounts").select("id").limit(1).maybeSingle();
+        targetAccountId = acct?.id || null;
+        if (targetAccountId) setAccountId(targetAccountId);
+      }
+
+      if (targetAccountId) {
+        const { error } = await supabase.from("accounts").update({
+          farm_name: normalizedFarmName,
+          operator_name: profile.ownerName,
+          email: newEmail,
+          location: profile.location,
+          updated_at: new Date().toISOString()
+        }).eq("id", targetAccountId);
+
+        if (error) {
+          showError("Failed to update database account record: " + error.message);
+          return false;
+        }
+      } else {
+        const { data: newAcct, error } = await supabase.from("accounts").insert([{
+          user_id: session.userId || null,
+          farm_name: normalizedFarmName,
+          operator_name: profile.ownerName,
+          email: newEmail,
+          location: profile.location
+        }]).select("id").single();
+
+        if (!error && newAcct) {
+          setAccountId(newAcct.id);
+        }
+      }
+
+      setFarmProfile({
+        ...profile,
+        name: normalizedFarmName,
+        email: newEmail
+      });
+      setSession(prev => ({ ...prev, email: newEmail, name: profile.ownerName }));
+
+      await logActivity("Farm Profile Updated", `Updated farm name to ${normalizedFarmName}`, profile.ownerName);
+      showSuccess("Farm profile updated successfully!");
+      return true;
+    } catch (e: any) {
+      showError(e?.message || "Failed to update profile.");
+      return false;
+    }
+  };
+
+  const changeAccountPassword = async (newPassword: string): Promise<boolean> => {
+    if (!newPassword || newPassword.length < 6) {
+      showError("Password must be at least 6 characters long.");
+      return false;
+    }
+
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) {
+        showError("Failed to change password: " + error.message);
+        return false;
+      }
+      showSuccess("Account password changed successfully!");
+      await logActivity("Password Changed", "Updated account access password", farmProfile.ownerName);
+      return true;
+    } catch (e: any) {
+      showError(e?.message || "Failed to change password.");
+      return false;
+    }
+  };
+
+  const requestPasswordReset = async (identifierOrEmail: string): Promise<boolean> => {
+    const clean = identifierOrEmail.trim();
+    if (!clean) {
+      showError("Please enter an email address or Farm Name.");
+      return false;
+    }
+
+    try {
+      let emailToReset = clean;
+
+      if (!clean.includes("@")) {
+        const normalized = normalizeFarmName(clean);
+        const { data: accountRow } = await supabase
+          .from("accounts")
+          .select("email, farm_name")
+          .or(`farm_name.ilike.${clean},farm_name.ilike.${normalized}`)
+          .limit(1)
+          .maybeSingle();
+
+        if (accountRow?.email) {
+          emailToReset = accountRow.email;
+        } else {
+          showError(`Could not locate farm account registered under '${clean}'.`);
+          return false;
+        }
+      }
+
+      const { error } = await supabase.auth.resetPasswordForEmail(emailToReset, {
+        redirectTo: window.location.origin + "/login"
+      });
+
+      if (error) {
+        showError("Password reset failed: " + error.message);
+        return false;
+      }
+
+      showSuccess(`Password reset instructions sent to ${emailToReset}`);
+      return true;
+    } catch (e: any) {
+      showError(e?.message || "Password reset request failed.");
+      return false;
+    }
+  };
+
   const addAnimal = async (animalData: Omit<Animal, "id" | "animal_code" | "created_at">) => {
-    // Generate Farm Prefix (e.g. Adam -> AD, Yuswas -> YU, My Farm -> MF)
     const getFarmPrefix = (farmName: string): string => {
       const clean = farmName.replace(/[^a-zA-Z]/g, "").toUpperCase();
       if (clean.length >= 2) return clean.slice(0, 2);
@@ -1008,7 +1190,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return "AD";
     };
 
-    // Species Code: Goat -> G, Ram/Sheep -> S, Chicken -> C, Other -> O
     const getSpeciesCode = (species: Animal["species"]): string => {
       switch (species) {
         case "Goat": return "G";
@@ -1547,46 +1728,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const updateFarmProfile = async (profile: FarmProfile) => {
-    setFarmProfile(profile);
-
-    let targetAccountId = accountId;
-    if (!targetAccountId) {
-      const { data: acct } = await supabase.from("accounts").select("id").limit(1).maybeSingle();
-      targetAccountId = acct?.id || null;
-      if (targetAccountId) setAccountId(targetAccountId);
-    }
-
-    if (targetAccountId) {
-      const { error } = await supabase.from("accounts").update({
-        farm_name: profile.name,
-        operator_name: profile.ownerName,
-        location: profile.location,
-        updated_at: new Date().toISOString()
-      }).eq("id", targetAccountId);
-
-      if (error) {
-        showError("Failed to update farm profile: " + error.message);
-        return;
-      }
-    } else {
-      const { data: newAcct, error } = await supabase.from("accounts").insert([{
-        user_id: session.userId || null,
-        farm_name: profile.name,
-        operator_name: profile.ownerName,
-        email: session.email || "operator@farmnest.com",
-        location: profile.location
-      }]).select("id").single();
-
-      if (!error && newAcct) {
-        setAccountId(newAcct.id);
-      }
-    }
-
-    await logActivity("Farm Profile Updated", `Updated farm details for ${profile.name}`, profile.ownerName);
-    showSuccess("Farm profile updated");
-  };
-
   const incrementAiUsage = (type: "text" | "image") => {
     setAiUsage(prev => ({
       ...prev,
@@ -1649,6 +1790,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         deleteAnimalNote,
         logActivity,
         updateFarmProfile,
+        changeAccountPassword,
+        requestPasswordReset,
         incrementAiUsage,
         setOnboardingCompleted,
         login,
