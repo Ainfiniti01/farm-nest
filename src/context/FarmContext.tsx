@@ -235,6 +235,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const fetchingAnimalsRef = useRef<boolean>(false);
   const fetchingAnimalProfileRef = useRef<string | null>(null);
   const isLoggingOutRef = useRef<boolean>(false);
+
+  const [accountId, setAccountId] = useState<string | null>(null);
   
   const [farmProfile, setFarmProfile] = useState<FarmProfile>({
     name: "My Farm",
@@ -263,9 +265,9 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem("farm_v2_onboarding_completed", JSON.stringify(val));
   };
 
-  // 1. LIGHTWEIGHT DASHBOARD DATA LOADER (Summary info only)
+  // 1. LIGHTWEIGHT DASHBOARD DATA LOADER (Summary info only, shared across farm)
   const loadDashboardData = useCallback(async () => {
-    if (!session.userId) return;
+    if (!session.isAuthenticated) return;
     if (fetchingDashboardRef.current) return;
     fetchingDashboardRef.current = true;
     setIsLoadingData(true);
@@ -280,16 +282,17 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         resFarmNotes,
         resLogs
       ] = await Promise.all([
-        supabase.from("accounts").select("farm_name, operator_name, location").eq("user_id", session.userId).limit(1).maybeSingle(),
-        supabase.from("animals").select("id, animal_code, name, species, sex, status, health_status").eq("user_id", session.userId),
-        supabase.from("treatments").select("id, animal_id, condition, medication, start_date, end_date, status, follow_up_date").eq("user_id", session.userId).eq("status", "Ongoing"),
-        supabase.from("inventory").select("id, name, category, quantity, unit, min_stock").eq("user_id", session.userId),
-        supabase.from("reminders").select("id, title, type, due_date, animal_id, completed, notes").eq("user_id", session.userId).eq("completed", false),
-        supabase.from("farm_notes").select("id, farm_id, title, content, created_by, created_at, updated_at").eq("user_id", session.userId).order("created_at", { ascending: false }).limit(5),
-        supabase.from("activity_logs").select("id, type, description, date, actor, target_id").eq("user_id", session.userId).order("date", { ascending: false }).limit(10)
+        supabase.from("accounts").select("id, farm_name, operator_name, location").limit(1).maybeSingle(),
+        supabase.from("animals").select("id, animal_code, name, species, sex, status, health_status"),
+        supabase.from("treatments").select("id, animal_id, condition, medication, start_date, end_date, status, follow_up_date").eq("status", "Ongoing"),
+        supabase.from("inventory").select("id, name, category, quantity, unit, min_stock"),
+        supabase.from("reminders").select("id, title, type, due_date, animal_id, completed, notes").eq("completed", false),
+        supabase.from("farm_notes").select("id, farm_id, title, content, created_by, created_at, updated_at").order("created_at", { ascending: false }).limit(5),
+        supabase.from("activity_logs").select("id, type, description, date, actor, target_id").order("date", { ascending: false }).limit(10)
       ]);
 
       if (acctRes.data) {
+        setAccountId(acctRes.data.id);
         setFarmProfile(prev => ({
           ...prev,
           name: acctRes.data.farm_name || prev.name,
@@ -383,11 +386,11 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       fetchingDashboardRef.current = false;
       setIsLoadingData(false);
     }
-  }, [session.userId]);
+  }, [session.isAuthenticated]);
 
-  // OWNED BY /animals ROUTE ONLY
+  // LOAD ALL ANIMALS FOR DIRECTORY
   const loadAnimals = useCallback(async () => {
-    if (!session.userId) return;
+    if (!session.isAuthenticated) return;
     if (fetchingAnimalsRef.current) return;
     fetchingAnimalsRef.current = true;
 
@@ -395,7 +398,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { data, error } = await supabase
         .from("animals")
         .select("id, animal_code, name, species, breed, sex, dob, purchase_date, source, status, health_status, primary_photo, photos, mother_id, father_id, notes, created_at")
-        .eq("user_id", session.userId)
         .order("created_at", { ascending: false });
 
       if (!error && data) {
@@ -421,23 +423,23 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       fetchingAnimalsRef.current = false;
     }
-  }, [session.userId]);
+  }, [session.isAuthenticated]);
 
-  // OWNED BY /animals/:id ROUTE ONLY
+  // LOAD DETAILED PROFILE FOR SINGLE ANIMAL
   const loadAnimalProfile = useCallback(async (animalId: string) => {
-    if (!animalId || !session.userId) return;
+    if (!animalId || !session.isAuthenticated) return;
     if (fetchingAnimalProfileRef.current === animalId) return;
     fetchingAnimalProfileRef.current = animalId;
 
     try {
       const [resAnimal, resHealth, resTreatments, resWeights, resBreeding, resNotes, resLogs] = await Promise.all([
-        supabase.from("animals").select("*").eq("id", animalId).eq("user_id", session.userId).maybeSingle(),
-        supabase.from("health_records").select("*").eq("animal_id", animalId).eq("user_id", session.userId).order("date", { ascending: false }),
-        supabase.from("treatments").select("*").eq("animal_id", animalId).eq("user_id", session.userId).order("start_date", { ascending: false }),
-        supabase.from("weight_records").select("*").eq("animal_id", animalId).eq("user_id", session.userId).order("date", { ascending: true }),
-        supabase.from("breeding_records").select("*").eq("user_id", session.userId).or(`female_id.eq.${animalId},male_id.eq.${animalId}`).order("date", { ascending: false }),
-        supabase.from("animal_notes").select("*").eq("animal_id", animalId).eq("user_id", session.userId).order("created_at", { ascending: false }),
-        supabase.from("activity_logs").select("*").eq("target_id", animalId).eq("user_id", session.userId).order("date", { ascending: false }).limit(20)
+        supabase.from("animals").select("*").eq("id", animalId).maybeSingle(),
+        supabase.from("health_records").select("*").eq("animal_id", animalId).order("date", { ascending: false }),
+        supabase.from("treatments").select("*").eq("animal_id", animalId).order("start_date", { ascending: false }),
+        supabase.from("weight_records").select("*").eq("animal_id", animalId).order("date", { ascending: true }),
+        supabase.from("breeding_records").select("*").or(`female_id.eq.${animalId},male_id.eq.${animalId}`).order("date", { ascending: false }),
+        supabase.from("animal_notes").select("*").eq("animal_id", animalId).order("created_at", { ascending: false }),
+        supabase.from("activity_logs").select("*").eq("target_id", animalId).order("date", { ascending: false }).limit(20)
       ]);
 
       if (resAnimal.data) {
@@ -539,14 +541,13 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       fetchingAnimalProfileRef.current = null;
     }
-  }, [session.userId]);
+  }, [session.isAuthenticated]);
 
   const loadInventory = useCallback(async () => {
-    if (!session.userId) return;
+    if (!session.isAuthenticated) return;
     const { data, error } = await supabase
       .from("inventory")
-      .select("id, name, category, quantity, unit, min_stock, expiry_date, notes")
-      .eq("user_id", session.userId);
+      .select("id, name, category, quantity, unit, min_stock, expiry_date, notes");
 
     if (!error && data) {
       setInventory(data.map((i: any) => ({
@@ -560,14 +561,13 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         notes: i.notes
       })));
     }
-  }, [session.userId]);
+  }, [session.isAuthenticated]);
 
   const loadFarmNotes = useCallback(async () => {
-    if (!session.userId) return;
+    if (!session.isAuthenticated) return;
     const { data, error } = await supabase
       .from("farm_notes")
       .select("id, farm_id, title, content, created_by, created_at, updated_at")
-      .eq("user_id", session.userId)
       .order("created_at", { ascending: false });
 
     if (!error && data) {
@@ -581,14 +581,13 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updated_at: fn.updated_at || new Date().toISOString()
       })));
     }
-  }, [session.userId]);
+  }, [session.isAuthenticated]);
 
   const loadContacts = useCallback(async () => {
-    if (!session.userId) return;
+    if (!session.isAuthenticated) return;
     const { data, error } = await supabase
       .from("contacts")
-      .select("id, name, role, phone, whatsapp, email, address, notes")
-      .eq("user_id", session.userId);
+      .select("id, name, role, phone, whatsapp, email, address, notes");
 
     if (!error && data) {
       setContacts(data.map((c: any) => ({
@@ -602,13 +601,13 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         notes: c.notes
       })));
     }
-  }, [session.userId]);
+  }, [session.isAuthenticated]);
 
   const reloadFarmData = useCallback(async () => {
-    if (session.userId) {
+    if (session.isAuthenticated) {
       await loadDashboardData();
     }
-  }, [loadDashboardData, session.userId]);
+  }, [loadDashboardData, session.isAuthenticated]);
 
   useEffect(() => {
     let isMounted = true;
@@ -685,6 +684,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
         setIsAuthReady(true);
         setIsLoadingData(false);
+        setAccountId(null);
         setAnimals([]);
         setHealthRecords([]);
         setTreatments([]);
@@ -705,13 +705,12 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   useEffect(() => {
-    if (session.isAuthenticated && session.userId) {
+    if (session.isAuthenticated) {
       loadDashboardData();
     }
-  }, [session.isAuthenticated, session.userId, loadDashboardData]);
+  }, [session.isAuthenticated, loadDashboardData]);
 
   const logActivity = async (type: string, description: string, actor: string, targetId?: string) => {
-    const newId = "l_" + Date.now();
     const newLog = {
       id: "l_" + Date.now(),
       type,
@@ -821,13 +820,17 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (authData?.user) {
         try {
-          await supabase.from("accounts").insert([{
+          const { data: newAcct } = await supabase.from("accounts").insert([{
             user_id: authData.user.id,
             farm_name: farmName,
             operator_name: name,
             email: email,
             location: location
-          }]);
+          }]).select("id").single();
+
+          if (newAcct?.id) {
+            setAccountId(newAcct.id);
+          }
         } catch (e) {
           console.warn("[FarmContext] Accounts insert note", e);
         }
@@ -871,6 +874,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       fetchingDashboardRef.current = false;
       fetchingAnimalsRef.current = false;
       fetchingAnimalProfileRef.current = null;
+      setAccountId(null);
       setSession({ userId: undefined, email: "", name: "", isAuthenticated: false });
       setAnimals([]);
       setHealthRecords([]);
@@ -1415,11 +1419,40 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updateFarmProfile = async (profile: FarmProfile) => {
     setFarmProfile(profile);
-    await supabase.from("accounts").update({
-      farm_name: profile.name,
-      operator_name: profile.ownerName,
-      location: profile.location
-    }).limit(1);
+
+    let targetAccountId = accountId;
+    if (!targetAccountId) {
+      const { data: acct } = await supabase.from("accounts").select("id").limit(1).maybeSingle();
+      targetAccountId = acct?.id || null;
+      if (targetAccountId) setAccountId(targetAccountId);
+    }
+
+    if (targetAccountId) {
+      const { error } = await supabase.from("accounts").update({
+        farm_name: profile.name,
+        operator_name: profile.ownerName,
+        location: profile.location,
+        updated_at: new Date().toISOString()
+      }).eq("id", targetAccountId);
+
+      if (error) {
+        showError("Failed to update farm profile: " + error.message);
+        return;
+      }
+    } else {
+      const { data: newAcct, error } = await supabase.from("accounts").insert([{
+        user_id: session.userId || null,
+        farm_name: profile.name,
+        operator_name: profile.ownerName,
+        email: session.email || "operator@farmnest.com",
+        location: profile.location
+      }]).select("id").single();
+
+      if (!error && newAcct) {
+        setAccountId(newAcct.id);
+      }
+    }
+
     await logActivity("Farm Profile Updated", `Updated farm details for ${profile.name}`, profile.ownerName);
     showSuccess("Farm profile updated");
   };
