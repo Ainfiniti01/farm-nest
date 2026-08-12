@@ -2,11 +2,10 @@
 
 import React, { useState, useEffect } from "react";
 import { useFarm, InventoryItem } from "@/context/FarmContext";
-import { Plus, Boxes, Search, Trash2, HelpCircle } from "lucide-react";
-import { showSuccess, showError } from "@/utils/toast";
+import { Plus, Search, Trash2, HelpCircle } from "lucide-react";
 
 export const Inventory: React.FC = () => {
-  const { inventory, addInventoryItem, updateInventoryStock, loadInventory } = useFarm();
+  const { inventory, addInventoryItem, updateInventoryStock, deleteInventoryItem, loadInventory } = useFarm();
 
   useEffect(() => {
     loadInventory();
@@ -29,6 +28,8 @@ export const Inventory: React.FC = () => {
   const [adjustQty, setAdjustQty] = useState(1);
   const [adjustType, setAdjustType] = useState<"add" | "remove">("add");
   const [adjustNotes, setAdjustNotes] = useState("");
+
+  const [deletingItem, setDeletingItem] = useState<InventoryItem | null>(null);
 
   const handleCreateInventory = (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,6 +64,12 @@ export const Inventory: React.FC = () => {
     );
     setAdjustingItem(null);
     setAdjustNotes("");
+  };
+
+  const handleDeleteInventory = async () => {
+    if (!deletingItem) return;
+    await deleteInventoryItem(deletingItem.id);
+    setDeletingItem(null);
   };
 
   const filteredInventory = inventory.filter(item => {
@@ -148,26 +155,71 @@ export const Inventory: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex flex-col gap-1 items-end">
+              <div className="flex flex-col gap-1.5 items-end">
                 {isLow && (
                   <span className="text-[9px] font-black text-red-700 bg-red-100 px-2 py-0.5 rounded-full mb-1">
                     Low Stock
                   </span>
                 )}
-                <button
-                  onClick={() => {
-                    setAdjustingItem(item);
-                    setAdjustQty(1);
-                  }}
-                  className="bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-bold px-3 py-1.5 rounded-xl"
-                >
-                  Adjust
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => {
+                      setAdjustingItem(item);
+                      setAdjustQty(1);
+                    }}
+                    className="bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-bold px-3 py-1.5 rounded-xl transition"
+                  >
+                    Adjust
+                  </button>
+                  <button
+                    onClick={() => setDeletingItem(item)}
+                    className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-100 p-1.5 rounded-xl transition"
+                    title="Delete item"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </div>
             </div>
           );
         })}
+        {filteredInventory.length === 0 && (
+          <div className="col-span-full text-center py-12 text-slate-400 text-xs">
+            No stock items found. Click "Add Item" to record new supplies.
+          </div>
+        )}
       </div>
+
+      {/* DELETE CONFIRMATION MODAL */}
+      {deletingItem && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white max-w-sm w-full rounded-3xl p-6 space-y-4 shadow-2xl border border-slate-100">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-red-50 rounded-xl text-red-600">
+                <HelpCircle size={22} />
+              </div>
+              <h3 className="font-black text-sm text-slate-900">Delete Supply Item?</h3>
+            </div>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Are you sure you want to delete <strong className="text-slate-800">{deletingItem.name}</strong> from inventory records? This action cannot be undone.
+            </p>
+            <div className="pt-2 flex gap-2">
+              <button
+                onClick={() => setDeletingItem(null)}
+                className="flex-1 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold transition border"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteInventory}
+                className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-extrabold transition shadow"
+              >
+                Confirm Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ADJUST QUANTITY DIALOG */}
       {adjustingItem && (
