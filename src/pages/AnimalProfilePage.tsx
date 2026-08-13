@@ -27,35 +27,58 @@ import {
 import { showSuccess, showError } from "@/utils/toast";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
-// Utility to calculate human-readable age from birth date string
+// Utility to calculate human-readable age dynamically in years, months, and days from DOB string
 export const calculateAge = (dobString?: string): string => {
-  if (!dobString) return "Age unknown";
-  const birth = new Date(dobString);
-  if (isNaN(birth.getTime())) return "Age unknown";
+  if (!dobString || !dobString.trim()) return "Age unknown";
+
+  const [yearStr, monthStr, dayStr] = dobString.split("-");
+  const birthYear = parseInt(yearStr, 10);
+  const birthMonth = parseInt(monthStr, 10) - 1; // 0-indexed
+  const birthDay = parseInt(dayStr, 10);
+
+  if (isNaN(birthYear) || isNaN(birthMonth) || isNaN(birthDay)) {
+    return "Age unknown";
+  }
 
   const today = new Date();
-  let years = today.getFullYear() - birth.getFullYear();
-  let months = today.getMonth() - birth.getMonth();
-  let days = today.getDate() - birth.getDate();
+  const birthDate = new Date(birthYear, birthMonth, birthDay);
+  const now = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+  if (birthDate > now) {
+    return "Not born yet";
+  }
+
+  let years = now.getFullYear() - birthDate.getFullYear();
+  let months = now.getMonth() - birthDate.getMonth();
+  let days = now.getDate() - birthDate.getDate();
 
   if (days < 0) {
     months -= 1;
+    // Get total days in the previous month relative to `now`
+    const prevMonthDate = new Date(now.getFullYear(), now.getMonth(), 0);
+    days += prevMonthDate.getDate();
   }
+
   if (months < 0) {
     years -= 1;
     months += 12;
   }
 
+  const parts: string[] = [];
   if (years > 0) {
-    return `${years} yr${years > 1 ? "s" : ""}${months > 0 ? ` ${months} mo${months > 1 ? "s" : ""}` : ""}`;
+    parts.push(`${years} ${years === 1 ? "year" : "years"}`);
   }
   if (months > 0) {
-    return `${months} month${months > 1 ? "s" : ""}`;
+    parts.push(`${months} ${months === 1 ? "month" : "months"}`);
   }
-  
-  const totalDays = Math.floor((today.getTime() - birth.getTime()) / (1000 * 60 * 60 * 24));
-  if (totalDays <= 0) return "Newborn (Today)";
-  return `${totalDays} day${totalDays > 1 ? "s" : ""} old`;
+  if (days > 0 || (years === 0 && months === 0)) {
+    if (years === 0 && months === 0 && days === 0) {
+      return "0 days (Born today)";
+    }
+    parts.push(`${days} ${days === 1 ? "day" : "days"}`);
+  }
+
+  return parts.join(", ");
 };
 
 // Utility to calculate gestation countdown from mating date
@@ -827,7 +850,7 @@ export const AnimalProfilePage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Editable Date of Birth and Age display */}
+                {/* Editable Date of Birth and Dynamic Age display */}
                 <div className="pt-2 text-[10px] text-slate-500 bg-slate-50 p-2.5 rounded-xl space-y-1">
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-slate-400 uppercase">DATE OF BIRTH</span>
@@ -838,9 +861,9 @@ export const AnimalProfilePage: React.FC = () => {
                       <Edit size={11} /> Edit DOB
                     </button>
                   </div>
-                  <div className="flex items-center justify-between text-xs">
+                  <div className="flex flex-col gap-0.5 text-xs">
                     <span className="font-bold text-slate-800">{animal.dob || "Unrecorded"}</span>
-                    <span className="font-black text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-md">
+                    <span className="font-black text-emerald-800 bg-emerald-100/80 px-2 py-1 rounded-md text-[11px] leading-tight self-start mt-0.5">
                       {currentAge}
                     </span>
                   </div>
@@ -1045,7 +1068,7 @@ export const AnimalProfilePage: React.FC = () => {
                     <div className="flex items-center justify-between border-b border-white/20 pb-2">
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center text-lg">
-                          🤰
+                          pregnant
                         </div>
                         <div>
                           <h4 className="font-extrabold text-sm tracking-wide">Pregnancy & Delivery Countdown</h4>

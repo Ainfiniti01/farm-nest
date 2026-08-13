@@ -159,6 +159,7 @@ export const SettingsContacts: React.FC = () => {
                   onChange={(e) => setNewContact({ ...newContact, role: e.target.value as any })}
                   className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
                 >
+                  <option value="Farm Owner">Farm owner</option>
                   <option value="Veterinarian">Veterinarian 🩺</option>
                   <option value="Farm Manager">Farm Manager 👨🏽‍🌾</option>
                   <option value="Worker">Worker</option>
