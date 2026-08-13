@@ -20,7 +20,9 @@ import {
   Heart,
   Baby,
   UserCheck,
-  Building
+  Building,
+  Camera,
+  Upload
 } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
@@ -85,7 +87,10 @@ export const calculateGestation = (matingDateString: string, gestationDays = 150
 export const AnimalProfilePage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const offspringFileInputRef = useRef<HTMLInputElement>(null);
+  const offspringCameraInputRef = useRef<HTMLInputElement>(null);
 
   const {
     animals,
@@ -203,12 +208,13 @@ export const AnimalProfilePage: React.FC = () => {
 
   const [newOffspring, setNewOffspring] = useState({
     name: "",
-    species: animal ? animal.species : "Goat",
+    species: animal ? animal.species : ("Goat" as Animal["species"]),
     breed: animal ? animal.breed : "",
     sex: "Female" as Animal["sex"],
     dob: new Date().toISOString().split("T")[0],
     notes: "",
     primaryPhoto: "",
+    photos: [] as string[],
   });
 
   useEffect(() => {
@@ -285,6 +291,40 @@ export const AnimalProfilePage: React.FC = () => {
         showError("Failed to process images.");
       }
     }
+  };
+
+  const handleOffspringPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      try {
+        const fileList = Array.from(files);
+        const compressedList = await Promise.all(
+          fileList.map(file => compressImage(file, 600, 600, 0.7))
+        );
+        setNewOffspring(prev => {
+          const allPhotos = [...prev.photos, ...compressedList];
+          return {
+            ...prev,
+            primaryPhoto: prev.primaryPhoto || allPhotos[0] || "",
+            photos: allPhotos
+          };
+        });
+        showSuccess(`${compressedList.length} photo${compressedList.length > 1 ? "s" : ""} attached!`);
+      } catch (err) {
+        showError("Failed to process images.");
+      }
+    }
+  };
+
+  const removeOffspringPhoto = (index: number) => {
+    setNewOffspring(prev => {
+      const updatedPhotos = prev.photos.filter((_, idx) => idx !== index);
+      return {
+        ...prev,
+        photos: updatedPhotos,
+        primaryPhoto: prev.primaryPhoto === prev.photos[index] ? (updatedPhotos[0] || "") : prev.primaryPhoto
+      };
+    });
   };
 
   const setPhotoAsPrimary = (photoUrl: string) => {
@@ -650,6 +690,10 @@ export const AnimalProfilePage: React.FC = () => {
       title: "Register Offspring?",
       message: `Register offspring and link to ${displayName}?`,
       onConfirm: () => {
+        const defaultPhoto = DEFAULT_ANIMAL_PHOTO;
+        const finalPhotos = newOffspring.photos.length > 0 ? newOffspring.photos : [defaultPhoto];
+        const finalPrimary = newOffspring.primaryPhoto || finalPhotos[0];
+
         addAnimal({
           name: newOffspring.name,
           species: newOffspring.species,
@@ -659,8 +703,8 @@ export const AnimalProfilePage: React.FC = () => {
           source: "Born on farm",
           status: "Healthy",
           healthStatus: "Healthy",
-          primaryPhoto: newOffspring.primaryPhoto || DEFAULT_ANIMAL_PHOTO,
-          photos: [newOffspring.primaryPhoto || DEFAULT_ANIMAL_PHOTO],
+          primaryPhoto: finalPrimary,
+          photos: finalPhotos,
           notes: newOffspring.notes || "Offspring of parent lineage.",
           parents: {
             motherId: animal.sex === "Female" ? animal.id : undefined,
@@ -669,6 +713,16 @@ export const AnimalProfilePage: React.FC = () => {
         });
         setShowAddOffspring(false);
         setPendingConfirm(null);
+        setNewOffspring({
+          name: "",
+          species: animal.species,
+          breed: animal.breed,
+          sex: "Female",
+          dob: new Date().toISOString().split("T")[0],
+          notes: "",
+          primaryPhoto: "",
+          photos: [],
+        });
       }
     });
   };
@@ -2121,7 +2175,7 @@ export const AnimalProfilePage: React.FC = () => {
         </div>
       )}
 
-      {/* OFFSPRING MODAL */}
+      {/* OFFSPRING MODAL (With Camera and Upload Buttons) */}
       {showAddOffspring && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
           <form 
@@ -2131,6 +2185,79 @@ export const AnimalProfilePage: React.FC = () => {
             <div className="flex items-center justify-between border-b pb-2">
               <h3 className="font-extrabold text-sm text-slate-900">Link Born Offspring</h3>
               <button type="button" onClick={() => setShowAddOffspring(false)} className="text-slate-400 hover:text-slate-600">✕</button>
+            </div>
+
+            {/* Photo Upload & Camera Section */}
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block">Offspring Portraits (Multiple Allowed)</label>
+              
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => offspringCameraInputRef.current?.click()}
+                  className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 rounded-xl text-xs font-bold flex items-center gap-1.5 border border-emerald-200 transition"
+                >
+                  <Camera size={14} className="text-emerald-700" /> Snap Photo
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => offspringFileInputRef.current?.click()}
+                  className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold flex items-center gap-1.5 border border-slate-200 transition"
+                >
+                  <Upload size={14} className="text-slate-600" /> Upload Photos
+                </button>
+
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  ref={offspringCameraInputRef}
+                  onChange={handleOffspringPhotoUpload}
+                  className="hidden"
+                />
+
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  ref={offspringFileInputRef}
+                  onChange={handleOffspringPhotoUpload}
+                  className="hidden"
+                />
+              </div>
+
+              {/* Thumbnails preview */}
+              {newOffspring.photos.length > 0 && (
+                <div className="grid grid-cols-4 gap-2 pt-2">
+                  {newOffspring.photos.map((photo, idx) => (
+                    <div 
+                      key={idx} 
+                      onClick={() => setNewOffspring(prev => ({ ...prev, primaryPhoto: photo }))}
+                      className={`relative h-20 rounded-xl overflow-hidden border cursor-pointer group ${
+                        newOffspring.primaryPhoto === photo ? "ring-2 ring-emerald-500 border-emerald-500" : "border-slate-200"
+                      }`}
+                    >
+                      <img src={photo} className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeOffspringPhoto(idx);
+                        }}
+                        className="absolute top-1 right-1 bg-black/60 hover:bg-red-600 text-white p-0.5 rounded-full text-[10px] transition"
+                      >
+                        <X size={12} />
+                      </button>
+                      {newOffspring.primaryPhoto === photo && (
+                        <span className="absolute bottom-0 inset-x-0 bg-emerald-600 text-white text-[8px] font-black text-center py-0.5">
+                          PRIMARY
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div>
@@ -2167,6 +2294,17 @@ export const AnimalProfilePage: React.FC = () => {
                   <option value="Male">Male</option>
                 </select>
               </div>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 block">Date of Birth</label>
+              <input
+                type="date"
+                value={newOffspring.dob}
+                onChange={(e) => setNewOffspring({ ...newOffspring, dob: e.target.value })}
+                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1 font-semibold"
+                required
+              />
             </div>
 
             <button
