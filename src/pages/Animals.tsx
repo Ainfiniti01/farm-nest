@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useFarm, Animal } from "@/context/FarmContext";
+import { compressImage } from "@/utils/imageCompressor";
 import { 
   Search, 
   Plus, 
@@ -11,7 +12,8 @@ import {
   Upload,
   HelpCircle,
   Eye,
-  Download
+  Download,
+  X
 } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 
@@ -43,6 +45,7 @@ export const Animals: React.FC = () => {
     status: "Healthy" as Animal["status"],
     notes: "",
     primaryPhoto: "",
+    photos: [] as string[],
     motherId: "",
     fatherId: "",
   });
@@ -54,27 +57,38 @@ export const Animals: React.FC = () => {
   } | null>(null);
 
   // Photo handlers
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (typeof reader.result === "string") {
-          setNewAnimal(prev => ({ ...prev, primaryPhoto: reader.result as string }));
-          showSuccess("Portrait attached successfully!");
-        }
-      };
-      reader.readAsDataURL(file);
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      try {
+        const fileList = Array.from(files);
+        const compressedList = await Promise.all(
+          fileList.map(file => compressImage(file, 600, 600, 0.7))
+        );
+        setNewAnimal(prev => {
+          const allPhotos = [...prev.photos, ...compressedList];
+          return {
+            ...prev,
+            primaryPhoto: prev.primaryPhoto || allPhotos[0] || "",
+            photos: allPhotos
+          };
+        });
+        showSuccess(`${compressedList.length} photo${compressedList.length > 1 ? "s" : ""} attached!`);
+      } catch (err) {
+        showError("Failed to process images.");
+      }
     }
   };
 
-  const handleSimulatePhoto = (type: "goat" | "ram" | "chicken") => {
-    let url = "";
-    if (type === "goat") url = "https://images.unsplash.com/photo-1524413840807-0c3cb6fa808d?w=500";
-    if (type === "ram") url = "https://images.unsplash.com/photo-1484557985045-edf25e08da73?w=500";
-    if (type === "chicken") url = "https://images.unsplash.com/photo-1548550023-2bdb3c5beed7?w=500";
-    setNewAnimal(prev => ({ ...prev, primaryPhoto: url }));
-    showSuccess("Preset animal photo attached!");
+  const removeNewAnimalPhoto = (index: number) => {
+    setNewAnimal(prev => {
+      const updatedPhotos = prev.photos.filter((_, idx) => idx !== index);
+      return {
+        ...prev,
+        photos: updatedPhotos,
+        primaryPhoto: prev.primaryPhoto === prev.photos[index] ? (updatedPhotos[0] || "") : prev.primaryPhoto
+      };
+    });
   };
 
   const triggerCreateAnimal = (e: React.FormEvent) => {
@@ -83,6 +97,10 @@ export const Animals: React.FC = () => {
       title: "Add New Animal Record?",
       message: `Verify details for registering this new ${newAnimal.species} in the main pedigree registry.`,
       onConfirm: () => {
+        const defaultPhoto = "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=400";
+        const finalPhotos = newAnimal.photos.length > 0 ? newAnimal.photos : [defaultPhoto];
+        const finalPrimary = newAnimal.primaryPhoto || finalPhotos[0];
+
         addAnimal({
           name: newAnimal.name,
           species: newAnimal.species,
@@ -92,8 +110,8 @@ export const Animals: React.FC = () => {
           source: newAnimal.source,
           status: newAnimal.status,
           healthStatus: "Healthy",
-          primaryPhoto: newAnimal.primaryPhoto || "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=400",
-          photos: [newAnimal.primaryPhoto || "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=400"],
+          primaryPhoto: finalPrimary,
+          photos: finalPhotos,
           notes: newAnimal.notes,
           parents: {
             motherId: newAnimal.motherId || undefined,
@@ -112,6 +130,7 @@ export const Animals: React.FC = () => {
           status: "Healthy",
           notes: "",
           primaryPhoto: "",
+          photos: [],
           motherId: "",
           fatherId: "",
         });
@@ -317,7 +336,7 @@ export const Animals: React.FC = () => {
             </div>
 
             <div className="space-y-2">
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block">Animal Portrait</label>
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block">Animal Portraits (Select Multiple)</label>
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
@@ -331,7 +350,7 @@ export const Animals: React.FC = () => {
                   onClick={() => fileInputRef.current?.click()}
                   className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold flex items-center gap-1.5 border border-slate-200 transition"
                 >
-                  <Upload size={14} className="text-slate-600" /> Upload Image
+                  <Upload size={14} className="text-slate-600" /> Upload Photos
                 </button>
 
                 <input
@@ -346,15 +365,42 @@ export const Animals: React.FC = () => {
                 <input
                   type="file"
                   accept="image/*"
+                  multiple
                   ref={fileInputRef}
                   onChange={handlePhotoUpload}
                   className="hidden"
                 />
               </div>
 
-              {newAnimal.primaryPhoto && (
-                <div className="relative h-24 w-24 rounded-xl overflow-hidden border">
-                  <img src={newAnimal.primaryPhoto} className="w-full h-full object-cover" />
+              {/* Thumbnails list */}
+              {newAnimal.photos.length > 0 && (
+                <div className="grid grid-cols-4 gap-2 pt-2">
+                  {newAnimal.photos.map((photo, idx) => (
+                    <div 
+                      key={idx} 
+                      onClick={() => setNewAnimal(prev => ({ ...prev, primaryPhoto: photo }))}
+                      className={`relative h-20 rounded-xl overflow-hidden border cursor-pointer group ${
+                        newAnimal.primaryPhoto === photo ? "ring-2 ring-emerald-500 border-emerald-500" : "border-slate-200"
+                      }`}
+                    >
+                      <img src={photo} className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeNewAnimalPhoto(idx);
+                        }}
+                        className="absolute top-1 right-1 bg-black/60 hover:bg-red-600 text-white p-0.5 rounded-full text-[10px] transition"
+                      >
+                        <X size={12} />
+                      </button>
+                      {newAnimal.primaryPhoto === photo && (
+                        <span className="absolute bottom-0 inset-x-0 bg-emerald-600 text-white text-[8px] font-black text-center py-0.5">
+                          PRIMARY
+                        </span>
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

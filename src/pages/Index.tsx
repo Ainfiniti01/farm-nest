@@ -16,7 +16,8 @@ import {
   Package,
   HelpCircle,
   Check,
-  LogOut
+  LogOut,
+  X
 } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 
@@ -50,6 +51,7 @@ const Index = () => {
     status: "Healthy" as Animal["status"],
     notes: "",
     primaryPhoto: "",
+    photos: [] as string[],
     motherId: "",
     fatherId: "",
   });
@@ -100,16 +102,37 @@ const Index = () => {
   const [fullscreenPhoto, setFullscreenPhoto] = useState<string | null>(null);
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
+    const files = e.target.files;
+    if (files && files.length > 0) {
       try {
-        const compressed = await compressImage(file, 600, 600, 0.7);
-        setNewAnimal(prev => ({ ...prev, primaryPhoto: compressed }));
-        showSuccess("Live livestock portrait attached!");
+        const fileList = Array.from(files);
+        const compressedList = await Promise.all(
+          fileList.map(file => compressImage(file, 600, 600, 0.7))
+        );
+        setNewAnimal(prev => {
+          const allPhotos = [...prev.photos, ...compressedList];
+          return {
+            ...prev,
+            primaryPhoto: prev.primaryPhoto || allPhotos[0] || "",
+            photos: allPhotos
+          };
+        });
+        showSuccess(`${compressedList.length} photo${compressedList.length > 1 ? "s" : ""} attached!`);
       } catch (err) {
-        showError("Failed to process image.");
+        showError("Failed to process images.");
       }
     }
+  };
+
+  const removeNewAnimalPhoto = (index: number) => {
+    setNewAnimal(prev => {
+      const updatedPhotos = prev.photos.filter((_, idx) => idx !== index);
+      return {
+        ...prev,
+        photos: updatedPhotos,
+        primaryPhoto: prev.primaryPhoto === prev.photos[index] ? (updatedPhotos[0] || "") : prev.primaryPhoto
+      };
+    });
   };
 
   const handleSimulatePhoto = (type: "goat" | "ram" | "chicken") => {
@@ -117,7 +140,11 @@ const Index = () => {
     if (type === "goat") url = "https://images.unsplash.com/photo-1524413840807-0c3cb6fa808d?w=500&auto=format&fit=crop&q=80";
     if (type === "ram") url = "https://images.unsplash.com/photo-1484557985045-edf25e08da73?w=500&auto=format&fit=crop&q=80";
     if (type === "chicken") url = "https://images.unsplash.com/photo-1548550023-2bdb3c5beed7?w=500&auto=format&fit=crop&q=80";
-    setNewAnimal(prev => ({ ...prev, primaryPhoto: url }));
+    setNewAnimal(prev => ({ 
+      ...prev, 
+      primaryPhoto: url,
+      photos: [...prev.photos, url]
+    }));
     showSuccess("Preset animal portrait selected!");
   };
 
@@ -127,6 +154,10 @@ const Index = () => {
       title: "Register New Livestock?",
       message: `Confirm addition of ${newAnimal.species} to pasture paddock registry database.`,
       onConfirm: () => {
+        const defaultPhoto = "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=400";
+        const finalPhotos = newAnimal.photos.length > 0 ? newAnimal.photos : [defaultPhoto];
+        const finalPrimary = newAnimal.primaryPhoto || finalPhotos[0];
+
         addAnimal({
           name: newAnimal.name,
           species: newAnimal.species,
@@ -136,8 +167,8 @@ const Index = () => {
           source: newAnimal.source,
           status: newAnimal.status,
           healthStatus: "Healthy",
-          primaryPhoto: newAnimal.primaryPhoto || "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=400",
-          photos: [newAnimal.primaryPhoto || "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=400"],
+          primaryPhoto: finalPrimary,
+          photos: finalPhotos,
           notes: newAnimal.notes,
           parents: {
             motherId: newAnimal.motherId || undefined,
@@ -156,6 +187,355 @@ const Index = () => {
           status: "Healthy",
           notes: "",
           primaryPhoto: "",
+          photos: [],
+          motherId: "",
+          fatherId: "",
+        });
+      }
+    });
+  };
+
+  const triggerToggleReminderConfirm = (reminderId: string, text: string) => {
+    setPendingConfirm({
+      title: "Complete Reminder Procedure?",
+      message: `Verify execution task status of procedure: "${text}"?`,
+      onConfirm: () => {
+        toggleReminder(reminderId);
+        setPendingConfirm(null);
+        showSuccess("Reminder status toggled successfully!");
+      }
+    });
+  };
+
+  const activeAnimals = animals.filter(a => a.status !== "Sold" && a.status !== "Deceased");
+  const totalAnimals = activeAnimals.length;
+  const goatsCount = activeAnimals.filter(a => a.species === "Goat").length;
+  const ramsCount = activeAnimals.filter(a => a.species === "Ram").length;
+  const chickensCount = activeAnimals.filter(a => a.species === "Chicken").length;
+  const attentionCount = activeAnimals.filter(a => a.status === "Sick" || a.status === "Under Treatment" || a.status === "Monitoring").length;
+
+  const filteredAnimals = animals.filter(animal => {
+    const codeMatch = animal.animal_code.toLowerCase().includes(searchQuery.toLowerCase());
+    const nameMatch = animal.name?.toLowerCase().includes(searchQuery.toLowerCase());
+    const breedMatch = animal.breed.toLowerCase().includes(searchQuery.toLowerCase());
+    const queryMatch = codeMatch || nameMatch || breedMatch;
+
+    const speciesMatch = speciesFilter === "All" || animal.species === speciesFilter;
+    const statusMatch = statusFilter === "All" || animal.status === statusFilter;
+
+    return queryMatch && speciesMatch && statusMatch;
+  });
+
+  return (
+    <div className="min-h-screen bg-[#FBFDF9] text-slate-800 font-sans flex flex-col md:flex-row">
+      
+      {/* DESKTOP SIDEBAR NAVIGATION PANEL */}
+      <aside className="hidden md:flex flex-col w-64 bg-emerald-950 text-white shrink-0 justify-between p-6 sticky top-0 h-screen border-r border-emerald-900">
+        <div className="space-y-8">
+          
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-white/10 rounded-2xl flex items-center justify-center text-xl shadow border border-white/20">
+              🚜
+            </div>
+            <div>
+              <h2 className="font-extrabold text-base leading-none text-white tracking-wide">{farmProfile.name}</h2>
+              <p className="text-[10px] text-emerald-300 font-bold uppercase mt-1 tracking-wider">
+                {farmProfile.location}
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <p className="text-[10px] font-extrabold text-emerald-300 uppercase tracking-widest px-2 mb-2">Main Menu</p>
+            
+            <button
+              onClick={() => setActiveTab("dashboard")}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === "dashboard" ? "bg-emerald-600 text-white shadow-md scale-102" : "text-emerald-100/75 hover:bg-white/5 hover:text-white"
+              }`}
+            >
+              <Home size={16} />
+              Dashboard
+            </button>
+
+            <button
+              onClick={() => setActiveTab("animals")}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === "animals" ? "bg-emerald-600 text-white shadow-md scale-102" : "text-emerald-100/75 hover:bg-white/5 hover:text-white"
+              }`}
+            >
+              <span className="text-xs">🐐</span>
+              Animals Directory
+            </button>
+
+            <button
+              onClick={() => setActiveTab("ai")}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === "ai" ? "bg-emerald-600 text-white shadow-md scale-102" : "text-emerald-100/75 hover:bg-white/5 hover:text-white"
+              }`}
+            >
+              <span className="text-xs">🤖</span>
+              Farm AI
+            </button>
+
+            <button
+              onClick={() => setActiveTab("inventory")}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === "inventory" ? "bg-emerald-600 text-white shadow-md scale-102" : "text-emerald-100/75 hover:bg-white/5 hover:text-white"
+              }`}
+            >
+              <Package size={16} />
+              Feed & Inventory
+            </button>
+
+            <button
+              onClick={() => setActiveTab("settings")}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === "settings" ? "bg-emerald-600 text-white shadow-md scale-102" : "text-emerald-100/75 hover:bg-white/5 hover:text-white"
+              }`}
+            >
+              <SettingsIcon size={16} />
+              Farm Settings
+            </button>
+          </div>
+
+        </div>
+
+        <div className="pt-4 border-t border-emerald-900/60 space-y-4">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-xs font-black">
+              {farmProfile.ownerName.charAt(0)}
+            </div>
+            <div>
+              <span className="text-xs font-bold text-white block">{farmProfile.ownerName}</span>
+              <span className="text-[9px] text-emerald-300 block">Operator Account</span>
+            </div>
+          </div>
+          <button
+            onClick={logout}
+            className="w-full py-2 bg-emerald-900/40 hover:bg-emerald-950 text-emerald-300 hover:text-white rounded-xl text-[11px] font-black transition flex items-center justify-center gap-1.5"
+          >
+            <LogOut size={12} />
+            Sign Out Session
+          </button>
+        </div>
+      </aside>
+
+      {/* MOBILE HEADER */}
+      <header className="md:hidden sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-emerald-100 shadow-sm px-4 py-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-9 h-9 bg-emerald-600 rounded-xl flex items-center justify-center text-white font-bold text-lg">
+              🚜
+            </div>
+            <div>
+              <h1 className="font-extrabold text-emerald-950 text-sm leading-none">{farmProfile.name}</h1>
+              <p className="text-[10px] text-emerald-700 font-semibold uppercase">{farmProfile.location}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold bg-emerald-50 text-emerald-800 px-2.5 py-1 rounded-full">
+              Live OS
+            </span>
+          </div>
+        </div>
+      </header>
+
+      {/* MAIN CONTENT AREA */}
+      <main className="flex-1 p-4 md:p-8 overflow-y-auto max-w-5xl mx-auto w-full pb-28 md:pb-8">
+
+        {activeTab === "dashboard" && (
+          <div className="mb-6 p-6 bg-gradient-to-r from-emerald-800 to-emerald-700 text-white rounded-3xl relative overflow-hidden shadow-md">
+            <div className="absolute right-0 top-0 w-36 h-36 bg-emerald-600/20 rounded-full blur-2xl" />
+            <span className="<dyad-write path="src/pages/Index.tsx" description="Completing Index.tsx with full multi-image upload support for livestock registration">
+"use client";
+
+import React, { useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { useFarm, Animal, HealthRecord, Reminder } from "@/context/FarmContext";
+import { compressImage } from "@/utils/imageCompressor";
+import { 
+  Home, 
+  Search, 
+  Plus, 
+  Calendar, 
+  Camera, 
+  Upload,
+  Settings as SettingsIcon, 
+  ChevronRight, 
+  Package,
+  HelpCircle,
+  Check,
+  LogOut,
+  X
+} from "lucide-react";
+import { showSuccess, showError } from "@/utils/toast";
+
+const Index = () => {
+  const {
+    animals,
+    treatments,
+    inventory,
+    reminders,
+    farmProfile,
+    addAnimal,
+    addHealthRecord,
+    addTreatment,
+    addReminder,
+    toggleReminder,
+    logout
+  } = useFarm();
+
+  const navigate = useNavigate();
+
+  const [activeTab, setActiveTab] = useState<"dashboard" | "animals" | "ai" | "inventory" | "settings">("dashboard");
+
+  const [showAddAnimal, setShowAddAnimal] = useState(false);
+  const [newAnimal, setNewAnimal] = useState({
+    name: "",
+    species: "Goat" as Animal["species"],
+    breed: "",
+    sex: "Female" as Animal["sex"],
+    dob: new Date().toISOString().split("T")[0],
+    source: "Born on farm" as Animal["source"],
+    status: "Healthy" as Animal["status"],
+    notes: "",
+    primaryPhoto: "",
+    photos: [] as string[],
+    motherId: "",
+    fatherId: "",
+  });
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  const [showAddHealth, setShowAddHealth] = useState(false);
+  const [newHealth, setNewHealth] = useState({
+    type: "Observation" as HealthRecord["type"],
+    details: "",
+    medication: "",
+    recordedBy: farmProfile.ownerName || "Operator",
+    date: new Date().toISOString().split("T")[0],
+  });
+
+  const [showAddTreatment, setShowAddTreatment] = useState(false);
+  const [newTreatment, setNewTreatment] = useState({
+    condition: "",
+    medication: "",
+    startDate: new Date().toISOString().split("T")[0],
+    endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+    notes: "",
+    followUpDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+  });
+
+  const [showAddReminder, setShowAddReminder] = useState(false);
+  const [newReminderForm, setNewReminderForm] = useState({
+    title: "",
+    type: "Vaccination" as Reminder["type"],
+    dueDate: new Date().toISOString().split("T")[0],
+    animalId: "",
+    notes: ""
+  });
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [speciesFilter, setSpeciesFilter] = useState<string>("All");
+  const [statusFilter, setStatusFilter] = useState<string>("All");
+
+  const [pendingConfirm, setPendingConfirm] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  } | null>(null);
+
+  const [fullscreenPhoto, setFullscreenPhoto] = useState<string | null>(null);
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      try {
+        const fileList = Array.from(files);
+        const compressedList = await Promise.all(
+          fileList.map(file => compressImage(file, 600, 600, 0.7))
+        );
+        setNewAnimal(prev => {
+          const allPhotos = [...prev.photos, ...compressedList];
+          return {
+            ...prev,
+            primaryPhoto: prev.primaryPhoto || allPhotos[0] || "",
+            photos: allPhotos
+          };
+        });
+        showSuccess(`${compressedList.length} photo${compressedList.length > 1 ? "s" : ""} attached!`);
+      } catch (err) {
+        showError("Failed to process images.");
+      }
+    }
+  };
+
+  const removeNewAnimalPhoto = (index: number) => {
+    setNewAnimal(prev => {
+      const updatedPhotos = prev.photos.filter((_, idx) => idx !== index);
+      return {
+        ...prev,
+        photos: updatedPhotos,
+        primaryPhoto: prev.primaryPhoto === prev.photos[index] ? (updatedPhotos[0] || "") : prev.primaryPhoto
+      };
+    });
+  };
+
+  const handleSimulatePhoto = (type: "goat" | "ram" | "chicken") => {
+    let url = "";
+    if (type === "goat") url = "https://images.unsplash.com/photo-1524413840807-0c3cb6fa808d?w=500&auto=format&fit=crop&q=80";
+    if (type === "ram") url = "https://images.unsplash.com/photo-1484557985045-edf25e08da73?w=500&auto=format&fit=crop&q=80";
+    if (type === "chicken") url = "https://images.unsplash.com/photo-1548550023-2bdb3c5beed7?w=500&auto=format&fit=crop&q=80";
+    setNewAnimal(prev => ({ 
+      ...prev, 
+      primaryPhoto: url,
+      photos: [...prev.photos, url]
+    }));
+    showSuccess("Preset animal portrait selected!");
+  };
+
+  const triggerCreateAnimal = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPendingConfirm({
+      title: "Register New Livestock?",
+      message: `Confirm addition of ${newAnimal.species} to pasture paddock registry database.`,
+      onConfirm: () => {
+        const defaultPhoto = "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=400";
+        const finalPhotos = newAnimal.photos.length > 0 ? newAnimal.photos : [defaultPhoto];
+        const finalPrimary = newAnimal.primaryPhoto || finalPhotos[0];
+
+        addAnimal({
+          name: newAnimal.name,
+          species: newAnimal.species,
+          breed: newAnimal.breed || "Local Breed",
+          sex: newAnimal.sex,
+          dob: newAnimal.dob,
+          source: newAnimal.source,
+          status: newAnimal.status,
+          healthStatus: "Healthy",
+          primaryPhoto: finalPrimary,
+          photos: finalPhotos,
+          notes: newAnimal.notes,
+          parents: {
+            motherId: newAnimal.motherId || undefined,
+            fatherId: newAnimal.fatherId || undefined
+          }
+        });
+        setShowAddAnimal(false);
+        setPendingConfirm(null);
+        setNewAnimal({
+          name: "",
+          species: "Goat",
+          breed: "",
+          sex: "Female",
+          dob: new Date().toISOString().split("T")[0],
+          source: "Born on farm",
+          status: "Healthy",
+          notes: "",
+          primaryPhoto: "",
+          photos: [],
           motherId: "",
           fatherId: "",
         });
@@ -642,7 +1022,7 @@ const Index = () => {
 
             {/* Photo upload + Portrait file selector */}
             <div className="space-y-2">
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block">Take/Upload Animal Portrait</label>
+              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block">Take/Upload Animal Portraits (Multiple Allowed)</label>
               
               <div className="flex flex-wrap gap-2">
                 <button
@@ -658,7 +1038,7 @@ const Index = () => {
                   onClick={() => fileInputRef.current?.click()}
                   className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold flex items-center gap-1.5 border border-slate-200 transition"
                 >
-                  <Upload size={14} className="text-slate-600" /> Upload Image
+                  <Upload size={14} className="text-slate-600" /> Upload Photos
                 </button>
 
                 <input
@@ -673,6 +1053,7 @@ const Index = () => {
                 <input
                   type="file"
                   accept="image/*"
+                  multiple
                   ref={fileInputRef}
                   onChange={handlePhotoUpload}
                   className="hidden"
@@ -704,12 +1085,35 @@ const Index = () => {
                 </button>
               </div>
 
-              {newAnimal.primaryPhoto && (
-                <div className="relative h-28 w-full rounded-2xl overflow-hidden border border-emerald-100 mt-2">
-                  <img src={newAnimal.primaryPhoto} alt="Snapshot preview" className="w-full h-full object-cover" />
-                  <span className="absolute bottom-2 right-2 bg-black/50 text-white text-[9px] px-2 py-0.5 rounded-full font-bold">
-                    Portrait Ready
-                  </span>
+              {/* Preview thumbnails */}
+              {newAnimal.photos.length > 0 && (
+                <div className="grid grid-cols-4 gap-2 pt-2">
+                  {newAnimal.photos.map((photo, idx) => (
+                    <div 
+                      key={idx} 
+                      onClick={() => setNewAnimal(prev => ({ ...prev, primaryPhoto: photo }))}
+                      className={`relative h-20 rounded-xl overflow-hidden border cursor-pointer group ${
+                        newAnimal.primaryPhoto === photo ? "ring-2 ring-emerald-500 border-emerald-500" : "border-slate-200"
+                      }`}
+                    >
+                      <img src={photo} className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeNewAnimalPhoto(idx);
+                        }}
+                        className="absolute top-1 right-1 bg-black/60 hover:bg-red-600 text-white p-0.5 rounded-full text-[10px] transition"
+                      >
+                        <X size={12} />
+                      </button>
+                      {newAnimal.primaryPhoto === photo && (
+                        <span className="absolute bottom-0 inset-x-0 bg-emerald-600 text-white text-[8px] font-black text-center py-0.5">
+                          PRIMARY
+                        </span>
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useFarm, Animal, HealthRecord, Treatment, WeightRecord, BreedingRecord, AnimalNote, DEFAULT_ANIMAL_PHOTO } from "@/context/FarmContext";
+import { compressImage } from "@/utils/imageCompressor";
 import { 
   ArrowLeft, 
   Trash2, 
@@ -194,18 +195,21 @@ export const AnimalProfilePage: React.FC = () => {
   const hasCustomName = Boolean(animal.name && animal.name.trim().length > 0);
   const displayName = hasCustomName ? animal.name : animal.animal_code;
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (typeof reader.result === "string") {
-          const updatedPhotos = [...(animal.photos || []), reader.result];
-          updateAnimal(animal.id, { photos: updatedPhotos });
-          showSuccess("New photo added!");
-        }
-      };
-      reader.readAsDataURL(file);
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      try {
+        const fileList = Array.from(files);
+        const compressedList = await Promise.all(
+          fileList.map(file => compressImage(file, 600, 600, 0.7))
+        );
+        const updatedPhotos = [...(animal.photos || []), ...compressedList];
+        const primary = animal.primaryPhoto || compressedList[0];
+        await updateAnimal(animal.id, { photos: updatedPhotos, primaryPhoto: primary });
+        showSuccess(`${compressedList.length} photo${compressedList.length > 1 ? "s" : ""} added!`);
+      } catch (err) {
+        showError("Failed to process images.");
+      }
     }
   };
 
@@ -1078,17 +1082,20 @@ export const AnimalProfilePage: React.FC = () => {
             {activeTab === "photos" && (
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-bold text-slate-900 text-sm">Photos</h3>
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-sm">Photos</h3>
+                    <p className="text-[10px] text-slate-400">Select multiple files to upload at once</p>
+                  </div>
                   <button
                     onClick={() => fileInputRef.current?.click()}
                     className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold"
                   >
-                    + Upload Photo
+                    + Upload Photos
                   </button>
                   <input
                     type="file"
                     accept="image/*"
-                    capture="environment"
+                    multiple
                     ref={fileInputRef}
                     onChange={handlePhotoUpload}
                     className="hidden"
