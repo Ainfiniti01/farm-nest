@@ -396,7 +396,6 @@ export const AnimalProfilePage: React.FC = () => {
   const offspringList = animals.filter(a => a.parents?.motherId === animal.id || a.parents?.fatherId === animal.id);
 
   // Female breeding & gestation countdown:
-  // Find the latest breeding record for this female where status is not "Failed"
   const femaleBreedingRecords = breedingRecords
     .filter(b => b.female_id === animal.id && b.status !== "Failed")
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -690,6 +689,12 @@ export const AnimalProfilePage: React.FC = () => {
   // Eligible females and males for linking parents
   const eligibleMothers = animals.filter(a => a.id !== animal.id && a.sex === "Female" && a.species === animal.species);
   const eligibleFathers = animals.filter(a => a.id !== animal.id && a.sex === "Male" && a.species === animal.species);
+
+  // Helper to format animal tag for display without showing database IDs
+  const formatAnimalDisplayTag = (anim?: Animal | null): string => {
+    if (!anim) return "";
+    return anim.name ? `${anim.animal_code} (${anim.name})` : anim.animal_code;
+  };
 
   return (
     <div className="min-h-screen bg-[#FBFDF9] text-slate-800 pb-20 md:pb-8">
@@ -1055,7 +1060,7 @@ export const AnimalProfilePage: React.FC = () => {
                   </div>
                 ))}
 
-                {/* LINEAGE & LINE TREE CARD (Mother & Father clickable and editable) */}
+                {/* LINEAGE & LINE TREE CARD */}
                 <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wider text-slate-400 flex items-center gap-2">
@@ -1080,11 +1085,15 @@ export const AnimalProfilePage: React.FC = () => {
                     {/* Mother Card */}
                     <div 
                       onClick={() => {
-                        setParentsForm({
-                          motherId: animal.parents?.motherId || "",
-                          fatherId: animal.parents?.fatherId || ""
-                        });
-                        setShowLinkParentsModal(true);
+                        if (mother) {
+                          navigate(`/animals/${mother.id}`);
+                        } else {
+                          setParentsForm({
+                            motherId: animal.parents?.motherId || "",
+                            fatherId: animal.parents?.fatherId || ""
+                          });
+                          setShowLinkParentsModal(true);
+                        }
                       }}
                       className="p-3 bg-slate-50 hover:bg-emerald-50/60 rounded-2xl border border-slate-100 transition cursor-pointer flex items-center gap-3 group"
                     >
@@ -1099,7 +1108,7 @@ export const AnimalProfilePage: React.FC = () => {
                         <span className="text-[9px] font-bold text-slate-400 uppercase block">Mother (Dam)</span>
                         {mother ? (
                           <span className="font-black text-xs text-emerald-900 group-hover:underline block truncate">
-                            {mother.name || mother.animal_code} ({mother.animal_code})
+                            {formatAnimalDisplayTag(mother)}
                           </span>
                         ) : (
                           <span className="text-xs font-bold text-emerald-700 block">
@@ -1112,11 +1121,15 @@ export const AnimalProfilePage: React.FC = () => {
                     {/* Father Card */}
                     <div 
                       onClick={() => {
-                        setParentsForm({
-                          motherId: animal.parents?.motherId || "",
-                          fatherId: animal.parents?.fatherId || ""
-                        });
-                        setShowLinkParentsModal(true);
+                        if (father) {
+                          navigate(`/animals/${father.id}`);
+                        } else {
+                          setParentsForm({
+                            motherId: animal.parents?.motherId || "",
+                            fatherId: animal.parents?.fatherId || ""
+                          });
+                          setShowLinkParentsModal(true);
+                        }
                       }}
                       className="p-3 bg-slate-50 hover:bg-emerald-50/60 rounded-2xl border border-slate-100 transition cursor-pointer flex items-center gap-3 group"
                     >
@@ -1131,7 +1144,7 @@ export const AnimalProfilePage: React.FC = () => {
                         <span className="text-[9px] font-bold text-slate-400 uppercase block">Father (Sire)</span>
                         {father ? (
                           <span className="font-black text-xs text-emerald-900 group-hover:underline block truncate">
-                            {father.name || father.animal_code} ({father.animal_code})
+                            {formatAnimalDisplayTag(father)}
                           </span>
                         ) : (
                           <span className="text-xs font-bold text-emerald-700 block">
@@ -1272,19 +1285,32 @@ export const AnimalProfilePage: React.FC = () => {
                 </div>
 
                 <div className="space-y-3">
-                  {animalBreeding.map(b => (
-                    <div key={b.id} className="p-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-xs font-black text-rose-800 bg-rose-50 px-2 py-0.5 rounded-full">
-                          {b.status}
-                        </span>
-                        <span className="text-[10px] text-slate-400">{b.date}</span>
+                  {animalBreeding.map(b => {
+                    const damObj = animals.find(a => a.id === b.female_id);
+                    const sireObj = animals.find(a => a.id === b.male_id);
+
+                    const damTag = damObj ? formatAnimalDisplayTag(damObj) : "Unrecorded Dam";
+                    const sireTag = sireObj ? formatAnimalDisplayTag(sireObj) : "Unrecorded Sire";
+
+                    return (
+                      <div key={b.id} className="p-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-xs font-black text-rose-800 bg-rose-50 px-2 py-0.5 rounded-full">
+                            {b.status}
+                          </span>
+                          <span className="text-[10px] text-slate-400">{b.date}</span>
+                        </div>
+                        <p className="text-xs text-slate-700 mt-1 leading-relaxed">
+                          Line cross of Dam: <strong>{damTag}</strong> & Sire: <strong>{sireTag}</strong>
+                        </p>
+                        {b.notes && (
+                          <p className="text-[11px] text-slate-500 mt-2 bg-slate-50 p-2 rounded-xl border border-slate-100">
+                            {b.notes}
+                          </p>
+                        )}
                       </div>
-                      <p className="text-xs text-slate-700 mt-1 leading-relaxed">
-                        Line cross of Dam: <strong>{b.female_id}</strong> & Sire: <strong>{b.male_id}</strong>
-                      </p>
-                    </div>
-                  ))}
+                    );
+                  })}
                   {animalBreeding.length === 0 && (
                     <div className="text-center py-12 bg-white rounded-3xl border border-dashed text-slate-400 text-xs">
                       No breeding cycles logged.
@@ -1810,7 +1836,7 @@ export const AnimalProfilePage: React.FC = () => {
         </div>
       )}
 
-      {/* EDIT ANIMAL MODAL (With Editable DOB & Purchase Date, Mother & Father) */}
+      {/* EDIT ANIMAL MODAL */}
       {showEditModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
           <form 
