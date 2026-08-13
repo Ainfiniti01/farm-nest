@@ -579,7 +579,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
             custodian: ownership.custodian,
             agreement: ownership.agreement,
             notes: cleanNotes,
-            parents: { motherId: a.mother_id, fatherId: a.father_id },
+            parents: { motherId: a.mother_id || undefined, fatherId: a.father_id || undefined },
             created_at: a.created_at || new Date().toISOString()
           };
         }));
@@ -618,7 +618,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
           species: a.species,
           breed: a.breed,
           sex: a.sex,
-          dob: a.dob,
+          dob: a.dob || "",
           purchaseDate: a.purchase_date,
           source: a.source,
           status: a.status,
@@ -630,7 +630,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
           custodian: ownership.custodian,
           agreement: ownership.agreement,
           notes: cleanNotes,
-          parents: { motherId: a.mother_id, fatherId: a.father_id },
+          parents: { motherId: a.mother_id || undefined, fatherId: a.father_id || undefined },
           created_at: a.created_at
         };
 
@@ -1314,8 +1314,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       primary_photo: animalData.primaryPhoto || DEFAULT_ANIMAL_PHOTO,
       photos: (animalData.photos && animalData.photos.length > 0) ? animalData.photos : [DEFAULT_ANIMAL_PHOTO],
       notes: encodedNotes,
-      mother_id: animalData.parents?.motherId,
-      father_id: animalData.parents?.fatherId,
+      mother_id: animalData.parents?.motherId || null,
+      father_id: animalData.parents?.fatherId || null,
       user_id: session.userId || null
     };
 
@@ -1381,8 +1381,10 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (updates.healthStatus !== undefined) payload.health_status = updates.healthStatus;
     if (updates.primaryPhoto !== undefined) payload.primary_photo = updates.primaryPhoto;
     if (updates.photos !== undefined) payload.photos = updates.photos;
-    if (updates.parents?.motherId !== undefined) payload.mother_id = updates.parents.motherId;
-    if (updates.parents?.fatherId !== undefined) payload.father_id = updates.parents.fatherId;
+    if (updates.parents !== undefined) {
+      payload.mother_id = updates.parents.motherId || null;
+      payload.father_id = updates.parents.fatherId || null;
+    }
 
     const { error } = await supabase.from("animals").update(payload).eq("id", id);
     if (error) {
@@ -1392,9 +1394,14 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setAnimals(prev => prev.map(a => {
       if (a.id === id) {
+        const newParents = updates.parents !== undefined 
+          ? { motherId: updates.parents.motherId, fatherId: updates.parents.fatherId }
+          : a.parents;
+
         return {
           ...a,
           ...updates,
+          parents: newParents,
           ownershipType: currentOwnership.ownershipType,
           ownerName: currentOwnership.ownerName,
           custodian: currentOwnership.custodian,
@@ -1406,7 +1413,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }));
 
     await logActivity("Animal Updated", `Updated details for livestock record`, farmProfile.ownerName, id);
-    showSuccess("Animal updated");
+    showSuccess("Animal record updated");
   };
 
   const deleteAnimal = async (id: string) => {
