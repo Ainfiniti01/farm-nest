@@ -1991,17 +1991,32 @@ export const AnimalProfilePage: React.FC = () => {
               </div>
             </div>
 
-            <div>
-              <label className="text-[10px] font-bold text-slate-500 block">Status</label>
-              <select
-                value={editForm.status}
-                onChange={(e) => setEditForm({ ...editForm, status: e.target.value as any })}
-                className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
-              >
-                {["Healthy", "Monitoring", "Sick", "Under Treatment", "Pregnant", "Sold", "Deceased", "Retired"].map((st) => (
-                  <option key={st} value={st}>{st}</option>
-                ))}
-              </select>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 block">Acquisition Source</label>
+                <select
+                  value={editForm.source}
+                  onChange={(e) => setEditForm({ ...editForm, source: e.target.value as any })}
+                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1 font-semibold"
+                >
+                  <option value="Born on farm">Born on farm</option>
+                  <option value="Purchased">Purchased</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 block">Status</label>
+                <select
+                  value={editForm.status}
+                  onChange={(e) => setEditForm({ ...editForm, status: e.target.value as any })}
+                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1 font-semibold"
+                >
+                  {["Healthy", "Monitoring", "Sick", "Under Treatment", "Pregnant", "Sold", "Deceased", "Retired"].map((st) => (
+                    <option key={st} value={st}>{st}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <button
@@ -2175,7 +2190,7 @@ export const AnimalProfilePage: React.FC = () => {
         </div>
       )}
 
-      {/* OFFSPRING MODAL (With Camera and Upload Buttons) */}
+      {/* OFFSPRING MODAL */}
       {showAddOffspring && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
           <form 
