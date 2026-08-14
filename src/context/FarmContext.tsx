@@ -14,6 +14,25 @@ export const normalizeFarmName = (name: string): string => {
   return `${trimmed} Farm`;
 };
 
+export const getFarmPrefix = (farmName: string): string => {
+  if (!farmName) return "YUS";
+  let clean = farmName.trim().replace(/\s*farm$/i, "").replace(/[^a-zA-Z]/g, "").toUpperCase();
+  if (!clean) clean = farmName.replace(/[^a-zA-Z]/g, "").toUpperCase();
+  if (clean.length >= 3) return clean.slice(0, 3);
+  if (clean.length === 2) return clean + "F";
+  if (clean.length === 1) return clean + "FM";
+  return "YUS";
+};
+
+export const getSpeciesCode = (species: Animal["species"]): string => {
+  switch (species) {
+    case "Goat": return "G";
+    case "Ram": return "R";
+    case "Chicken": return "C";
+    default: return "O";
+  }
+};
+
 export interface OwnershipData {
   ownershipType: "Farm Owned" | "Client Owned";
   ownerName?: string;
@@ -320,7 +339,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [accountId, setAccountId] = useState<string | null>(null);
   
   const [farmProfile, setFarmProfile] = useState<FarmProfile>({
-    name: "My Farm",
+    name: "Yuswas Farm",
     description: "Agricultural production unit.",
     ownerName: "Operator",
     location: "Kano, Nigeria",
@@ -824,7 +843,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const { data: { session: sbSession } } = await supabase.auth.getSession();
         if (isMounted) {
           if (sbSession?.user) {
-            const rawFarmName = sbSession.user.user_metadata?.farmName || "My Farm";
+            const rawFarmName = sbSession.user.user_metadata?.farmName || "Yuswas Farm";
             const normalized = normalizeFarmName(rawFarmName);
             setSession({
               userId: sbSession.user.id,
@@ -867,7 +886,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
         if (sbSession?.user) {
-          const rawFarmName = sbSession.user.user_metadata?.farmName || "My Farm";
+          const rawFarmName = sbSession.user.user_metadata?.farmName || "Yuswas Farm";
           const normalized = normalizeFarmName(rawFarmName);
           setSession({
             userId: sbSession.user.id,
@@ -993,7 +1012,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (authData?.user) {
         clearSessionCache();
-        const rawFarmName = authData.user.user_metadata?.farmName || "My Farm";
+        const rawFarmName = authData.user.user_metadata?.farmName || "Yuswas Farm";
         const normalized = normalizeFarmName(rawFarmName);
         setSession({
           userId: authData.user.id,
@@ -1255,35 +1274,34 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addAnimal = async (animalData: Omit<Animal, "id" | "animal_code" | "created_at">) => {
-    const getFarmPrefix = (farmName: string): string => {
-      const clean = farmName.replace(/[^a-zA-Z]/g, "").toUpperCase();
-      if (clean.length >= 2) return clean.slice(0, 2);
-      if (clean.length === 1) return (clean + "F").slice(0, 2);
-      return "AD";
-    };
-
-    const getSpeciesCode = (species: Animal["species"]): string => {
-      switch (species) {
-        case "Goat": return "G";
-        case "Ram": return "S";
-        case "Chicken": return "C";
-        default: return "O";
-      }
-    };
-
-    const farmPrefix = getFarmPrefix(farmProfile.name || "Adam");
+    const farmPrefix = getFarmPrefix(farmProfile.name || "Yuswas");
     const speciesCode = getSpeciesCode(animalData.species);
-    const codePrefix = `${farmPrefix}${speciesCode}`;
+    const codePrefix = `${farmPrefix}${speciesCode}`; // e.g. YUSG for Goat, YUSR for Ram, YUSC for Chicken, YUSO for Other
 
-    let dbCodesQuery = supabase.from("animals").select("animal_code").ilike("animal_code", `${codePrefix}%`);
-    const { data: existingRows } = await dbCodesQuery;
-    const dbCodeSet = new Set((existingRows || []).map((r: any) => r.animal_code));
-    const localCodeSet = new Set(animals.map(a => a.animal_code));
+    // Fetch existing animal codes to find highest number for this exact prefix
+    const { data: existingRows } = await supabase.from("animals").select("animal_code").ilike("animal_code", `${codePrefix}%`);
+    const dbCodes = (existingRows || []).map((r: any) => r.animal_code);
+    const localCodes = animals.map(a => a.animal_code);
+    const allCodes = new Set([...dbCodes, ...localCodes]);
 
-    let countNumber = 1;
+    let maxNum = 0;
+    allCodes.forEach(code => {
+      if (code && typeof code === "string" && code.toUpperCase().startsWith(codePrefix.toUpperCase())) {
+        const numPart = code.slice(codePrefix.length);
+        const match = numPart.match(/^(\d+)$/);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (!isNaN(num) && num > maxNum) {
+            maxNum = num;
+          }
+        }
+      }
+    });
+
+    let countNumber = maxNum + 1;
     let generatedCode = `${codePrefix}${countNumber.toString().padStart(3, "0")}`;
 
-    while (dbCodeSet.has(generatedCode) || localCodeSet.has(generatedCode)) {
+    while (allCodes.has(generatedCode)) {
       countNumber++;
       generatedCode = `${codePrefix}${countNumber.toString().padStart(3, "0")}`;
     }
