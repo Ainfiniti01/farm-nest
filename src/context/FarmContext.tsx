@@ -14,6 +14,16 @@ export const normalizeFarmName = (name: string): string => {
   return `${trimmed} Farm`;
 };
 
+export const getFarmPrefix = (farmName: string): string => {
+  if (!farmName) return "YUS";
+  let clean = farmName.trim().replace(/\s*farm$/i, "").replace(/[^a-zA-Z]/g, "").toUpperCase();
+  if (!clean) clean = farmName.replace(/[^a-zA-Z]/g, "").toUpperCase();
+  if (clean.length >= 3) return clean.slice(0, 3);
+  if (clean.length === 2) return clean + "F";
+  if (clean.length === 1) return clean + "FM";
+  return "YUS";
+};
+
 export interface OwnershipData {
   ownershipType: "Farm Owned" | "Client Owned";
   ownerName?: string;
@@ -320,7 +330,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [accountId, setAccountId] = useState<string | null>(null);
   
   const [farmProfile, setFarmProfile] = useState<FarmProfile>({
-    name: "My Farm",
+    name: "Yuswas Farm",
     description: "Agricultural production unit.",
     ownerName: "Operator",
     location: "Kano, Nigeria",
@@ -824,7 +834,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const { data: { session: sbSession } } = await supabase.auth.getSession();
         if (isMounted) {
           if (sbSession?.user) {
-            const rawFarmName = sbSession.user.user_metadata?.farmName || "My Farm";
+            const rawFarmName = sbSession.user.user_metadata?.farmName || "Yuswas Farm";
             const normalized = normalizeFarmName(rawFarmName);
             setSession({
               userId: sbSession.user.id,
@@ -867,7 +877,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
         if (sbSession?.user) {
-          const rawFarmName = sbSession.user.user_metadata?.farmName || "My Farm";
+          const rawFarmName = sbSession.user.user_metadata?.farmName || "Yuswas Farm";
           const normalized = normalizeFarmName(rawFarmName);
           setSession({
             userId: sbSession.user.id,
@@ -993,7 +1003,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (authData?.user) {
         clearSessionCache();
-        const rawFarmName = authData.user.user_metadata?.farmName || "My Farm";
+        const rawFarmName = authData.user.user_metadata?.farmName || "Yuswas Farm";
         const normalized = normalizeFarmName(rawFarmName);
         setSession({
           userId: authData.user.id,
@@ -1255,35 +1265,31 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addAnimal = async (animalData: Omit<Animal, "id" | "animal_code" | "created_at">) => {
-    const getFarmPrefix = (farmName: string): string => {
-      const clean = farmName.replace(/[^a-zA-Z]/g, "").toUpperCase();
-      if (clean.length >= 2) return clean.slice(0, 2);
-      if (clean.length === 1) return (clean + "F").slice(0, 2);
-      return "AD";
-    };
+    const codePrefix = getFarmPrefix(farmProfile.name || "Yuswas");
 
-    const getSpeciesCode = (species: Animal["species"]): string => {
-      switch (species) {
-        case "Goat": return "G";
-        case "Ram": return "S";
-        case "Chicken": return "C";
-        default: return "O";
+    // Fetch existing animal codes to ensure strictly sequential tags (e.g. YUS001, YUS002)
+    const { data: existingRows } = await supabase.from("animals").select("animal_code");
+    const dbCodes = (existingRows || []).map((r: any) => r.animal_code);
+    const localCodes = animals.map(a => a.animal_code);
+    const allCodes = new Set([...dbCodes, ...localCodes]);
+
+    let maxNum = 0;
+    allCodes.forEach(code => {
+      if (code && typeof code === "string") {
+        const match = code.match(/(\d+)$/);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (!isNaN(num) && num > maxNum) {
+            maxNum = num;
+          }
+        }
       }
-    };
+    });
 
-    const farmPrefix = getFarmPrefix(farmProfile.name || "Adam");
-    const speciesCode = getSpeciesCode(animalData.species);
-    const codePrefix = `${farmPrefix}${speciesCode}`;
-
-    let dbCodesQuery = supabase.from("animals").select("animal_code").ilike("animal_code", `${codePrefix}%`);
-    const { data: existingRows } = await dbCodesQuery;
-    const dbCodeSet = new Set((existingRows || []).map((r: any) => r.animal_code));
-    const localCodeSet = new Set(animals.map(a => a.animal_code));
-
-    let countNumber = 1;
+    let countNumber = maxNum + 1;
     let generatedCode = `${codePrefix}${countNumber.toString().padStart(3, "0")}`;
 
-    while (dbCodeSet.has(generatedCode) || localCodeSet.has(generatedCode)) {
+    while (allCodes.has(generatedCode)) {
       countNumber++;
       generatedCode = `${codePrefix}${countNumber.toString().padStart(3, "0")}`;
     }
