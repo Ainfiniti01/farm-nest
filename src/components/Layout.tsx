@@ -8,7 +8,7 @@ import {
   Package, 
   Settings as SettingsIcon, 
   LogOut,
-  Sparkles
+  Image as ImageIcon
 } from "lucide-react";
 
 interface LayoutProps {
@@ -23,11 +23,12 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const currentPath = location.pathname;
 
   const navItems = [
-    { label: "Dashboard", path: "/dashboard", icon: <Home size={18} />, emoji: "🏠" },
-    { label: "Animals", path: "/animals", icon: <span className="text-sm">🐐</span>, emoji: "🐐" },
-    { label: "Farm AI", path: "/farm-ai", icon: <span className="text-sm">🤖</span>, emoji: "🤖" },
-    { label: "Inventory", path: "/inventory", icon: <Package size={18} />, emoji: "📦" },
-    { label: "Settings", path: "/settings", icon: <SettingsIcon size={18} />, emoji: "⚙️" },
+    { label: "Dashboard", path: "/dashboard", icon: <Home size={18} /> },
+    { label: "Animals", path: "/animals", icon: <span className="text-sm">🐐</span> },
+    { label: "Gallery", path: "/gallery", icon: <ImageIcon size={18} /> },
+    { label: "Farm AI", path: "/farm-ai", icon: <span className="text-sm">🤖</span> },
+    { label: "Inventory", path: "/inventory", icon: <Package size={18} /> },
+    { label: "Settings", path: "/settings", icon: <SettingsIcon size={18} /> },
   ];
 
   const handleLogout = () => {
@@ -38,7 +39,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   return (
     <div className="min-h-screen bg-[#FBFDF9] text-slate-800 font-sans flex flex-col md:flex-row">
       
-      {/* DESKTOP SIDEBAR NAVIGATION PANEL (Visible on MD screens and above) */}
+      {/* DESKTOP SIDEBAR NAVIGATION PANEL */}
       <aside className="hidden md:flex flex-col w-64 bg-emerald-950 text-white shrink-0 justify-between p-6 sticky top-0 h-screen border-r border-emerald-900">
         <div className="space-y-8">
           
@@ -99,7 +100,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         </div>
       </aside>
 
-      {/* MOBILE HEADER (Visible on mobile/tablet) */}
+      {/* MOBILE HEADER */}
       <header className="md:hidden sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-emerald-100 shadow-sm px-4 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -124,8 +125,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         {children}
       </main>
 
-      {/* MOBILE BOTTOM NAVIGATION BAR (Exactly 5 destinations only) */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-100 px-4 py-2 shadow-lg">
+      {/* MOBILE BOTTOM NAVIGATION BAR */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-100 px-2 py-2 shadow-lg">
         <div className="max-w-md mx-auto flex items-center justify-between">
           {navItems.map((item) => {
             const isActive = currentPath === item.path || currentPath.startsWith(item.path + "/");
@@ -133,12 +134,12 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
               <Link
                 key={item.path}
                 to={item.path}
-                className={`flex flex-col items-center justify-center py-1.5 flex-1 transition-all ${
+                className={`flex flex-col items-center justify-center py-1 flex-1 transition-all ${
                   isActive ? "text-emerald-600 font-extrabold scale-105" : "text-slate-400"
                 }`}
               >
                 {item.icon}
-                <span className="text-[10px] mt-1">{item.label}</span>
+                <span className="text-[9px] mt-1">{item.label}</span>
               </Link>
             );
           })}

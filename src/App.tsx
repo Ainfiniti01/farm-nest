@@ -19,6 +19,7 @@ import { AnimalProfilePage } from "./pages/AnimalProfilePage";
 import { FarmAi } from "./pages/FarmAi";
 import { Inventory } from "./pages/Inventory";
 import { FarmNotesPage } from "./pages/FarmNotesPage";
+import { FarmGalleryPage } from "./pages/FarmGalleryPage";
 import { Settings } from "./pages/Settings";
 import { SettingsFarmProfile } from "./pages/SettingsFarmProfile";
 import { SettingsContacts } from "./pages/SettingsContacts";
@@ -159,6 +160,15 @@ const AppRoutes = () => {
         element={
           <PrivateRoute>
             <FarmNotesPage />
+          </PrivateRoute>
+        } 
+      />
+
+      <Route 
+        path="/gallery" 
+        element={
+          <PrivateRoute>
+            <FarmGalleryPage />
           </PrivateRoute>
         } 
       />

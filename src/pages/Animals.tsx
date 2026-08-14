@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useFarm, Animal } from "@/context/FarmContext";
+import { useFarm, Animal, SPECIES_OPTIONS } from "@/context/FarmContext";
 import { compressImage } from "@/utils/imageCompressor";
 import { 
   Search, 
@@ -35,9 +35,11 @@ export const Animals: React.FC = () => {
 
   const [fullscreenPhoto, setFullscreenPhoto] = useState<string | null>(null);
 
+  const [selectedSpeciesOption, setSelectedSpeciesOption] = useState<string>("Goat");
+  const [customSpecies, setCustomSpecies] = useState<string>("");
+
   const [newAnimal, setNewAnimal] = useState({
     name: "",
-    species: "Goat" as Animal["species"],
     breed: "",
     sex: "Female" as Animal["sex"],
     dob: new Date().toISOString().split("T")[0],
@@ -91,11 +93,21 @@ export const Animals: React.FC = () => {
     });
   };
 
+  const finalSpecies = selectedSpeciesOption === "Other" 
+    ? (customSpecies.trim() || "Other") 
+    : selectedSpeciesOption;
+
   const triggerCreateAnimal = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (selectedSpeciesOption === "Other" && !customSpecies.trim()) {
+      showError("Please enter a custom species name.");
+      return;
+    }
+
     setPendingConfirm({
       title: "Add New Animal Record?",
-      message: `Verify details for registering this new ${newAnimal.species} in the main pedigree registry.`,
+      message: `Verify details for registering this new ${finalSpecies} in the main pedigree registry.`,
       onConfirm: () => {
         const defaultPhoto = "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=400";
         const finalPhotos = newAnimal.photos.length > 0 ? newAnimal.photos : [defaultPhoto];
@@ -103,7 +115,7 @@ export const Animals: React.FC = () => {
 
         addAnimal({
           name: newAnimal.name,
-          species: newAnimal.species,
+          species: finalSpecies,
           breed: newAnimal.breed || "Local Breed",
           sex: newAnimal.sex,
           dob: newAnimal.dob,
@@ -120,9 +132,10 @@ export const Animals: React.FC = () => {
         });
         setShowAddAnimal(false);
         setPendingConfirm(null);
+        setSelectedSpeciesOption("Goat");
+        setCustomSpecies("");
         setNewAnimal({
           name: "",
-          species: "Goat",
           breed: "",
           sex: "Female",
           dob: new Date().toISOString().split("T")[0],
@@ -142,12 +155,13 @@ export const Animals: React.FC = () => {
     const codeMatch = animal.animal_code.toLowerCase().includes(searchQuery.toLowerCase());
     const nameMatch = animal.name?.toLowerCase().includes(searchQuery.toLowerCase());
     const breedMatch = animal.breed.toLowerCase().includes(searchQuery.toLowerCase());
-    const queryMatch = codeMatch || nameMatch || breedMatch;
+    const speciesMatchText = animal.species.toLowerCase().includes(searchQuery.toLowerCase());
+    const queryMatch = codeMatch || nameMatch || breedMatch || speciesMatchText;
 
-    const speciesMatch = speciesFilter === "All" || animal.species === speciesFilter;
-    const statusMatch = statusFilter === "All" || animal.status === statusFilter;
+    const speciesMatchFilter = speciesFilter === "All" || animal.species === speciesFilter;
+    const statusMatchFilter = statusFilter === "All" || animal.status === statusFilter;
 
-    return queryMatch && speciesMatch && statusMatch;
+    return queryMatch && speciesMatchFilter && statusMatchFilter;
   });
 
   const handleDownloadFullscreen = () => {
@@ -184,7 +198,7 @@ export const Animals: React.FC = () => {
         <Search className="absolute left-3 top-3 text-slate-400" size={16} />
         <input
           type="text"
-          placeholder="Search tags, breeds, names (e.g. ADG001)..."
+          placeholder="Search tags, breeds, species, names (e.g. ADG001, Cow)..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-1 focus:ring-emerald-500 outline-none transition"
@@ -194,7 +208,18 @@ export const Animals: React.FC = () => {
       {/* Filters */}
       <div className="space-y-2 bg-white p-3.5 rounded-2xl border border-slate-100 shadow-sm">
         <div className="flex flex-wrap gap-1.5">
-          {["All", "Goat", "Ram", "Chicken", "Other"].map((species) => (
+          <button
+            onClick={() => setSpeciesFilter("All")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition ${
+              speciesFilter === "All"
+                ? "bg-emerald-600 border-emerald-600 text-white shadow-sm"
+                : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            🌍 All Species
+          </button>
+
+          {SPECIES_OPTIONS.map((species) => (
             <button
               key={species}
               onClick={() => setSpeciesFilter(species)}
@@ -204,7 +229,7 @@ export const Animals: React.FC = () => {
                   : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
               }`}
             >
-              {species === "All" ? "🌍 All Species" : species}
+              {species}
             </button>
           ))}
         </div>
@@ -409,16 +434,18 @@ export const Animals: React.FC = () => {
               <div>
                 <label className="text-[10px] font-bold text-slate-500 block">Species</label>
                 <select
-                  value={newAnimal.species}
-                  onChange={(e) => setNewAnimal({ ...newAnimal, species: e.target.value as any })}
+                  value={selectedSpeciesOption}
+                  onChange={(e) => setSelectedSpeciesOption(e.target.value)}
                   className="w-full p-2 bg-slate-50 border rounded-xl text-xs mt-1"
                 >
-                  <option value="Goat">Goat 🐐</option>
-                  <option value="Ram">Ram 🐏</option>
-                  <option value="Chicken">Chicken 🐔</option>
-                  <option value="Other">Other Species</option>
+                  {SPECIES_OPTIONS.map((spec) => (
+                    <option key={spec} value={spec}>
+                      {spec}
+                    </option>
+                  ))}
                 </select>
               </div>
+
               <div>
                 <label className="text-[10px] font-bold text-slate-500 block">Gender</label>
                 <select
@@ -432,12 +459,29 @@ export const Animals: React.FC = () => {
               </div>
             </div>
 
+            {/* Conditional Custom Species Input */}
+            {selectedSpeciesOption === "Other" && (
+              <div className="animate-in fade-in">
+                <label className="text-[10px] font-bold text-emerald-800 uppercase block mb-1">
+                  Specify Custom Species Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Pigeon, Ostrich, Alpacas..."
+                  value={customSpecies}
+                  onChange={(e) => setCustomSpecies(e.target.value)}
+                  className="w-full p-2.5 bg-emerald-50/50 border border-emerald-300 rounded-xl text-xs font-bold text-slate-900 outline-none focus:ring-1 focus:ring-emerald-500"
+                  required
+                />
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-[10px] font-bold text-slate-500 block">Breed Name</label>
                 <input
                   type="text"
-                  placeholder="West African Dwarf"
+                  placeholder="e.g. Local Breed"
                   value={newAnimal.breed}
                   onChange={(e) => setNewAnimal({ ...newAnimal, breed: e.target.value })}
                   className="w-full p-2 bg-slate-50 border rounded-xl text-xs mt-1"

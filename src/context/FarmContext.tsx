@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { showSuccess, showError } from "@/utils/toast";
 import { supabase } from "@/lib/supabaseClient";
+import { compressImage } from "@/utils/imageCompressor";
 
 export const DEFAULT_ANIMAL_PHOTO = "/placeholder.svg";
 
@@ -24,14 +25,31 @@ export const getFarmPrefix = (farmName: string): string => {
   return "YUS";
 };
 
-export const getSpeciesCode = (species: Animal["species"]): string => {
+export const getSpeciesCode = (species: string): string => {
   switch (species) {
     case "Goat": return "G";
     case "Ram": return "R";
     case "Chicken": return "C";
+    case "Turkey": return "T";
+    case "Horse": return "H";
+    case "Camel": return "CM";
+    case "Duck": return "D";
+    case "Cow": return "CW";
     default: return "O";
   }
 };
+
+export const SPECIES_OPTIONS = [
+  "Goat",
+  "Ram",
+  "Chicken",
+  "Turkey",
+  "Horse",
+  "Camel",
+  "Duck",
+  "Cow",
+  "Other"
+] as const;
 
 export interface OwnershipData {
   ownershipType: "Farm Owned" | "Client Owned";
@@ -87,7 +105,7 @@ export interface Animal {
   id: string;
   animal_code: string;
   name: string;
-  species: "Goat" | "Ram" | "Chicken" | "Other";
+  species: string;
   breed: string;
   sex: "Male" | "Female";
   dob: string;
@@ -207,6 +225,15 @@ export interface AnimalNote {
   updated_at: string;
 }
 
+export interface FarmGalleryItem {
+  id: string;
+  title?: string;
+  caption?: string;
+  category: "General" | "Animals" | "Buildings" | "Equipment" | "Events" | "Other";
+  image_url: string;
+  created_at: string;
+}
+
 export interface ActivityLog {
   id: string;
   type: string;
@@ -244,6 +271,7 @@ interface FarmContextType {
   reminders: Reminder[];
   farmNotes: FarmNote[];
   animalNotes: AnimalNote[];
+  farmGallery: FarmGalleryItem[];
   activityLogs: ActivityLog[];
   farmProfile: FarmProfile;
   session: UserSession;
@@ -263,6 +291,7 @@ interface FarmContextType {
   loadInventory: (force?: boolean) => Promise<void>;
   loadFarmNotes: (force?: boolean) => Promise<void>;
   loadContacts: (force?: boolean) => Promise<void>;
+  loadFarmGallery: (force?: boolean) => Promise<void>;
   addAnimal: (animal: Omit<Animal, "id" | "animal_code" | "created_at">) => Promise<void>;
   updateAnimal: (id: string, updates: Partial<Animal>) => Promise<void>;
   deleteAnimal: (id: string) => Promise<void>;
@@ -285,6 +314,8 @@ interface FarmContextType {
   addAnimalNote: (note: { animal_id: string; content: string }) => Promise<boolean>;
   updateAnimalNote: (id: string, content: string) => Promise<boolean>;
   deleteAnimalNote: (id: string) => Promise<boolean>;
+  addFarmGalleryPhoto: (photo: { title?: string; caption?: string; category: string; file?: File; dataUrl?: string }) => Promise<boolean>;
+  deleteFarmGalleryPhoto: (id: string, imageUrl?: string) => Promise<boolean>;
   logActivity: (type: string, description: string, actor: string, targetId?: string) => Promise<void>;
   updateFarmProfile: (profile: FarmProfile) => Promise<boolean>;
   changeAccountPassword: (newPassword: string) => Promise<boolean>;
@@ -313,6 +344,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [farmNotes, setFarmNotes] = useState<FarmNote[]>([]);
   const [animalNotes, setAnimalNotes] = useState<AnimalNote[]>([]);
+  const [farmGallery, setFarmGallery] = useState<FarmGalleryItem[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [onboardingCompleted, setOnboardingCompletedState] = useState<boolean>(false);
   
@@ -326,6 +358,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const hasLoadedInventoryRef = useRef<boolean>(false);
   const hasLoadedFarmNotesRef = useRef<boolean>(false);
   const hasLoadedContactsRef = useRef<boolean>(false);
+  const hasLoadedGalleryRef = useRef<boolean>(false);
 
   const fetchingAccountRef = useRef<boolean>(false);
   const fetchingDashboardRef = useRef<boolean>(false);
@@ -333,6 +366,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const fetchingInventoryRef = useRef<boolean>(false);
   const fetchingFarmNotesRef = useRef<boolean>(false);
   const fetchingContactsRef = useRef<boolean>(false);
+  const fetchingGalleryRef = useRef<boolean>(false);
   const fetchingAnimalProfileRef = useRef<string | null>(null);
   const isLoggingOutRef = useRef<boolean>(false);
 
@@ -373,6 +407,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     hasLoadedInventoryRef.current = false;
     hasLoadedFarmNotesRef.current = false;
     hasLoadedContactsRef.current = false;
+    hasLoadedGalleryRef.current = false;
 
     fetchingAccountRef.current = false;
     fetchingDashboardRef.current = false;
@@ -380,6 +415,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     fetchingInventoryRef.current = false;
     fetchingFarmNotesRef.current = false;
     fetchingContactsRef.current = false;
+    fetchingGalleryRef.current = false;
     fetchingAnimalProfileRef.current = null;
   }, []);
 
@@ -824,6 +860,36 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [session.isAuthenticated]);
 
+  const loadFarmGallery = useCallback(async (force = false) => {
+    if (!session.isAuthenticated) return;
+    if (hasLoadedGalleryRef.current && !force) return;
+    if (fetchingGalleryRef.current) return;
+    fetchingGalleryRef.current = true;
+
+    try {
+      const { data, error } = await supabase
+        .from("farm_gallery")
+        .select("id, title, caption, category, image_url, created_at")
+        .order("created_at", { ascending: false });
+
+      if (!error && data) {
+        setFarmGallery(data.map((item: any) => ({
+          id: item.id,
+          title: item.title,
+          caption: item.caption,
+          category: item.category || "General",
+          image_url: item.image_url,
+          created_at: item.created_at || new Date().toISOString()
+        })));
+        hasLoadedGalleryRef.current = true;
+      }
+    } catch (err) {
+      console.error("[FarmContext] Farm gallery load error:", err);
+    } finally {
+      fetchingGalleryRef.current = false;
+    }
+  }, [session.isAuthenticated]);
+
   const reloadFarmData = useCallback(async () => {
     if (session.isAuthenticated) {
       await loadDashboardData(true);
@@ -922,6 +988,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setReminders([]);
         setFarmNotes([]);
         setAnimalNotes([]);
+        setFarmGallery([]);
       }
     });
 
@@ -1127,6 +1194,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setReminders([]);
       setFarmNotes([]);
       setAnimalNotes([]);
+      setFarmGallery([]);
       showSuccess("Signed out successfully.");
     }
   };
@@ -1276,9 +1344,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const addAnimal = async (animalData: Omit<Animal, "id" | "animal_code" | "created_at">) => {
     const farmPrefix = getFarmPrefix(farmProfile.name || "Yuswas");
     const speciesCode = getSpeciesCode(animalData.species);
-    const codePrefix = `${farmPrefix}${speciesCode}`; // e.g. YUSG for Goat, YUSR for Ram, YUSC for Chicken, YUSO for Other
+    const codePrefix = `${farmPrefix}${speciesCode}`;
 
-    // Fetch existing animal codes to find highest number for this exact prefix
     const { data: existingRows } = await supabase.from("animals").select("animal_code").ilike("animal_code", `${codePrefix}%`);
     const dbCodes = (existingRows || []).map((r: any) => r.animal_code);
     const localCodes = animals.map(a => a.animal_code);
@@ -1374,7 +1441,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updateAnimal = async (id: string, updates: Partial<Animal>) => {
     const existing = animals.find(a => a.id === id);
     
-    // Determine new ownership properties
     const currentOwnership: OwnershipData = {
       ownershipType: updates.ownershipType !== undefined ? updates.ownershipType : (existing?.ownershipType || "Farm Owned"),
       ownerName: updates.ownershipType === "Farm Owned" ? undefined : (updates.ownerName !== undefined ? updates.ownerName : existing?.ownerName),
@@ -1390,6 +1456,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     if (updates.name !== undefined) payload.name = updates.name.trim();
+    if (updates.species !== undefined) payload.species = updates.species;
     if (updates.breed !== undefined) payload.breed = updates.breed;
     if (updates.sex !== undefined) payload.sex = updates.sex;
     if (updates.dob !== undefined) payload.dob = updates.dob;
@@ -1880,6 +1947,94 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const addFarmGalleryPhoto = async (photoData: { title?: string; caption?: string; category: string; file?: File; dataUrl?: string }): Promise<boolean> => {
+    const newId = "fg_" + Date.now();
+    let finalImageUrl = photoData.dataUrl || "";
+
+    try {
+      if (photoData.file) {
+        const file = photoData.file;
+        const fileExt = file.name.split('.').pop() || 'jpg';
+        const filePath = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+
+        const { data: uploadData, error: uploadErr } = await supabase.storage
+          .from("farm-gallery")
+          .upload(filePath, file, { cacheControl: "3600", upsert: false });
+
+        if (!uploadErr && uploadData?.path) {
+          const { data: publicData } = supabase.storage.from("farm-gallery").getPublicUrl(uploadData.path);
+          finalImageUrl = publicData.publicUrl;
+        } else {
+          console.warn("[FarmContext] Storage bucket upload failed, using compressed image fallback:", uploadErr?.message);
+          finalImageUrl = await compressImage(file, 800, 800, 0.7);
+        }
+      }
+
+      if (!finalImageUrl) {
+        showError("Please provide an image file or portrait");
+        return false;
+      }
+
+      const dbPayload = {
+        id: newId,
+        title: photoData.title?.trim() || null,
+        caption: photoData.caption?.trim() || null,
+        category: photoData.category || "General",
+        image_url: finalImageUrl,
+        user_id: session.userId || null,
+        created_at: new Date().toISOString()
+      };
+
+      const { error } = await supabase.from("farm_gallery").insert([dbPayload]);
+      if (error) {
+        showError("Couldn't save photo record: " + error.message);
+        return false;
+      }
+
+      const newItem: FarmGalleryItem = {
+        id: newId,
+        title: photoData.title?.trim() || undefined,
+        caption: photoData.caption?.trim() || undefined,
+        category: (photoData.category as any) || "General",
+        image_url: finalImageUrl,
+        created_at: dbPayload.created_at
+      };
+
+      setFarmGallery(prev => [newItem, ...prev]);
+      await logActivity("Farm Gallery Photo Added", `Uploaded photo "${photoData.title || photoData.category}" to Farm Gallery`, farmProfile.ownerName);
+      showSuccess("Photo added to General Farm Gallery!");
+      return true;
+    } catch (e: any) {
+      showError("Couldn't save photo: " + (e?.message || "Unknown error"));
+      return false;
+    }
+  };
+
+  const deleteFarmGalleryPhoto = async (id: string, imageUrl?: string): Promise<boolean> => {
+    try {
+      const { error } = await supabase.from("farm_gallery").delete().eq("id", id);
+      if (error) {
+        showError("Couldn't delete photo: " + error.message);
+        return false;
+      }
+
+      if (imageUrl && imageUrl.includes("/farm-gallery/")) {
+        const parts = imageUrl.split("/farm-gallery/");
+        if (parts[1]) {
+          await supabase.storage.from("farm-gallery").remove([parts[1]]);
+        }
+      }
+
+      setFarmGallery(prev => prev.filter(item => item.id !== id));
+      await logActivity("Farm Gallery Photo Deleted", `Deleted photo from General Farm Gallery`, farmProfile.ownerName);
+      showSuccess("Photo deleted from gallery.");
+      return true;
+    } catch (e: any) {
+      showError("Couldn't delete photo: " + (e?.message || "Unknown error"));
+      return false;
+    }
+  };
+
   const incrementAiUsage = (type: "text" | "image") => {
     setAiUsage(prev => ({
       ...prev,
@@ -1905,6 +2060,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         reminders,
         farmNotes,
         animalNotes,
+        farmGallery,
         activityLogs,
         farmProfile,
         session,
@@ -1919,6 +2075,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loadInventory,
         loadFarmNotes,
         loadContacts,
+        loadFarmGallery,
         addAnimal,
         updateAnimal,
         deleteAnimal,
@@ -1941,6 +2098,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         addAnimalNote,
         updateAnimalNote,
         deleteAnimalNote,
+        addFarmGalleryPhoto,
+        deleteFarmGalleryPhoto,
         logActivity,
         updateFarmProfile,
         changeAccountPassword,

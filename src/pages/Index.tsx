@@ -2,7 +2,7 @@
 
 import React, { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { useFarm, Animal, HealthRecord, Reminder } from "@/context/FarmContext";
+import { useFarm, Animal, HealthRecord, Reminder, SPECIES_OPTIONS } from "@/context/FarmContext";
 import { compressImage } from "@/utils/imageCompressor";
 import { 
   Home, 
@@ -41,359 +41,11 @@ const Index = () => {
   const [activeTab, setActiveTab] = useState<"dashboard" | "animals" | "ai" | "inventory" | "settings">("dashboard");
 
   const [showAddAnimal, setShowAddAnimal] = useState(false);
+  const [selectedSpeciesOption, setSelectedSpeciesOption] = useState<string>("Goat");
+  const [customSpecies, setCustomSpecies] = useState<string>("");
+
   const [newAnimal, setNewAnimal] = useState({
     name: "",
-    species: "Goat" as Animal["species"],
-    breed: "",
-    sex: "Female" as Animal["sex"],
-    dob: new Date().toISOString().split("T")[0],
-    source: "Born on farm" as Animal["source"],
-    status: "Healthy" as Animal["status"],
-    notes: "",
-    primaryPhoto: "",
-    photos: [] as string[],
-    motherId: "",
-    fatherId: "",
-  });
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
-
-  const [showAddHealth, setShowAddHealth] = useState(false);
-  const [selectedAnimalForHealth, setSelectedAnimalForHealth] = useState("");
-  const [newHealth, setNewHealth] = useState({
-    type: "Observation" as HealthRecord["type"],
-    details: "",
-    medication: "",
-    recordedBy: farmProfile.ownerName || "Operator",
-    date: new Date().toISOString().split("T")[0],
-  });
-
-  const [showAddTreatment, setShowAddTreatment] = useState(false);
-  const [selectedAnimalForTreatment, setSelectedAnimalForTreatment] = useState("");
-  const [newTreatment, setNewTreatment] = useState({
-    condition: "",
-    medication: "",
-    startDate: new Date().toISOString().split("T")[0],
-    endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-    notes: "",
-    followUpDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-  });
-
-  const [showAddReminder, setShowAddReminder] = useState(false);
-  const [newReminderForm, setNewReminderForm] = useState({
-    title: "",
-    type: "Vaccination" as Reminder["type"],
-    dueDate: new Date().toISOString().split("T")[0],
-    animalId: "",
-    notes: ""
-  });
-
-  const [searchQuery, setSearchQuery] = useState("");
-  const [speciesFilter, setSpeciesFilter] = useState<string>("All");
-  const [statusFilter, setStatusFilter] = useState<string>("All");
-
-  const [pendingConfirm, setPendingConfirm] = useState<{
-    title: string;
-    message: string;
-    onConfirm: () => void;
-  } | null>(null);
-
-  const [fullscreenPhoto, setFullscreenPhoto] = useState<string | null>(null);
-
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files && files.length > 0) {
-      try {
-        const fileList = Array.from(files);
-        const compressedList = await Promise.all(
-          fileList.map(file => compressImage(file, 600, 600, 0.7))
-        );
-        setNewAnimal(prev => {
-          const allPhotos = [...prev.photos, ...compressedList];
-          return {
-            ...prev,
-            primaryPhoto: prev.primaryPhoto || allPhotos[0] || "",
-            photos: allPhotos
-          };
-        });
-        showSuccess(`${compressedList.length} photo${compressedList.length > 1 ? "s" : ""} attached!`);
-      } catch (err) {
-        showError("Failed to process images.");
-      }
-    }
-  };
-
-  const removeNewAnimalPhoto = (index: number) => {
-    setNewAnimal(prev => {
-      const updatedPhotos = prev.photos.filter((_, idx) => idx !== index);
-      return {
-        ...prev,
-        photos: updatedPhotos,
-        primaryPhoto: prev.primaryPhoto === prev.photos[index] ? (updatedPhotos[0] || "") : prev.primaryPhoto
-      };
-    });
-  };
-
-  const handleSimulatePhoto = (type: "goat" | "ram" | "chicken") => {
-    let url = "";
-    if (type === "goat") url = "https://images.unsplash.com/photo-1524413840807-0c3cb6fa808d?w=500&auto=format&fit=crop&q=80";
-    if (type === "ram") url = "https://images.unsplash.com/photo-1484557985045-edf25e08da73?w=500&auto=format&fit=crop&q=80";
-    if (type === "chicken") url = "https://images.unsplash.com/photo-1548550023-2bdb3c5beed7?w=500&auto=format&fit=crop&q=80";
-    setNewAnimal(prev => ({ 
-      ...prev, 
-      primaryPhoto: url,
-      photos: [...prev.photos, url]
-    }));
-    showSuccess("Preset animal portrait selected!");
-  };
-
-  const triggerCreateAnimal = (e: React.FormEvent) => {
-    e.preventDefault();
-    setPendingConfirm({
-      title: "Register New Livestock?",
-      message: `Confirm addition of ${newAnimal.species} to pasture paddock registry database.`,
-      onConfirm: () => {
-        const defaultPhoto = "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=400";
-        const finalPhotos = newAnimal.photos.length > 0 ? newAnimal.photos : [defaultPhoto];
-        const finalPrimary = newAnimal.primaryPhoto || finalPhotos[0];
-
-        addAnimal({
-          name: newAnimal.name,
-          species: newAnimal.species,
-          breed: newAnimal.breed || "Local Breed",
-          sex: newAnimal.sex,
-          dob: newAnimal.dob,
-          source: newAnimal.source,
-          status: newAnimal.status,
-          healthStatus: "Healthy",
-          primaryPhoto: finalPrimary,
-          photos: finalPhotos,
-          notes: newAnimal.notes,
-          parents: {
-            motherId: newAnimal.motherId || undefined,
-            fatherId: newAnimal.fatherId || undefined
-          }
-        });
-        setShowAddAnimal(false);
-        setPendingConfirm(null);
-        setNewAnimal({
-          name: "",
-          species: "Goat",
-          breed: "",
-          sex: "Female",
-          dob: new Date().toISOString().split("T")[0],
-          source: "Born on farm",
-          status: "Healthy",
-          notes: "",
-          primaryPhoto: "",
-          photos: [],
-          motherId: "",
-          fatherId: "",
-        });
-      }
-    });
-  };
-
-  const triggerToggleReminderConfirm = (reminderId: string, text: string) => {
-    setPendingConfirm({
-      title: "Complete Reminder Procedure?",
-      message: `Verify execution task status of procedure: "${text}"?`,
-      onConfirm: () => {
-        toggleReminder(reminderId);
-        setPendingConfirm(null);
-        showSuccess("Reminder status toggled successfully!");
-      }
-    });
-  };
-
-  const activeAnimals = animals.filter(a => a.status !== "Sold" && a.status !== "Deceased");
-  const totalAnimals = activeAnimals.length;
-  const goatsCount = activeAnimals.filter(a => a.species === "Goat").length;
-  const ramsCount = activeAnimals.filter(a => a.species === "Ram").length;
-  const chickensCount = activeAnimals.filter(a => a.species === "Chicken").length;
-  const attentionCount = activeAnimals.filter(a => a.status === "Sick" || a.status === "Under Treatment" || a.status === "Monitoring").length;
-
-  const filteredAnimals = animals.filter(animal => {
-    const codeMatch = animal.animal_code.toLowerCase().includes(searchQuery.toLowerCase());
-    const nameMatch = animal.name?.toLowerCase().includes(searchQuery.toLowerCase());
-    const breedMatch = animal.breed.toLowerCase().includes(searchQuery.toLowerCase());
-    const queryMatch = codeMatch || nameMatch || breedMatch;
-
-    const speciesMatch = speciesFilter === "All" || animal.species === speciesFilter;
-    const statusMatch = statusFilter === "All" || animal.status === statusFilter;
-
-    return queryMatch && speciesMatch && statusMatch;
-  });
-
-  return (
-    <div className="min-h-screen bg-[#FBFDF9] text-slate-800 font-sans flex flex-col md:flex-row">
-      
-      {/* DESKTOP SIDEBAR NAVIGATION PANEL */}
-      <aside className="hidden md:flex flex-col w-64 bg-emerald-950 text-white shrink-0 justify-between p-6 sticky top-0 h-screen border-r border-emerald-900">
-        <div className="space-y-8">
-          
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-white/10 rounded-2xl flex items-center justify-center text-xl shadow border border-white/20">
-              🚜
-            </div>
-            <div>
-              <h2 className="font-extrabold text-base leading-none text-white tracking-wide">{farmProfile.name}</h2>
-              <p className="text-[10px] text-emerald-300 font-bold uppercase mt-1 tracking-wider">
-                {farmProfile.location}
-              </p>
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <p className="text-[10px] font-extrabold text-emerald-300 uppercase tracking-widest px-2 mb-2">Main Menu</p>
-            
-            <button
-              onClick={() => setActiveTab("dashboard")}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                activeTab === "dashboard" ? "bg-emerald-600 text-white shadow-md scale-102" : "text-emerald-100/75 hover:bg-white/5 hover:text-white"
-              }`}
-            >
-              <Home size={16} />
-              Dashboard
-            </button>
-
-            <button
-              onClick={() => setActiveTab("animals")}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                activeTab === "animals" ? "bg-emerald-600 text-white shadow-md scale-102" : "text-emerald-100/75 hover:bg-white/5 hover:text-white"
-              }`}
-            >
-              <span className="text-xs">🐐</span>
-              Animals Directory
-            </button>
-
-            <button
-              onClick={() => setActiveTab("ai")}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                activeTab === "ai" ? "bg-emerald-600 text-white shadow-md scale-102" : "text-emerald-100/75 hover:bg-white/5 hover:text-white"
-              }`}
-            >
-              <span className="text-xs">🤖</span>
-              Farm AI
-            </button>
-
-            <button
-              onClick={() => setActiveTab("inventory")}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                activeTab === "inventory" ? "bg-emerald-600 text-white shadow-md scale-102" : "text-emerald-100/75 hover:bg-white/5 hover:text-white"
-              }`}
-            >
-              <Package size={16} />
-              Feed & Inventory
-            </button>
-
-            <button
-              onClick={() => setActiveTab("settings")}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                activeTab === "settings" ? "bg-emerald-600 text-white shadow-md scale-102" : "text-emerald-100/75 hover:bg-white/5 hover:text-white"
-              }`}
-            >
-              <SettingsIcon size={16} />
-              Farm Settings
-            </button>
-          </div>
-
-        </div>
-
-        <div className="pt-4 border-t border-emerald-900/60 space-y-4">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-xs font-black">
-              {farmProfile.ownerName.charAt(0)}
-            </div>
-            <div>
-              <span className="text-xs font-bold text-white block">{farmProfile.ownerName}</span>
-              <span className="text-[9px] text-emerald-300 block">Operator Account</span>
-            </div>
-          </div>
-          <button
-            onClick={logout}
-            className="w-full py-2 bg-emerald-900/40 hover:bg-emerald-950 text-emerald-300 hover:text-white rounded-xl text-[11px] font-black transition flex items-center justify-center gap-1.5"
-          >
-            <LogOut size={12} />
-            Sign Out Session
-          </button>
-        </div>
-      </aside>
-
-      {/* MOBILE HEADER */}
-      <header className="md:hidden sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-emerald-100 shadow-sm px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-9 h-9 bg-emerald-600 rounded-xl flex items-center justify-center text-white font-bold text-lg">
-              🚜
-            </div>
-            <div>
-              <h1 className="font-extrabold text-emerald-950 text-sm leading-none">{farmProfile.name}</h1>
-              <p className="text-[10px] text-emerald-700 font-semibold uppercase">{farmProfile.location}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold bg-emerald-50 text-emerald-800 px-2.5 py-1 rounded-full">
-              Live OS
-            </span>
-          </div>
-        </div>
-      </header>
-
-      {/* MAIN CONTENT AREA */}
-      <main className="flex-1 p-4 md:p-8 overflow-y-auto max-w-5xl mx-auto w-full pb-28 md:pb-8">
-
-        {activeTab === "dashboard" && (
-          <div className="mb-6 p-6 bg-gradient-to-r from-emerald-800 to-emerald-700 text-white rounded-3xl relative overflow-hidden shadow-md">
-            <div className="absolute right-0 top-0 w-36 h-36 bg-emerald-600/20 rounded-full blur-2xl" />
-            <span className="<dyad-write path="src/pages/Index.tsx" description="Completing Index.tsx with full multi-image upload support for livestock registration">
-"use client";
-
-import React, { useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
-import { useFarm, Animal, HealthRecord, Reminder } from "@/context/FarmContext";
-import { compressImage } from "@/utils/imageCompressor";
-import { 
-  Home, 
-  Search, 
-  Plus, 
-  Calendar, 
-  Camera, 
-  Upload,
-  Settings as SettingsIcon, 
-  ChevronRight, 
-  Package,
-  HelpCircle,
-  Check,
-  LogOut,
-  X
-} from "lucide-react";
-import { showSuccess, showError } from "@/utils/toast";
-
-const Index = () => {
-  const {
-    animals,
-    treatments,
-    inventory,
-    reminders,
-    farmProfile,
-    addAnimal,
-    addHealthRecord,
-    addTreatment,
-    addReminder,
-    toggleReminder,
-    logout
-  } = useFarm();
-
-  const navigate = useNavigate();
-
-  const [activeTab, setActiveTab] = useState<"dashboard" | "animals" | "ai" | "inventory" | "settings">("dashboard");
-
-  const [showAddAnimal, setShowAddAnimal] = useState(false);
-  const [newAnimal, setNewAnimal] = useState({
-    name: "",
-    species: "Goat" as Animal["species"],
     breed: "",
     sex: "Female" as Animal["sex"],
     dob: new Date().toISOString().split("T")[0],
@@ -483,24 +135,21 @@ const Index = () => {
     });
   };
 
-  const handleSimulatePhoto = (type: "goat" | "ram" | "chicken") => {
-    let url = "";
-    if (type === "goat") url = "https://images.unsplash.com/photo-1524413840807-0c3cb6fa808d?w=500&auto=format&fit=crop&q=80";
-    if (type === "ram") url = "https://images.unsplash.com/photo-1484557985045-edf25e08da73?w=500&auto=format&fit=crop&q=80";
-    if (type === "chicken") url = "https://images.unsplash.com/photo-1548550023-2bdb3c5beed7?w=500&auto=format&fit=crop&q=80";
-    setNewAnimal(prev => ({ 
-      ...prev, 
-      primaryPhoto: url,
-      photos: [...prev.photos, url]
-    }));
-    showSuccess("Preset animal portrait selected!");
-  };
+  const finalSpecies = selectedSpeciesOption === "Other" 
+    ? (customSpecies.trim() || "Other") 
+    : selectedSpeciesOption;
 
   const triggerCreateAnimal = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (selectedSpeciesOption === "Other" && !customSpecies.trim()) {
+      showError("Please enter a custom species name.");
+      return;
+    }
+
     setPendingConfirm({
       title: "Register New Livestock?",
-      message: `Confirm addition of ${newAnimal.species} to pasture paddock registry database.`,
+      message: `Confirm addition of ${finalSpecies} to pasture paddock registry database.`,
       onConfirm: () => {
         const defaultPhoto = "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=400";
         const finalPhotos = newAnimal.photos.length > 0 ? newAnimal.photos : [defaultPhoto];
@@ -508,7 +157,7 @@ const Index = () => {
 
         addAnimal({
           name: newAnimal.name,
-          species: newAnimal.species,
+          species: finalSpecies,
           breed: newAnimal.breed || "Local Breed",
           sex: newAnimal.sex,
           dob: newAnimal.dob,
@@ -525,9 +174,10 @@ const Index = () => {
         });
         setShowAddAnimal(false);
         setPendingConfirm(null);
+        setSelectedSpeciesOption("Goat");
+        setCustomSpecies("");
         setNewAnimal({
           name: "",
-          species: "Goat",
           breed: "",
           sex: "Female",
           dob: new Date().toISOString().split("T")[0],
@@ -557,21 +207,19 @@ const Index = () => {
 
   const activeAnimals = animals.filter(a => a.status !== "Sold" && a.status !== "Deceased");
   const totalAnimals = activeAnimals.length;
-  const goatsCount = activeAnimals.filter(a => a.species === "Goat").length;
-  const ramsCount = activeAnimals.filter(a => a.species === "Ram").length;
-  const chickensCount = activeAnimals.filter(a => a.species === "Chicken").length;
   const attentionCount = activeAnimals.filter(a => a.status === "Sick" || a.status === "Under Treatment" || a.status === "Monitoring").length;
 
   const filteredAnimals = animals.filter(animal => {
     const codeMatch = animal.animal_code.toLowerCase().includes(searchQuery.toLowerCase());
     const nameMatch = animal.name?.toLowerCase().includes(searchQuery.toLowerCase());
     const breedMatch = animal.breed.toLowerCase().includes(searchQuery.toLowerCase());
-    const queryMatch = codeMatch || nameMatch || breedMatch;
+    const speciesTextMatch = animal.species.toLowerCase().includes(searchQuery.toLowerCase());
+    const queryMatch = codeMatch || nameMatch || breedMatch || speciesTextMatch;
 
-    const speciesMatch = speciesFilter === "All" || animal.species === speciesFilter;
-    const statusMatch = statusFilter === "All" || animal.status === statusFilter;
+    const speciesMatchFilter = speciesFilter === "All" || animal.species === speciesFilter;
+    const statusMatchFilter = statusFilter === "All" || animal.status === statusFilter;
 
-    return queryMatch && speciesMatch && statusMatch;
+    return queryMatch && speciesMatchFilter && statusMatchFilter;
   });
 
   return (
@@ -712,11 +360,6 @@ const Index = () => {
                 <div className="flex items-baseline gap-2 mt-1">
                   <span className="text-3xl font-black text-emerald-950">{totalAnimals}</span>
                   <span className="text-xs text-emerald-700 font-medium">heads</span>
-                </div>
-                <div className="text-[10px] text-emerald-800/80 mt-2 flex flex-wrap gap-x-2">
-                  <span>🐐 {goatsCount} G</span>
-                  <span>🐏 {ramsCount} R</span>
-                  <span>🐔 {chickensCount} C</span>
                 </div>
               </div>
 
@@ -877,7 +520,7 @@ const Index = () => {
                 <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
                 <input
                   type="text"
-                  placeholder="Search tag (e.g. ADG001, Aisha)..."
+                  placeholder="Search tag (e.g. ADG001, Aisha, Cow)..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-1 focus:ring-emerald-500 outline-none transition"
@@ -889,7 +532,18 @@ const Index = () => {
             <div className="space-y-1.5">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Quick Category Filter</p>
               <div className="flex flex-wrap gap-1.5">
-                {["All", "Goat", "Ram", "Chicken", "Other"].map((species) => (
+                <button
+                  onClick={() => setSpeciesFilter("All")}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition ${
+                    speciesFilter === "All"
+                      ? "bg-emerald-600 border-emerald-600 text-white shadow-sm"
+                      : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  🌍 All Species
+                </button>
+
+                {SPECIES_OPTIONS.map((species) => (
                   <button
                     key={species}
                     onClick={() => setSpeciesFilter(species)}
@@ -899,7 +553,7 @@ const Index = () => {
                         : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
                     }`}
                   >
-                    {species === "All" ? "🌍 All Species" : species}
+                    {species}
                   </button>
                 ))}
               </div>
@@ -994,7 +648,7 @@ const Index = () => {
         {/* TAB 3: FARM AI */}
         {activeTab === "ai" && (
           <div className="space-y-6">
-            <div className="text-center p-6 bg-emerald-95 text-white rounded-3xl relative overflow-hidden shadow-xl">
+            <div className="text-center p-6 bg-emerald-950 text-white rounded-3xl relative overflow-hidden shadow-xl">
               <div className="w-12 h-12 bg-white/10 backdrop-blur-md rounded-2xl mx-auto flex items-center justify-center text-2xl mb-3 border border-white/20">
                 🤖
               </div>
@@ -1060,31 +714,6 @@ const Index = () => {
                 />
               </div>
 
-              {/* Quick preset portraits */}
-              <div className="flex gap-1.5 mt-2">
-                <button
-                  type="button"
-                  onClick={() => handleSimulatePhoto("goat")}
-                  className="px-2 py-1 bg-emerald-50 text-emerald-800 text-[10px] font-extrabold rounded-lg"
-                >
-                  Preset Goat
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSimulatePhoto("ram")}
-                  className="px-2 py-1 bg-blue-50 text-blue-800 text-[10px] font-extrabold rounded-lg"
-                >
-                  Preset Ram
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSimulatePhoto("chicken")}
-                  className="px-2 py-1 bg-purple-50 text-purple-800 text-[10px] font-extrabold rounded-lg"
-                >
-                  Preset Hen
-                </button>
-              </div>
-
               {/* Preview thumbnails */}
               {newAnimal.photos.length > 0 && (
                 <div className="grid grid-cols-4 gap-2 pt-2">
@@ -1122,14 +751,15 @@ const Index = () => {
               <div>
                 <label className="text-[10px] font-bold text-slate-500 block">Species</label>
                 <select
-                  value={newAnimal.species}
-                  onChange={(e) => setNewAnimal({ ...newAnimal, species: e.target.value as Animal["species"] })}
+                  value={selectedSpeciesOption}
+                  onChange={(e) => setSelectedSpeciesOption(e.target.value)}
                   className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1"
                 >
-                  <option value="Goat">Goat 🐐</option>
-                  <option value="Ram">Ram 🐏</option>
-                  <option value="Chicken">Chicken 🐔</option>
-                  <option value="Other">Other Species</option>
+                  {SPECIES_OPTIONS.map((spec) => (
+                    <option key={spec} value={spec}>
+                      {spec}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -1145,6 +775,23 @@ const Index = () => {
                 </select>
               </div>
             </div>
+
+            {/* Custom Species Text Input when Other is selected */}
+            {selectedSpeciesOption === "Other" && (
+              <div className="animate-in fade-in">
+                <label className="text-[10px] font-bold text-emerald-800 uppercase block mb-1">
+                  Specify Custom Species Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Pigeon, Ostrich, Alpacas..."
+                  value={customSpecies}
+                  onChange={(e) => setCustomSpecies(e.target.value)}
+                  className="w-full p-2.5 bg-emerald-50/50 border border-emerald-300 rounded-xl text-xs font-bold text-slate-900 outline-none focus:ring-1 focus:ring-emerald-500"
+                  required
+                />
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div>
