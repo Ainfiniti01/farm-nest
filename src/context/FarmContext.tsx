@@ -101,6 +101,35 @@ export const encodeOwnershipIntoNotes = (ownership: OwnershipData, cleanNotes: s
   return strippedNotes ? `${strippedNotes}\n[OWNERSHIP_DATA:${tag}]` : `[OWNERSHIP_DATA:${tag}]`;
 };
 
+export const formatDbError = (err: any, fallbackMessage = "An unexpected error occurred."): string => {
+  if (!err) return fallbackMessage;
+  const msg = typeof err === "string" ? err : err.message || "";
+  const details = err.details || "";
+  const code = err.code || "";
+
+  if (
+    msg.toLowerCase().includes("unique constraint") ||
+    msg.toLowerCase().includes("duplicate key") ||
+    details.toLowerCase().includes("already exists") ||
+    code === "23505"
+  ) {
+    if (msg.includes("farm_name") || details.includes("farm_name") || msg.includes("accounts")) {
+      return "This farm name is already registered. Please choose another name.";
+    }
+    return "This record already exists. Please choose a different identifier.";
+  }
+
+  if (msg.toLowerCase().includes("invalid login credentials")) {
+    return "Incorrect farm name, email, or password. Please try again.";
+  }
+
+  if (msg.toLowerCase().includes("email not confirmed")) {
+    return "Please confirm your email address before signing in.";
+  }
+
+  return msg || fallbackMessage;
+};
+
 export interface Animal {
   id: string;
   animal_code: string;
@@ -108,8 +137,10 @@ export interface Animal {
   species: string;
   breed: string;
   sex: "Male" | "Female";
-  dob: string;
+  dob?: string;
   purchaseDate?: string;
+  purchasePrice?: number;
+  deathDate?: string;
   source: "Born on farm" | "Purchased" | "Other";
   status: "Active" | "Healthy" | "Monitoring" | "Sick" | "Under Treatment" | "Pregnant" | "Sold" | "Deceased" | "Retired";
   healthStatus: "Healthy" | "Monitoring" | "Sick" | "Under Treatment";
@@ -373,7 +404,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [accountId, setAccountId] = useState<string | null>(null);
   
   const [farmProfile, setFarmProfile] = useState<FarmProfile>({
-    name: "Yuswas Farm",
+    name: "My Farm",
     description: "Agricultural production unit.",
     ownerName: "Operator",
     location: "Kano, Nigeria",
@@ -420,26 +451,28 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const loadAccount = useCallback(async (force = false) => {
-    if (!session.isAuthenticated) return;
+    if (!session.isAuthenticated || !session.userId) return;
     if (hasLoadedAccountRef.current && !force) return;
     if (fetchingAccountRef.current) return;
     fetchingAccountRef.current = true;
 
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("accounts")
-        .select("id, farm_name, operator_name, email, location")
+        .select("id, user_id, farm_name, operator_name, email, location, header_image_url")
+        .eq("user_id", session.userId)
         .limit(1)
         .maybeSingle();
 
-      if (data) {
+      if (!error && data) {
         setAccountId(data.id);
         setFarmProfile(prev => ({
           ...prev,
           name: data.farm_name || prev.name,
           ownerName: data.operator_name || prev.ownerName,
           location: data.location || prev.location,
-          email: data.email || session.email || prev.email
+          email: data.email || session.email || prev.email,
+          image: data.header_image_url || prev.image || "/placeholder.svg"
         }));
         hasLoadedAccountRef.current = true;
       }
@@ -448,13 +481,15 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       fetchingAccountRef.current = false;
     }
-  }, [session.isAuthenticated, session.email]);
+  }, [session.isAuthenticated, session.userId, session.email]);
 
   const loadDashboardData = useCallback(async (force = false) => {
-    if (!session.isAuthenticated) return;
+    if (!session.isAuthenticated || !session.userId) return;
     if (hasLoadedDashboardRef.current && !force) return;
     if (fetchingDashboardRef.current) return;
     fetchingDashboardRef.current = true;
+
+    const currentUserId = session.userId;
 
     try {
       const [
@@ -466,13 +501,13 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         resFarmNotes,
         resLogs
       ] = await Promise.all([
-        supabase.from("accounts").select("id, farm_name, operator_name, email, location").limit(1).maybeSingle(),
-        supabase.from("animals").select("id, animal_code, name, species, sex, status, health_status, notes"),
-        supabase.from("treatments").select("id, animal_id, condition, medication, start_date, end_date, status, follow_up_date").eq("status", "Ongoing"),
-        supabase.from("inventory").select("id, name, category, quantity, unit, min_stock"),
-        supabase.from("reminders").select("id, title, type, due_date, animal_id, completed, notes").eq("completed", false),
-        supabase.from("farm_notes").select("id, farm_id, title, content, created_by, created_at, updated_at").order("created_at", { ascending: false }).limit(5),
-        supabase.from("activity_logs").select("id, type, description, date, actor, target_id").order("date", { ascending: false }).limit(10)
+        supabase.from("accounts").select("id, user_id, farm_name, operator_name, email, location, header_image_url").eq("user_id", currentUserId).limit(1).maybeSingle(),
+        supabase.from("animals").select("id, animal_code, name, species, sex, status, health_status, notes, purchase_price, death_date, dob, purchase_date").eq("user_id", currentUserId),
+        supabase.from("treatments").select("id, animal_id, condition, medication, start_date, end_date, status, follow_up_date").eq("user_id", currentUserId).eq("status", "Ongoing"),
+        supabase.from("inventory").select("id, name, category, quantity, unit, min_stock").eq("user_id", currentUserId),
+        supabase.from("reminders").select("id, title, type, due_date, animal_id, completed, notes").eq("user_id", currentUserId).eq("completed", false),
+        supabase.from("farm_notes").select("id, farm_id, title, content, created_by, created_at, updated_at").eq("user_id", currentUserId).order("created_at", { ascending: false }).limit(5),
+        supabase.from("activity_logs").select("id, type, description, date, actor, target_id").eq("user_id", currentUserId).order("date", { ascending: false }).limit(10)
       ]);
 
       if (acctRes.data) {
@@ -482,38 +517,39 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
           name: acctRes.data.farm_name || prev.name,
           ownerName: acctRes.data.operator_name || prev.ownerName,
           location: acctRes.data.location || prev.location,
-          email: acctRes.data.email || session.email || prev.email
+          email: acctRes.data.email || session.email || prev.email,
+          image: acctRes.data.header_image_url || prev.image || "/placeholder.svg"
         }));
         hasLoadedAccountRef.current = true;
       }
 
       if (resAnimals.data) {
-        setAnimals(prev => {
-          if (prev.length > 0) return prev;
-          return resAnimals.data.map((a: any) => {
-            const { ownership, cleanNotes } = parseOwnershipFromNotes(a.notes || "");
-            return {
-              id: a.id,
-              animal_code: a.animal_code,
-              name: a.name || "",
-              species: a.species,
-              breed: "",
-              sex: a.sex,
-              dob: "",
-              source: "Born on farm",
-              status: a.status,
-              healthStatus: a.health_status,
-              primaryPhoto: DEFAULT_ANIMAL_PHOTO,
-              photos: [DEFAULT_ANIMAL_PHOTO],
-              ownershipType: ownership.ownershipType,
-              ownerName: ownership.ownerName,
-              custodian: ownership.custodian,
-              agreement: ownership.agreement,
-              notes: cleanNotes,
-              created_at: new Date().toISOString()
-            };
-          });
-        });
+        setAnimals(resAnimals.data.map((a: any) => {
+          const { ownership, cleanNotes } = parseOwnershipFromNotes(a.notes || "");
+          return {
+            id: a.id,
+            animal_code: a.animal_code,
+            name: a.name || "",
+            species: a.species,
+            breed: "",
+            sex: a.sex,
+            dob: a.dob || "",
+            purchaseDate: a.purchase_date,
+            purchasePrice: a.purchase_price !== null && a.purchase_price !== undefined ? parseFloat(a.purchase_price) : undefined,
+            deathDate: a.death_date || undefined,
+            source: a.purchase_date ? "Purchased" : "Born on farm",
+            status: a.status,
+            healthStatus: a.health_status,
+            primaryPhoto: DEFAULT_ANIMAL_PHOTO,
+            photos: [DEFAULT_ANIMAL_PHOTO],
+            ownershipType: ownership.ownershipType,
+            ownerName: ownership.ownerName,
+            custodian: ownership.custodian,
+            agreement: ownership.agreement,
+            notes: cleanNotes,
+            created_at: new Date().toISOString()
+          };
+        }));
       }
 
       if (resTreatments.data) {
@@ -531,17 +567,14 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (resInventory.data) {
-        setInventory(prev => {
-          if (prev.length > 0) return prev;
-          return resInventory.data.map((i: any) => ({
-            id: i.id,
-            name: i.name,
-            category: i.category,
-            quantity: parseFloat(i.quantity),
-            unit: i.unit,
-            minStock: parseFloat(i.min_stock)
-          }));
-        });
+        setInventory(resInventory.data.map((i: any) => ({
+          id: i.id,
+          name: i.name,
+          category: i.category,
+          quantity: parseFloat(i.quantity),
+          unit: i.unit,
+          minStock: parseFloat(i.min_stock)
+        })));
       }
 
       if (resReminders.data) {
@@ -557,18 +590,15 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (resFarmNotes.data && !resFarmNotes.error) {
-        setFarmNotes(prev => {
-          if (prev.length > 0) return prev;
-          return resFarmNotes.data.map((fn: any) => ({
-            id: fn.id,
-            farm_id: fn.farm_id,
-            title: fn.title,
-            content: fn.content,
-            created_by: fn.created_by || "Operator",
-            created_at: fn.created_at || new Date().toISOString(),
-            updated_at: fn.updated_at || new Date().toISOString()
-          }));
-        });
+        setFarmNotes(resFarmNotes.data.map((fn: any) => ({
+          id: fn.id,
+          farm_id: fn.farm_id,
+          title: fn.title,
+          content: fn.content,
+          created_by: fn.created_by || "Operator",
+          created_at: fn.created_at || new Date().toISOString(),
+          updated_at: fn.updated_at || new Date().toISOString()
+        })));
       }
 
       if (resLogs.data) {
@@ -588,29 +618,20 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       fetchingDashboardRef.current = false;
     }
-  }, [session.isAuthenticated, session.email]);
+  }, [session.isAuthenticated, session.userId, session.email]);
 
   const loadAnimals = useCallback(async (force = false) => {
-    if (!session.isAuthenticated) return;
+    if (!session.isAuthenticated || !session.userId) return;
     if (hasLoadedAnimalsRef.current && !force) return;
     if (fetchingAnimalsRef.current) return;
     fetchingAnimalsRef.current = true;
 
     try {
-      let { data, error } = await supabase
+      const { data, error } = await supabase
         .from("animals")
-        .select("id, animal_code, name, species, breed, sex, dob, purchase_date, source, status, health_status, primary_photo, photos, mother_id, father_id, notes, created_at")
+        .select("id, animal_code, name, species, breed, sex, dob, purchase_date, purchase_price, death_date, source, status, health_status, primary_photo, photos, mother_id, father_id, notes, created_at")
+        .eq("user_id", session.userId)
         .order("created_at", { ascending: false });
-
-      if (error) {
-        const fallbackRes = await supabase
-          .from("animals")
-          .select("id, animal_code, name, species, breed, sex, dob, purchase_date, source, status, health_status, primary_photo, mother_id, father_id, notes, created_at")
-          .order("created_at", { ascending: false });
-
-        data = fallbackRes.data as any;
-        error = fallbackRes.error as any;
-      }
 
       if (!error && data) {
         setAnimals(data.map((a: any) => {
@@ -624,6 +645,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
             sex: a.sex,
             dob: a.dob || "",
             purchaseDate: a.purchase_date,
+            purchasePrice: a.purchase_price !== null && a.purchase_price !== undefined ? parseFloat(a.purchase_price) : undefined,
+            deathDate: a.death_date || undefined,
             source: a.source || "Born on farm",
             status: a.status || "Healthy",
             healthStatus: a.health_status || "Healthy",
@@ -645,22 +668,24 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       fetchingAnimalsRef.current = false;
     }
-  }, [session.isAuthenticated]);
+  }, [session.isAuthenticated, session.userId]);
 
   const loadAnimalProfile = useCallback(async (animalId: string, force = false) => {
-    if (!animalId || !session.isAuthenticated) return;
+    if (!animalId || !session.isAuthenticated || !session.userId) return;
     if (fetchingAnimalProfileRef.current === animalId && !force) return;
     fetchingAnimalProfileRef.current = animalId;
 
+    const currentUserId = session.userId;
+
     try {
       const [resAnimal, resHealth, resTreatments, resWeights, resBreeding, resNotes, resLogs] = await Promise.all([
-        supabase.from("animals").select("*").eq("id", animalId).maybeSingle(),
-        supabase.from("health_records").select("*").eq("animal_id", animalId).order("date", { ascending: false }),
-        supabase.from("treatments").select("*").eq("animal_id", animalId).order("start_date", { ascending: false }),
-        supabase.from("weight_records").select("*").eq("animal_id", animalId).order("date", { ascending: true }),
-        supabase.from("breeding_records").select("*").or(`female_id.eq.${animalId},male_id.eq.${animalId}`).order("date", { ascending: false }),
-        supabase.from("animal_notes").select("*").eq("animal_id", animalId).order("created_at", { ascending: false }),
-        supabase.from("activity_logs").select("*").eq("target_id", animalId).order("date", { ascending: false }).limit(20)
+        supabase.from("animals").select("*").eq("id", animalId).eq("user_id", currentUserId).maybeSingle(),
+        supabase.from("health_records").select("*").eq("animal_id", animalId).eq("user_id", currentUserId).order("date", { ascending: false }),
+        supabase.from("treatments").select("*").eq("animal_id", animalId).eq("user_id", currentUserId).order("start_date", { ascending: false }),
+        supabase.from("weight_records").select("*").eq("animal_id", animalId).eq("user_id", currentUserId).order("date", { ascending: true }),
+        supabase.from("breeding_records").select("*").eq("user_id", currentUserId).or(`female_id.eq.${animalId},male_id.eq.${animalId}`).order("date", { ascending: false }),
+        supabase.from("animal_notes").select("*").eq("animal_id", animalId).eq("user_id", currentUserId).order("created_at", { ascending: false }),
+        supabase.from("activity_logs").select("*").eq("target_id", animalId).eq("user_id", currentUserId).order("date", { ascending: false }).limit(20)
       ]);
 
       if (resAnimal.data) {
@@ -675,6 +700,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
           sex: a.sex,
           dob: a.dob || "",
           purchaseDate: a.purchase_date,
+          purchasePrice: a.purchase_price !== null && a.purchase_price !== undefined ? parseFloat(a.purchase_price) : undefined,
+          deathDate: a.death_date || undefined,
           source: a.source,
           status: a.status,
           healthStatus: a.health_status,
@@ -771,10 +798,10 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       fetchingAnimalProfileRef.current = null;
     }
-  }, [session.isAuthenticated]);
+  }, [session.isAuthenticated, session.userId]);
 
   const loadInventory = useCallback(async (force = false) => {
-    if (!session.isAuthenticated) return;
+    if (!session.isAuthenticated || !session.userId) return;
     if (hasLoadedInventoryRef.current && !force) return;
     if (fetchingInventoryRef.current) return;
     fetchingInventoryRef.current = true;
@@ -782,7 +809,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const { data, error } = await supabase
         .from("inventory")
-        .select("id, name, category, quantity, unit, min_stock, expiry_date, notes");
+        .select("id, name, category, quantity, unit, min_stock, expiry_date, notes")
+        .eq("user_id", session.userId);
 
       if (!error && data) {
         setInventory(data.map((i: any) => ({
@@ -800,10 +828,10 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       fetchingInventoryRef.current = false;
     }
-  }, [session.isAuthenticated]);
+  }, [session.isAuthenticated, session.userId]);
 
   const loadFarmNotes = useCallback(async (force = false) => {
-    if (!session.isAuthenticated) return;
+    if (!session.isAuthenticated || !session.userId) return;
     if (hasLoadedFarmNotesRef.current && !force) return;
     if (fetchingFarmNotesRef.current) return;
     fetchingFarmNotesRef.current = true;
@@ -812,6 +840,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { data, error } = await supabase
         .from("farm_notes")
         .select("id, farm_id, title, content, created_by, created_at, updated_at")
+        .eq("user_id", session.userId)
         .order("created_at", { ascending: false });
 
       if (!error && data) {
@@ -829,10 +858,10 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       fetchingFarmNotesRef.current = false;
     }
-  }, [session.isAuthenticated]);
+  }, [session.isAuthenticated, session.userId]);
 
   const loadContacts = useCallback(async (force = false) => {
-    if (!session.isAuthenticated) return;
+    if (!session.isAuthenticated || !session.userId) return;
     if (hasLoadedContactsRef.current && !force) return;
     if (fetchingContactsRef.current) return;
     fetchingContactsRef.current = true;
@@ -840,7 +869,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const { data, error } = await supabase
         .from("contacts")
-        .select("id, name, role, phone, whatsapp, email, address, notes");
+        .select("id, name, role, phone, whatsapp, email, address, notes")
+        .eq("user_id", session.userId);
 
       if (!error && data) {
         setContacts(data.map((c: any) => ({
@@ -858,10 +888,10 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       fetchingContactsRef.current = false;
     }
-  }, [session.isAuthenticated]);
+  }, [session.isAuthenticated, session.userId]);
 
   const loadFarmGallery = useCallback(async (force = false) => {
-    if (!session.isAuthenticated) return;
+    if (!session.isAuthenticated || !session.userId) return;
     if (hasLoadedGalleryRef.current && !force) return;
     if (fetchingGalleryRef.current) return;
     fetchingGalleryRef.current = true;
@@ -870,6 +900,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { data, error } = await supabase
         .from("farm_gallery")
         .select("id, title, caption, category, image_url, created_at")
+        .eq("user_id", session.userId)
         .order("created_at", { ascending: false });
 
       if (!error && data) {
@@ -888,7 +919,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       fetchingGalleryRef.current = false;
     }
-  }, [session.isAuthenticated]);
+  }, [session.isAuthenticated, session.userId]);
 
   const reloadFarmData = useCallback(async () => {
     if (session.isAuthenticated) {
@@ -909,7 +940,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const { data: { session: sbSession } } = await supabase.auth.getSession();
         if (isMounted) {
           if (sbSession?.user) {
-            const rawFarmName = sbSession.user.user_metadata?.farmName || "Yuswas Farm";
+            const rawFarmName = sbSession.user.user_metadata?.farmName || "My Farm";
             const normalized = normalizeFarmName(rawFarmName);
             setSession({
               userId: sbSession.user.id,
@@ -952,7 +983,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
         if (sbSession?.user) {
-          const rawFarmName = sbSession.user.user_metadata?.farmName || "Yuswas Farm";
+          const rawFarmName = sbSession.user.user_metadata?.farmName || "My Farm";
           const normalized = normalizeFarmName(rawFarmName);
           setSession({
             userId: sbSession.user.id,
@@ -999,10 +1030,10 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [clearSessionCache]);
 
   useEffect(() => {
-    if (session.isAuthenticated) {
+    if (session.isAuthenticated && session.userId) {
       loadAccount();
     }
-  }, [session.isAuthenticated, loadAccount]);
+  }, [session.isAuthenticated, session.userId, loadAccount]);
 
   const logActivity = async (type: string, description: string, actor: string, targetId?: string) => {
     const newLog = {
@@ -1026,18 +1057,20 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ...prev
     ].slice(0, 50));
 
-    try {
-      await supabase.from("activity_logs").insert([{
-        id: newLog.id,
-        type: newLog.type,
-        description: newLog.description,
-        date: newLog.date,
-        actor: newLog.actor,
-        target_id: targetId,
-        user_id: session.userId || null
-      }]);
-    } catch (e) {
-      console.error("[FarmContext] Activity log insert error", e);
+    if (session.userId) {
+      try {
+        await supabase.from("activity_logs").insert([{
+          id: newLog.id,
+          type: newLog.type,
+          description: newLog.description,
+          date: newLog.date,
+          actor: newLog.actor,
+          target_id: targetId,
+          user_id: session.userId
+        }]);
+      } catch (e) {
+        console.error("[FarmContext] Activity log insert error", e);
+      }
     }
   };
 
@@ -1050,12 +1083,18 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!cleanInput.includes("@")) {
         const normalizedInput = normalizeFarmName(cleanInput);
         
-        const { data: accountRow } = await supabase
+        const { data: accountRow, error: findErr } = await supabase
           .from("accounts")
           .select("email, farm_name")
           .or(`farm_name.ilike.${cleanInput},farm_name.ilike.${normalizedInput}`)
           .limit(1)
           .maybeSingle();
+
+        if (findErr) {
+          showError(formatDbError(findErr, "Database verification failed."));
+          setIsLoadingData(false);
+          return false;
+        }
 
         if (accountRow?.email) {
           emailToUse = accountRow.email;
@@ -1072,14 +1111,14 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       if (authError) {
-        showError("Incorrect password or login credentials.");
+        showError(formatDbError(authError, "Incorrect password or login credentials."));
         setIsLoadingData(false);
         return false;
       }
 
       if (authData?.user) {
         clearSessionCache();
-        const rawFarmName = authData.user.user_metadata?.farmName || "Yuswas Farm";
+        const rawFarmName = authData.user.user_metadata?.farmName || "My Farm";
         const normalized = normalizeFarmName(rawFarmName);
         setSession({
           userId: authData.user.id,
@@ -1096,7 +1135,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return true;
       }
     } catch (err: any) {
-      showError(err.message || "An error occurred during sign in.");
+      showError(formatDbError(err, "An error occurred during sign in."));
     } finally {
       setIsLoadingData(false);
     }
@@ -1107,6 +1146,20 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoadingData(true);
     try {
       const normalizedFarmName = normalizeFarmName(rawFarmName);
+
+      // Verify farm name doesn't already exist
+      const { data: existingFarm } = await supabase
+        .from("accounts")
+        .select("id")
+        .ilike("farm_name", normalizedFarmName)
+        .limit(1)
+        .maybeSingle();
+
+      if (existingFarm) {
+        showError("This farm name is already registered. Please choose another name.");
+        setIsLoadingData(false);
+        return false;
+      }
 
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: email.trim(),
@@ -1121,26 +1174,25 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       if (authError) {
-        showError(authError.message);
+        showError(formatDbError(authError, "Failed to create farm login."));
         setIsLoadingData(false);
         return false;
       }
 
       if (authData?.user) {
-        try {
-          const { data: newAcct } = await supabase.from("accounts").insert([{
-            user_id: authData.user.id,
-            farm_name: normalizedFarmName,
-            operator_name: name.trim(),
-            email: email.trim(),
-            location: location.trim()
-          }]).select("id").single();
+        const { data: newAcct, error: acctErr } = await supabase.from("accounts").insert([{
+          user_id: authData.user.id,
+          farm_name: normalizedFarmName,
+          operator_name: name.trim(),
+          email: email.trim(),
+          location: location.trim(),
+          header_image_url: "/placeholder.svg"
+        }]).select("id").single();
 
-          if (newAcct?.id) {
-            setAccountId(newAcct.id);
-          }
-        } catch (e) {
-          console.warn("[FarmContext] Accounts insert note", e);
+        if (acctErr) {
+          showError(formatDbError(acctErr, "Failed to register farm account record."));
+        } else if (newAcct?.id) {
+          setAccountId(newAcct.id);
         }
 
         const newProfile = {
@@ -1148,7 +1200,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
           name: normalizedFarmName,
           ownerName: name.trim(),
           location: location.trim(),
-          email: email.trim()
+          email: email.trim(),
+          image: "/placeholder.svg"
         };
         setFarmProfile(newProfile);
 
@@ -1164,7 +1217,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return true;
       }
     } catch (err: any) {
-      showError(err.message || "Failed to create account.");
+      showError(formatDbError(err, "Failed to create account."));
     } finally {
       setIsLoadingData(false);
     }
@@ -1200,14 +1253,33 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateFarmProfile = async (profile: FarmProfile): Promise<boolean> => {
+    if (!session.userId) {
+      showError("You must be logged in to update farm details.");
+      return false;
+    }
+
     const normalizedFarmName = normalizeFarmName(profile.name);
     const newEmail = (profile.email || session.email).trim();
 
     try {
+      // Check if target farm name conflicts with another user's farm
+      const { data: existingFarm, error: checkErr } = await supabase
+        .from("accounts")
+        .select("id, user_id")
+        .ilike("farm_name", normalizedFarmName)
+        .neq("user_id", session.userId)
+        .limit(1)
+        .maybeSingle();
+
+      if (existingFarm) {
+        showError("This farm name is already registered. Please choose another name.");
+        return false;
+      }
+
       if (newEmail && newEmail.toLowerCase() !== session.email.toLowerCase()) {
         const { error: emailErr } = await supabase.auth.updateUser({ email: newEmail });
         if (emailErr) {
-          showError("Failed to update authentication email: " + emailErr.message);
+          showError(formatDbError(emailErr, "Failed to update account email."));
           return false;
         }
         showSuccess("Account email update requested. Check inbox for confirmation if required.");
@@ -1222,56 +1294,67 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       if (metaErr) {
-        showError("Failed to update user auth metadata: " + metaErr.message);
+        showError(formatDbError(metaErr, "Failed to update account metadata."));
         return false;
       }
 
-      let targetAccountId = accountId;
-      if (!targetAccountId) {
-        const { data: acct } = await supabase.from("accounts").select("id").limit(1).maybeSingle();
-        targetAccountId = acct?.id || null;
-        if (targetAccountId) setAccountId(targetAccountId);
-      }
+      const accountPayload = {
+        user_id: session.userId,
+        farm_name: normalizedFarmName,
+        operator_name: profile.ownerName,
+        email: newEmail,
+        location: profile.location,
+        header_image_url: profile.image || "/placeholder.svg",
+        updated_at: new Date().toISOString()
+      };
 
-      if (targetAccountId) {
-        const { error } = await supabase.from("accounts").update({
-          farm_name: normalizedFarmName,
-          operator_name: profile.ownerName,
-          email: newEmail,
-          location: profile.location,
-          updated_at: new Date().toISOString()
-        }).eq("id", targetAccountId);
+      // Check if account row exists for this user
+      const { data: existingUserAccount } = await supabase
+        .from("accounts")
+        .select("id")
+        .eq("user_id", session.userId)
+        .limit(1)
+        .maybeSingle();
 
-        if (error) {
-          showError("Failed to update database account record: " + error.message);
+      if (existingUserAccount?.id) {
+        const { error: updateErr } = await supabase
+          .from("accounts")
+          .update(accountPayload)
+          .eq("id", existingUserAccount.id)
+          .eq("user_id", session.userId);
+
+        if (updateErr) {
+          showError(formatDbError(updateErr, "Failed to update database account record."));
           return false;
         }
+        setAccountId(existingUserAccount.id);
       } else {
-        const { data: newAcct, error } = await supabase.from("accounts").insert([{
-          user_id: session.userId || null,
-          farm_name: normalizedFarmName,
-          operator_name: profile.ownerName,
-          email: newEmail,
-          location: profile.location
-        }]).select("id").single();
+        const { data: newAcct, error: insertErr } = await supabase
+          .from("accounts")
+          .insert([accountPayload])
+          .select("id")
+          .single();
 
-        if (!error && newAcct) {
-          setAccountId(newAcct.id);
+        if (insertErr) {
+          showError(formatDbError(insertErr, "Failed to save account profile."));
+          return false;
         }
+        if (newAcct?.id) setAccountId(newAcct.id);
       }
 
       setFarmProfile({
         ...profile,
         name: normalizedFarmName,
-        email: newEmail
+        email: newEmail,
+        image: profile.image || "/placeholder.svg"
       });
       setSession(prev => ({ ...prev, email: newEmail, name: profile.ownerName }));
 
-      await logActivity("Farm Profile Updated", `Updated farm name to ${normalizedFarmName}`, profile.ownerName);
+      await logActivity("Farm Profile Updated", `Updated farm profile for ${normalizedFarmName}`, profile.ownerName);
       showSuccess("Farm profile updated successfully!");
       return true;
     } catch (e: any) {
-      showError(e?.message || "Failed to update profile.");
+      showError(formatDbError(e, "Failed to update profile."));
       return false;
     }
   };
@@ -1285,14 +1368,14 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) {
-        showError("Failed to change password: " + error.message);
+        showError(formatDbError(error, "Failed to change password."));
         return false;
       }
       showSuccess("Account password changed successfully!");
       await logActivity("Password Changed", "Updated account access password", farmProfile.ownerName);
       return true;
     } catch (e: any) {
-      showError(e?.message || "Failed to change password.");
+      showError(formatDbError(e, "Failed to change password."));
       return false;
     }
   };
@@ -1309,19 +1392,18 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (!clean.includes("@")) {
         const normalized = normalizeFarmName(clean);
-        const { data: accountRow } = await supabase
+        const { data: accountRow, error } = await supabase
           .from("accounts")
           .select("email, farm_name")
           .or(`farm_name.ilike.${clean},farm_name.ilike.${normalized}`)
           .limit(1)
           .maybeSingle();
 
-        if (accountRow?.email) {
-          emailToReset = accountRow.email;
-        } else {
+        if (error || !accountRow?.email) {
           showError(`Could not locate farm account registered under '${clean}'.`);
           return false;
         }
+        emailToReset = accountRow.email;
       }
 
       const { error } = await supabase.auth.resetPasswordForEmail(emailToReset, {
@@ -1329,24 +1411,34 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       if (error) {
-        showError("Password reset failed: " + error.message);
+        showError(formatDbError(error, "Password reset failed."));
         return false;
       }
 
       showSuccess(`Password reset instructions sent to ${emailToReset}`);
       return true;
     } catch (e: any) {
-      showError(e?.message || "Password reset request failed.");
+      showError(formatDbError(e, "Password reset request failed."));
       return false;
     }
   };
 
   const addAnimal = async (animalData: Omit<Animal, "id" | "animal_code" | "created_at">) => {
-    const farmPrefix = getFarmPrefix(farmProfile.name || "Yuswas");
+    if (!session.userId) {
+      showError("You must be logged in to register animals.");
+      return;
+    }
+
+    const farmPrefix = getFarmPrefix(farmProfile.name || "YUS");
     const speciesCode = getSpeciesCode(animalData.species);
     const codePrefix = `${farmPrefix}${speciesCode}`;
 
-    const { data: existingRows } = await supabase.from("animals").select("animal_code").ilike("animal_code", `${codePrefix}%`);
+    const { data: existingRows } = await supabase
+      .from("animals")
+      .select("animal_code")
+      .eq("user_id", session.userId)
+      .ilike("animal_code", `${codePrefix}%`);
+
     const dbCodes = (existingRows || []).map((r: any) => r.animal_code);
     const localCodes = animals.map(a => a.animal_code);
     const allCodes = new Set([...dbCodes, ...localCodes]);
@@ -1391,8 +1483,10 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       species: animalData.species,
       breed: animalData.breed,
       sex: animalData.sex,
-      dob: animalData.dob,
-      purchase_date: animalData.purchaseDate,
+      dob: animalData.dob || null,
+      purchase_date: animalData.purchaseDate || null,
+      purchase_price: animalData.purchasePrice !== undefined && animalData.purchasePrice !== null ? animalData.purchasePrice : null,
+      death_date: animalData.deathDate || null,
       source: animalData.source,
       status: animalData.status,
       health_status: animalData.healthStatus,
@@ -1401,12 +1495,12 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       notes: encodedNotes,
       mother_id: animalData.parents?.motherId || null,
       father_id: animalData.parents?.fatherId || null,
-      user_id: session.userId || null
+      user_id: session.userId
     };
 
     const { error } = await supabase.from("animals").insert([dbPayload]);
     if (error) {
-      showError("Failed to save animal to database: " + error.message);
+      showError(formatDbError(error, "Failed to save animal to database."));
       return;
     }
 
@@ -1419,6 +1513,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       sex: animalData.sex,
       dob: animalData.dob,
       purchaseDate: animalData.purchaseDate,
+      purchasePrice: animalData.purchasePrice,
+      deathDate: animalData.deathDate,
       source: animalData.source,
       status: animalData.status,
       healthStatus: animalData.healthStatus,
@@ -1439,7 +1535,15 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateAnimal = async (id: string, updates: Partial<Animal>) => {
+    if (!session.userId) return;
     const existing = animals.find(a => a.id === id);
+    if (!existing) return;
+
+    // Disallow updates to deceased animals unless it is already deceased or being marked deceased
+    if (existing.status === "Deceased" && updates.status !== "Healthy" && updates.status !== "Active") {
+      showError("This animal record is marked as deceased and is read-only.");
+      return;
+    }
     
     const currentOwnership: OwnershipData = {
       ownershipType: updates.ownershipType !== undefined ? updates.ownershipType : (existing?.ownershipType || "Farm Owned"),
@@ -1459,8 +1563,10 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (updates.species !== undefined) payload.species = updates.species;
     if (updates.breed !== undefined) payload.breed = updates.breed;
     if (updates.sex !== undefined) payload.sex = updates.sex;
-    if (updates.dob !== undefined) payload.dob = updates.dob;
-    if (updates.purchaseDate !== undefined) payload.purchase_date = updates.purchaseDate;
+    if (updates.dob !== undefined) payload.dob = updates.dob || null;
+    if (updates.purchaseDate !== undefined) payload.purchase_date = updates.purchaseDate || null;
+    if (updates.purchasePrice !== undefined) payload.purchase_price = updates.purchasePrice !== null ? updates.purchasePrice : null;
+    if (updates.deathDate !== undefined) payload.death_date = updates.deathDate || null;
     if (updates.source !== undefined) payload.source = updates.source;
     if (updates.status !== undefined) payload.status = updates.status;
     if (updates.healthStatus !== undefined) payload.health_status = updates.healthStatus;
@@ -1471,9 +1577,14 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       payload.father_id = updates.parents.fatherId || null;
     }
 
-    const { error } = await supabase.from("animals").update(payload).eq("id", id);
+    const { error } = await supabase
+      .from("animals")
+      .update(payload)
+      .eq("id", id)
+      .eq("user_id", session.userId);
+
     if (error) {
-      showError("Failed to update animal: " + error.message);
+      showError(formatDbError(error, "Failed to update animal."));
       return;
     }
 
@@ -1497,15 +1608,21 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return a;
     }));
 
-    await logActivity("Animal Updated", `Updated details for livestock record`, farmProfile.ownerName, id);
+    await logActivity("Animal Updated", `Updated details for ${existing.animal_code}`, farmProfile.ownerName, id);
     showSuccess("Animal record updated");
   };
 
   const deleteAnimal = async (id: string) => {
+    if (!session.userId) return;
     const target = animals.find(a => a.id === id);
-    const { error } = await supabase.from("animals").delete().eq("id", id);
+    const { error } = await supabase
+      .from("animals")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", session.userId);
+
     if (error) {
-      showError("Failed to delete animal: " + error.message);
+      showError(formatDbError(error, "Failed to delete animal."));
       return;
     }
 
@@ -1515,6 +1632,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addHealthRecord = async (record: Omit<HealthRecord, "id">) => {
+    if (!session.userId) return;
     const newId = "h_" + Date.now();
     const { error } = await supabase.from("health_records").insert([{
       id: newId,
@@ -1524,11 +1642,11 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       details: record.details,
       medication: record.medication,
       recorded_by: record.recordedBy,
-      user_id: session.userId || null
+      user_id: session.userId
     }]);
 
     if (error) {
-      showError("Failed to log health event: " + error.message);
+      showError(formatDbError(error, "Failed to log health event."));
       return;
     }
 
@@ -1542,7 +1660,11 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       hStatus = "Under Treatment";
     }
 
-    await supabase.from("animals").update({ status: newStatus, health_status: hStatus }).eq("id", record.animal_id);
+    await supabase
+      .from("animals")
+      .update({ status: newStatus, health_status: hStatus })
+      .eq("id", record.animal_id)
+      .eq("user_id", session.userId);
     
     setHealthRecords(prev => [{ id: newId, ...record }, ...prev]);
     setAnimals(prev => prev.map(a => a.id === record.animal_id ? { ...a, status: newStatus, healthStatus: hStatus } : a));
@@ -1552,6 +1674,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addTreatment = async (treatmentData: Omit<Treatment, "id">) => {
+    if (!session.userId) return;
     const newId = "t_" + Date.now();
     const { error } = await supabase.from("treatments").insert([{
       id: newId,
@@ -1563,15 +1686,19 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       status: treatmentData.status,
       notes: treatmentData.notes,
       follow_up_date: treatmentData.followUpDate,
-      user_id: session.userId || null
+      user_id: session.userId
     }]);
 
     if (error) {
-      showError("Failed to add treatment: " + error.message);
+      showError(formatDbError(error, "Failed to add treatment."));
       return;
     }
 
-    await supabase.from("animals").update({ status: "Under Treatment", health_status: "Under Treatment" }).eq("id", treatmentData.animal_id);
+    await supabase
+      .from("animals")
+      .update({ status: "Under Treatment", health_status: "Under Treatment" })
+      .eq("id", treatmentData.animal_id)
+      .eq("user_id", session.userId);
     
     setTreatments(prev => [{ id: newId, ...treatmentData }, ...prev]);
     setAnimals(prev => prev.map(a => a.id === treatmentData.animal_id ? { ...a, status: "Under Treatment", healthStatus: "Under Treatment" } : a));
@@ -1581,15 +1708,26 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateTreatmentStatus = async (id: string, status: "Ongoing" | "Completed" | "Stopped") => {
-    const { error } = await supabase.from("treatments").update({ status }).eq("id", id);
+    if (!session.userId) return;
+    const { error } = await supabase
+      .from("treatments")
+      .update({ status })
+      .eq("id", id)
+      .eq("user_id", session.userId);
+
     if (error) {
-      showError("Failed to update treatment: " + error.message);
+      showError(formatDbError(error, "Failed to update treatment."));
       return;
     }
 
     const currentTx = treatments.find(t => t.id === id);
     if (status === "Completed" && currentTx) {
-      await supabase.from("animals").update({ status: "Healthy", health_status: "Healthy" }).eq("id", currentTx.animal_id);
+      await supabase
+        .from("animals")
+        .update({ status: "Healthy", health_status: "Healthy" })
+        .eq("id", currentTx.animal_id)
+        .eq("user_id", session.userId);
+
       setAnimals(prev => prev.map(a => a.id === currentTx.animal_id ? { ...a, status: "Healthy", healthStatus: "Healthy" } : a));
     }
 
@@ -1599,6 +1737,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addWeightRecord = async (record: Omit<WeightRecord, "id">) => {
+    if (!session.userId) return;
     const newId = "w_" + Date.now();
     const { error } = await supabase.from("weight_records").insert([{
       id: newId,
@@ -1606,11 +1745,11 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       weight: record.weight,
       date: record.date,
       notes: record.notes,
-      user_id: session.userId || null
+      user_id: session.userId
     }]);
 
     if (error) {
-      showError("Failed to log weight: " + error.message);
+      showError(formatDbError(error, "Failed to log weight."));
       return;
     }
 
@@ -1621,6 +1760,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addBreedingRecord = async (record: Omit<BreedingRecord, "id">) => {
+    if (!session.userId) return;
     const newId = "b_" + Date.now();
     const { error } = await supabase.from("breeding_records").insert([{
       id: newId,
@@ -1629,11 +1769,11 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       date: record.date,
       status: record.status,
       notes: record.notes,
-      user_id: session.userId || null
+      user_id: session.userId
     }]);
 
     if (error) {
-      showError("Failed to log breeding: " + error.message);
+      showError(formatDbError(error, "Failed to log breeding."));
       return;
     }
 
@@ -1643,6 +1783,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addInventoryItem = async (item: Omit<InventoryItem, "id">) => {
+    if (!session.userId) return;
     const newId = "i_" + Date.now();
     const { error } = await supabase.from("inventory").insert([{
       id: newId,
@@ -1652,11 +1793,11 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       unit: item.unit,
       min_stock: item.minStock,
       notes: item.notes,
-      user_id: session.userId || null
+      user_id: session.userId
     }]);
 
     if (error) {
-      showError("Failed to add inventory: " + error.message);
+      showError(formatDbError(error, "Failed to add inventory."));
       return;
     }
 
@@ -1666,6 +1807,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateInventoryStock = async (itemId: string, qtyChange: number, type: "add" | "remove" | "adjust", notes: string, recordedBy: string) => {
+    if (!session.userId) return;
     const target = inventory.find(i => i.id === itemId);
     if (!target) return;
 
@@ -1679,9 +1821,14 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
-    const { error } = await supabase.from("inventory").update({ quantity: newQty }).eq("id", itemId);
+    const { error } = await supabase
+      .from("inventory")
+      .update({ quantity: newQty })
+      .eq("id", itemId)
+      .eq("user_id", session.userId);
+
     if (error) {
-      showError("Failed to update stock: " + error.message);
+      showError(formatDbError(error, "Failed to update stock."));
       return;
     }
 
@@ -1691,10 +1838,16 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const deleteInventoryItem = async (id: string) => {
+    if (!session.userId) return;
     const target = inventory.find(i => i.id === id);
-    const { error } = await supabase.from("inventory").delete().eq("id", id);
+    const { error } = await supabase
+      .from("inventory")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", session.userId);
+
     if (error) {
-      showError("Failed to delete inventory item: " + error.message);
+      showError(formatDbError(error, "Failed to delete inventory item."));
       return;
     }
 
@@ -1704,6 +1857,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addContact = async (contact: Omit<Contact, "id">) => {
+    if (!session.userId) return;
     const newId = "c_" + Date.now();
     const { error } = await supabase.from("contacts").insert([{
       id: newId,
@@ -1714,11 +1868,11 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       email: contact.email,
       address: contact.address,
       notes: contact.notes,
-      user_id: session.userId || null
+      user_id: session.userId
     }]);
 
     if (error) {
-      showError("Failed to add contact: " + error.message);
+      showError(formatDbError(error, "Failed to add contact."));
       return;
     }
 
@@ -1728,19 +1882,31 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateContact = async (id: string, updates: Partial<Contact>) => {
-    const { error } = await supabase.from("contacts").update(updates).eq("id", id);
+    if (!session.userId) return;
+    const { error } = await supabase
+      .from("contacts")
+      .update(updates)
+      .eq("id", id)
+      .eq("user_id", session.userId);
+
     if (error) {
-      showError("Failed to update contact: " + error.message);
+      showError(formatDbError(error, "Failed to update contact."));
       return;
     }
     setContacts(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
   };
 
   const deleteContact = async (id: string) => {
+    if (!session.userId) return;
     const target = contacts.find(c => c.id === id);
-    const { error } = await supabase.from("contacts").delete().eq("id", id);
+    const { error } = await supabase
+      .from("contacts")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", session.userId);
+
     if (error) {
-      showError("Failed to delete contact: " + error.message);
+      showError(formatDbError(error, "Failed to delete contact."));
       return;
     }
     setContacts(prev => prev.filter(c => c.id !== id));
@@ -1749,6 +1915,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addReminder = async (reminder: Omit<Reminder, "id" | "completed">) => {
+    if (!session.userId) return;
     const newId = "r_" + Date.now();
     const { error } = await supabase.from("reminders").insert([{
       id: newId,
@@ -1758,11 +1925,11 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       animal_id: reminder.animal_id,
       completed: false,
       notes: reminder.notes,
-      user_id: session.userId || null
+      user_id: session.userId
     }]);
 
     if (error) {
-      showError("Failed to create reminder: " + error.message);
+      showError(formatDbError(error, "Failed to create reminder."));
       return;
     }
 
@@ -1772,12 +1939,18 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const toggleReminder = async (id: string) => {
+    if (!session.userId) return;
     const target = reminders.find(r => r.id === id);
     if (!target) return;
 
-    const { error } = await supabase.from("reminders").update({ completed: !target.completed }).eq("id", id);
+    const { error } = await supabase
+      .from("reminders")
+      .update({ completed: !target.completed })
+      .eq("id", id)
+      .eq("user_id", session.userId);
+
     if (error) {
-      showError("Failed to update reminder: " + error.message);
+      showError(formatDbError(error, "Failed to update reminder."));
       return;
     }
 
@@ -1786,6 +1959,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addFarmNote = async (note: { title?: string; content: string }): Promise<boolean> => {
+    if (!session.userId) return false;
     const newId = "fn_" + Date.now();
     const newRecord: FarmNote = {
       id: newId,
@@ -1802,11 +1976,11 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         title: newRecord.title || null,
         content: newRecord.content,
         created_by: newRecord.created_by,
-        user_id: session.userId || null
+        user_id: session.userId
       }]);
 
       if (error) {
-        showError("Couldn't save note: " + error.message);
+        showError(formatDbError(error, "Couldn't save farm note."));
         return false;
       }
 
@@ -1815,12 +1989,13 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       showSuccess("Farm note saved");
       return true;
     } catch (e: any) {
-      showError("Couldn't save note: " + (e?.message || "Unknown error"));
+      showError(formatDbError(e, "Couldn't save note."));
       return false;
     }
   };
 
   const updateFarmNote = async (id: string, updates: { title?: string; content: string }): Promise<boolean> => {
+    if (!session.userId) return false;
     const payload = {
       title: updates.title?.trim() || null,
       content: updates.content.trim(),
@@ -1828,10 +2003,14 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     try {
-      const { error } = await supabase.from("farm_notes").update(payload).eq("id", id);
+      const { error } = await supabase
+        .from("farm_notes")
+        .update(payload)
+        .eq("id", id)
+        .eq("user_id", session.userId);
 
       if (error) {
-        showError("Couldn't update note: " + error.message);
+        showError(formatDbError(error, "Couldn't update farm note."));
         return false;
       }
 
@@ -1840,19 +2019,24 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       showSuccess("Farm note updated");
       return true;
     } catch (e: any) {
-      showError("Couldn't update note: " + (e?.message || "Unknown error"));
+      showError(formatDbError(e, "Couldn't update note."));
       return false;
     }
   };
 
   const deleteFarmNote = async (id: string): Promise<boolean> => {
+    if (!session.userId) return false;
     const target = farmNotes.find(f => f.id === id);
 
     try {
-      const { error } = await supabase.from("farm_notes").delete().eq("id", id);
+      const { error } = await supabase
+        .from("farm_notes")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", session.userId);
 
       if (error) {
-        showError("Couldn't delete note: " + error.message);
+        showError(formatDbError(error, "Couldn't delete note."));
         return false;
       }
 
@@ -1861,12 +2045,13 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       showSuccess("Farm note deleted");
       return true;
     } catch (e: any) {
-      showError("Couldn't delete note: " + (e?.message || "Unknown error"));
+      showError(formatDbError(e, "Couldn't delete note."));
       return false;
     }
   };
 
   const addAnimalNote = async (note: { animal_id: string; content: string }): Promise<boolean> => {
+    if (!session.userId) return false;
     const newId = "an_" + Date.now();
     const newRecord: AnimalNote = {
       id: newId,
@@ -1883,11 +2068,11 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         animal_id: newRecord.animal_id,
         content: newRecord.content,
         created_by: newRecord.created_by,
-        user_id: session.userId || null
+        user_id: session.userId
       }]);
 
       if (error) {
-        showError("Couldn't save note: " + error.message);
+        showError(formatDbError(error, "Couldn't save note."));
         return false;
       }
 
@@ -1897,22 +2082,27 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       showSuccess("Animal note saved");
       return true;
     } catch (e: any) {
-      showError("Couldn't save note: " + (e?.message || "Unknown error"));
+      showError(formatDbError(e, "Couldn't save note."));
       return false;
     }
   };
 
   const updateAnimalNote = async (id: string, content: string): Promise<boolean> => {
+    if (!session.userId) return false;
     const payload = {
       content: content.trim(),
       updated_at: new Date().toISOString()
     };
 
     try {
-      const { error } = await supabase.from("animal_notes").update(payload).eq("id", id);
+      const { error } = await supabase
+        .from("animal_notes")
+        .update(payload)
+        .eq("id", id)
+        .eq("user_id", session.userId);
 
       if (error) {
-        showError("Couldn't update note: " + error.message);
+        showError(formatDbError(error, "Couldn't update note."));
         return false;
       }
 
@@ -1921,19 +2111,24 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       showSuccess("Animal note updated");
       return true;
     } catch (e: any) {
-      showError("Couldn't update note: " + (e?.message || "Unknown error"));
+      showError(formatDbError(e, "Couldn't update note."));
       return false;
     }
   };
 
   const deleteAnimalNote = async (id: string): Promise<boolean> => {
+    if (!session.userId) return false;
     const target = animalNotes.find(a => a.id === id);
 
     try {
-      const { error } = await supabase.from("animal_notes").delete().eq("id", id);
+      const { error } = await supabase
+        .from("animal_notes")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", session.userId);
 
       if (error) {
-        showError("Couldn't delete note: " + error.message);
+        showError(formatDbError(error, "Couldn't delete note."));
         return false;
       }
 
@@ -1942,12 +2137,13 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       showSuccess("Animal note deleted");
       return true;
     } catch (e: any) {
-      showError("Couldn't delete note: " + (e?.message || "Unknown error"));
+      showError(formatDbError(e, "Couldn't delete note."));
       return false;
     }
   };
 
   const addFarmGalleryPhoto = async (photoData: { title?: string; caption?: string; category: string; file?: File; dataUrl?: string }): Promise<boolean> => {
+    if (!session.userId) return false;
     const newId = "fg_" + Date.now();
     let finalImageUrl = photoData.dataUrl || "";
 
@@ -1955,7 +2151,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (photoData.file) {
         const file = photoData.file;
         const fileExt = file.name.split('.').pop() || 'jpg';
-        const filePath = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+        const filePath = `${session.userId}/${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
 
         const { data: uploadData, error: uploadErr } = await supabase.storage
           .from("farm-gallery")
@@ -1965,13 +2161,12 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const { data: publicData } = supabase.storage.from("farm-gallery").getPublicUrl(uploadData.path);
           finalImageUrl = publicData.publicUrl;
         } else {
-          console.warn("[FarmContext] Storage bucket upload failed, using compressed image fallback:", uploadErr?.message);
           finalImageUrl = await compressImage(file, 800, 800, 0.7);
         }
       }
 
       if (!finalImageUrl) {
-        showError("Please provide an image file or portrait");
+        showError("Please provide an image file or photo.");
         return false;
       }
 
@@ -1981,13 +2176,13 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         caption: photoData.caption?.trim() || null,
         category: photoData.category || "General",
         image_url: finalImageUrl,
-        user_id: session.userId || null,
+        user_id: session.userId,
         created_at: new Date().toISOString()
       };
 
       const { error } = await supabase.from("farm_gallery").insert([dbPayload]);
       if (error) {
-        showError("Couldn't save photo record: " + error.message);
+        showError(formatDbError(error, "Couldn't save photo record."));
         return false;
       }
 
@@ -2005,16 +2200,22 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       showSuccess("Photo added to General Farm Gallery!");
       return true;
     } catch (e: any) {
-      showError("Couldn't save photo: " + (e?.message || "Unknown error"));
+      showError(formatDbError(e, "Couldn't save photo."));
       return false;
     }
   };
 
   const deleteFarmGalleryPhoto = async (id: string, imageUrl?: string): Promise<boolean> => {
+    if (!session.userId) return false;
     try {
-      const { error } = await supabase.from("farm_gallery").delete().eq("id", id);
+      const { error } = await supabase
+        .from("farm_gallery")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", session.userId);
+
       if (error) {
-        showError("Couldn't delete photo: " + error.message);
+        showError(formatDbError(error, "Couldn't delete photo."));
         return false;
       }
 
@@ -2030,7 +2231,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       showSuccess("Photo deleted from gallery.");
       return true;
     } catch (e: any) {
-      showError("Couldn't delete photo: " + (e?.message || "Unknown error"));
+      showError(formatDbError(e, "Couldn't delete photo."));
       return false;
     }
   };

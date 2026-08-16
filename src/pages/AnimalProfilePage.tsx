@@ -8,36 +8,73 @@ import {
   ArrowLeft, 
   Trash2, 
   Download, 
-  Eye,
-  AlertCircle,
-  HelpCircle,
-  X,
-  Edit,
-  Plus,
-  FileText,
-  Loader2,
-  Calendar,
-  Heart,
-  Baby,
-  UserCheck,
-  Building,
-  Camera,
-  Upload
+  Eye, 
+  AlertCircle, 
+  HelpCircle, 
+  X, 
+  Edit, 
+  Plus, 
+  FileText, 
+  Loader2, 
+  Calendar, 
+  Building, 
+  UserCheck, 
+  Camera, 
+  Upload, 
+  Lock, 
+  DollarSign, 
+  Clock 
 } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
-// Utility to calculate human-readable age dynamically in years, months, and days from DOB string
+// Dynamic duration from date string
+export const calculateDuration = (dateString?: string): string => {
+  if (!dateString || !dateString.trim()) return "";
+
+  const [yearStr, monthStr, dayStr] = dateString.split("-");
+  const year = parseInt(yearStr, 10);
+  const month = parseInt(monthStr, 10) - 1;
+  const day = parseInt(dayStr, 10);
+
+  if (isNaN(year) || isNaN(month) || isNaN(day)) return "";
+
+  const pastDate = new Date(year, month, day);
+  const now = new Date();
+  if (pastDate > now) return "Recent";
+
+  let years = now.getFullYear() - pastDate.getFullYear();
+  let months = now.getMonth() - pastDate.getMonth();
+  let days = now.getDate() - pastDate.getDate();
+
+  if (days < 0) {
+    months -= 1;
+    const prevMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+    days += prevMonth.getDate();
+  }
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+
+  const parts: string[] = [];
+  if (years > 0) parts.push(`${years} ${years === 1 ? "yr" : "yrs"}`);
+  if (months > 0) parts.push(`${months} ${months === 1 ? "mo" : "mos"}`);
+  if (days > 0 || parts.length === 0) parts.push(`${days} ${days === 1 ? "day" : "days"}`);
+
+  return parts.join(", ");
+};
+
 export const calculateAge = (dobString?: string): string => {
-  if (!dobString || !dobString.trim()) return "Age unknown";
+  if (!dobString || !dobString.trim()) return "Unrecorded";
 
   const [yearStr, monthStr, dayStr] = dobString.split("-");
   const birthYear = parseInt(yearStr, 10);
-  const birthMonth = parseInt(monthStr, 10) - 1; // 0-indexed
+  const birthMonth = parseInt(monthStr, 10) - 1;
   const birthDay = parseInt(dayStr, 10);
 
   if (isNaN(birthYear) || isNaN(birthMonth) || isNaN(birthDay)) {
-    return "Age unknown";
+    return "Unrecorded";
   }
 
   const today = new Date();
@@ -54,7 +91,6 @@ export const calculateAge = (dobString?: string): string => {
 
   if (days < 0) {
     months -= 1;
-    // Get total days in the previous month relative to `now`
     const prevMonthDate = new Date(now.getFullYear(), now.getMonth(), 0);
     days += prevMonthDate.getDate();
   }
@@ -65,24 +101,16 @@ export const calculateAge = (dobString?: string): string => {
   }
 
   const parts: string[] = [];
-  if (years > 0) {
-    parts.push(`${years} ${years === 1 ? "year" : "years"}`);
-  }
-  if (months > 0) {
-    parts.push(`${months} ${months === 1 ? "month" : "months"}`);
-  }
+  if (years > 0) parts.push(`${years} ${years === 1 ? "year" : "years"}`);
+  if (months > 0) parts.push(`${months} ${months === 1 ? "month" : "months"}`);
   if (days > 0 || (years === 0 && months === 0)) {
-    if (years === 0 && months === 0 && days === 0) {
-      return "0 days (Born today)";
-    }
+    if (years === 0 && months === 0 && days === 0) return "0 days (Born today)";
     parts.push(`${days} ${days === 1 ? "day" : "days"}`);
   }
 
   return parts.join(", ");
 };
 
-// Utility to calculate gestation countdown from mating date
-// Goats and sheep typically have a ~150 day gestation period (approx 5 months)
 export const calculateGestation = (matingDateString: string, gestationDays = 150) => {
   const matingDate = new Date(matingDateString);
   if (isNaN(matingDate.getTime())) return null;
@@ -90,7 +118,6 @@ export const calculateGestation = (matingDateString: string, gestationDays = 150
   const dueDate = new Date(matingDate.getTime() + gestationDays * 24 * 60 * 60 * 1000);
   const today = new Date();
   
-  // Set both to midnight for exact day diff
   const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const dueMidnight = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
   
@@ -146,6 +173,8 @@ export const AnimalProfilePage: React.FC = () => {
 
   const animal = animals.find(a => a.id === id || a.animal_code === id);
 
+  const isDeceased = animal?.status === "Deceased";
+
   const [activeTab, setActiveTab] = useState<"overview" | "health" | "breeding" | "photos" | "notes" | "activity">("overview");
   const [showEditModal, setShowEditModal] = useState(false);
   const [showOwnershipModal, setShowOwnershipModal] = useState(false);
@@ -177,8 +206,220 @@ export const AnimalProfilePage: React.FC = () => {
     name: animal ? animal.name : "",
     breed: animal ? animal.breed : "",
     sex: animal ? animal.sex : ("Female" as Animal["sex"]),
-    dob: animal ? animal.dob : "",
+    dob: animal?.dob || "",
     purchaseDate: animal?.purchaseDate || "",
+    purchasePrice: animal?.purchasePrice !== undefined ? String(animal.purchasePrice) :<dyad-write path="src/pages/AnimalProfilePage.tsx" description="Complete AnimalProfilePage with deceased read-only mode, death date display/watermark, acquisition date calculation, and dedicated purchase price fields">
+"use client";
+
+import React, { useState, useRef, useEffect } from "react";
+import { useParams, useNavigate, Link } from "react-router-dom";
+import { useFarm, Animal, HealthRecord, Treatment, WeightRecord, BreedingRecord, AnimalNote, DEFAULT_ANIMAL_PHOTO } from "@/context/FarmContext";
+import { compressImage } from "@/utils/imageCompressor";
+import { 
+  ArrowLeft, 
+  Trash2, 
+  Download, 
+  Eye, 
+  AlertCircle, 
+  HelpCircle, 
+  X, 
+  Edit, 
+  Plus, 
+  FileText, 
+  Loader2, 
+  Calendar, 
+  Building, 
+  UserCheck, 
+  Camera, 
+  Upload, 
+  Lock, 
+  DollarSign, 
+  Clock 
+} from "lucide-react";
+import { showSuccess, showError } from "@/utils/toast";
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+
+// Dynamic duration from date string
+export const calculateDuration = (dateString?: string): string => {
+  if (!dateString || !dateString.trim()) return "";
+
+  const [yearStr, monthStr, dayStr] = dateString.split("-");
+  const year = parseInt(yearStr, 10);
+  const month = parseInt(monthStr, 10) - 1;
+  const day = parseInt(dayStr, 10);
+
+  if (isNaN(year) || isNaN(month) || isNaN(day)) return "";
+
+  const pastDate = new Date(year, month, day);
+  const now = new Date();
+  if (pastDate > now) return "Recent";
+
+  let years = now.getFullYear() - pastDate.getFullYear();
+  let months = now.getMonth() - pastDate.getMonth();
+  let days = now.getDate() - pastDate.getDate();
+
+  if (days < 0) {
+    months -= 1;
+    const prevMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+    days += prevMonth.getDate();
+  }
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+
+  const parts: string[] = [];
+  if (years > 0) parts.push(`${years} ${years === 1 ? "yr" : "yrs"}`);
+  if (months > 0) parts.push(`${months} ${months === 1 ? "mo" : "mos"}`);
+  if (days > 0 || parts.length === 0) parts.push(`${days} ${days === 1 ? "day" : "days"}`);
+
+  return parts.join(", ");
+};
+
+export const calculateAge = (dobString?: string): string => {
+  if (!dobString || !dobString.trim()) return "Unrecorded";
+
+  const [yearStr, monthStr, dayStr] = dobString.split("-");
+  const birthYear = parseInt(yearStr, 10);
+  const birthMonth = parseInt(monthStr, 10) - 1;
+  const birthDay = parseInt(dayStr, 10);
+
+  if (isNaN(birthYear) || isNaN(birthMonth) || isNaN(birthDay)) {
+    return "Unrecorded";
+  }
+
+  const today = new Date();
+  const birthDate = new Date(birthYear, birthMonth, birthDay);
+  const now = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+  if (birthDate > now) {
+    return "Not born yet";
+  }
+
+  let years = now.getFullYear() - birthDate.getFullYear();
+  let months = now.getMonth() - birthDate.getMonth();
+  let days = now.getDate() - birthDate.getDate();
+
+  if (days < 0) {
+    months -= 1;
+    const prevMonthDate = new Date(now.getFullYear(), now.getMonth(), 0);
+    days += prevMonthDate.getDate();
+  }
+
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+
+  const parts: string[] = [];
+  if (years > 0) parts.push(`${years} ${years === 1 ? "year" : "years"}`);
+  if (months > 0) parts.push(`${months} ${months === 1 ? "month" : "months"}`);
+  if (days > 0 || (years === 0 && months === 0)) {
+    if (years === 0 && months === 0 && days === 0) return "0 days (Born today)";
+    parts.push(`${days} ${days === 1 ? "day" : "days"}`);
+  }
+
+  return parts.join(", ");
+};
+
+export const calculateGestation = (matingDateString: string, gestationDays = 150) => {
+  const matingDate = new Date(matingDateString);
+  if (isNaN(matingDate.getTime())) return null;
+
+  const dueDate = new Date(matingDate.getTime() + gestationDays * 24 * 60 * 60 * 1000);
+  const today = new Date();
+  
+  const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const dueMidnight = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+  
+  const diffTime = dueMidnight.getTime() - todayMidnight.getTime();
+  const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  return {
+    matingDate: matingDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+    dueDate: dueDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+    dueDateIso: dueDate.toISOString().split("T")[0],
+    daysRemaining,
+    isOverdue: daysRemaining < 0,
+    isToday: daysRemaining === 0,
+  };
+};
+
+export const AnimalProfilePage: React.FC = () => {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const offspringFileInputRef = useRef<HTMLInputElement>(null);
+  const offspringCameraInputRef = useRef<HTMLInputElement>(null);
+
+  const {
+    animals,
+    healthRecords,
+    treatments,
+    weightRecords,
+    breedingRecords,
+    animalNotes,
+    activityLogs,
+    farmProfile,
+    loadAnimalProfile,
+    updateAnimal,
+    deleteAnimal,
+    addHealthRecord,
+    addTreatment,
+    updateTreatmentStatus,
+    addWeightRecord,
+    addBreedingRecord,
+    addAnimalNote,
+    updateAnimalNote,
+    deleteAnimalNote,
+    addAnimal
+  } = useFarm();
+
+  useEffect(() => {
+    if (id) {
+      loadAnimalProfile(id);
+    }
+  }, [id, loadAnimalProfile]);
+
+  const animal = animals.find(a => a.id === id || a.animal_code === id);
+  const isDeceased = animal?.status === "Deceased";
+
+  const [activeTab, setActiveTab] = useState<"overview" | "health" | "breeding" | "photos" | "notes" | "activity">("overview");
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showOwnershipModal, setShowOwnershipModal] = useState(false);
+  const [showLinkParentsModal, setShowLinkParentsModal] = useState(false);
+  const [showAddHealth, setShowAddHealth] = useState(false);
+  const [showAddTreatment, setShowAddTreatment] = useState(false);
+  const [showAddWeight, setShowAddWeight] = useState(false);
+  const [showAddBreeding, setShowAddBreeding] = useState(false);
+  const [showAddOffspring, setShowAddOffspring] = useState(false);
+  
+  const [showAddAnimalNoteModal, setShowAddAnimalNoteModal] = useState(false);
+  const [selectedAnimalNote, setSelectedAnimalNote] = useState<AnimalNote | null>(null);
+  const [isEditingAnimalNote, setIsEditingAnimalNote] = useState(false);
+  const [noteContentText, setNoteContentText] = useState("");
+
+  const [isSubmittingAnimalNote, setIsSubmittingAnimalNote] = useState(false);
+  const [isSavingAnimalNoteEdit, setIsSavingAnimalNoteEdit] = useState(false);
+  const [isDeletingAnimalNote, setIsDeletingAnimalNote] = useState(false);
+
+  const [pendingConfirm, setPendingConfirm] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  } | null>(null);
+
+  const [fullscreenPhoto, setFullscreenPhoto] = useState<string | null>(null);
+
+  const [editForm, setEditForm] = useState({
+    name: animal ? animal.name : "",
+    breed: animal ? animal.breed : "",
+    sex: animal ? animal.sex : ("Female" as Animal["sex"]),
+    dob: animal?.dob || "",
+    purchaseDate: animal?.purchaseDate || "",
+    purchasePrice: animal?.purchasePrice !== undefined ? String(animal.purchasePrice) : "",
+    deathDate: animal?.deathDate || "",
     source: animal ? animal.source : ("Born on farm" as Animal["source"]),
     status: animal ? animal.status : ("Healthy" as Animal["status"]),
     notes: animal ? animal.notes : "",
@@ -248,6 +489,8 @@ export const AnimalProfilePage: React.FC = () => {
         sex: animal.sex,
         dob: animal.dob || "",
         purchaseDate: animal.purchaseDate || "",
+        purchasePrice: animal.purchasePrice !== undefined && animal.purchasePrice !== null ? String(animal.purchasePrice) : "",
+        deathDate: animal.deathDate || "",
         source: animal.source,
         status: animal.status,
         notes: animal.notes,
@@ -285,10 +528,10 @@ export const AnimalProfilePage: React.FC = () => {
           The animal profile with ID "{id}" does not exist or was deleted.
         </p>
         <button
-          onClick={() => navigate("/")}
+          onClick={() => navigate("/animals")}
           className="mt-6 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow transition"
         >
-          Return to Dashboard
+          Return to Livestock Directory
         </button>
       </div>
     );
@@ -297,8 +540,13 @@ export const AnimalProfilePage: React.FC = () => {
   const hasCustomName = Boolean(animal.name && animal.name.trim().length > 0);
   const displayName = hasCustomName ? animal.name : animal.animal_code;
   const currentAge = calculateAge(animal.dob);
+  const timeOnFarm = animal.purchaseDate ? calculateDuration(animal.purchaseDate) : "";
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (isDeceased) {
+      showError("Deceased animal records are read-only.");
+      return;
+    }
     const files = e.target.files;
     if (files && files.length > 0) {
       try {
@@ -351,6 +599,10 @@ export const AnimalProfilePage: React.FC = () => {
   };
 
   const setPhotoAsPrimary = (photoUrl: string) => {
+    if (isDeceased) {
+      showError("Deceased animal records are read-only.");
+      return;
+    }
     setPendingConfirm({
       title: "Set Primary Portrait?",
       message: "Set this photo as the primary portrait?",
@@ -363,6 +615,10 @@ export const AnimalProfilePage: React.FC = () => {
   };
 
   const deletePhoto = (photoUrl: string) => {
+    if (isDeceased) {
+      showError("Deceased animal records are read-only.");
+      return;
+    }
     if (animal.photos.length <= 1) {
       showError("At least one profile photo must remain.");
       return;
@@ -392,6 +648,7 @@ export const AnimalProfilePage: React.FC = () => {
             body { font-family: system-ui, sans-serif; padding: 30px; color: #1a202c; }
             .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #047857; padding-bottom: 10px; }
             .badge { padding: 4px 10px; border-radius: 9999px; font-weight: bold; background: #e6fffa; color: #047857; font-size: 14px; }
+            .badge.deceased { background: #fee2e2; color: #991b1b; }
             .photo { width: 100%; max-height: 350px; object-fit: cover; border-radius: 12px; margin-top: 20px; }
             table { width: 100%; border-collapse: collapse; margin-top: 20px; }
             th, td { padding: 10px; border: 1px solid #e2e8f0; text-align: left; }
@@ -404,7 +661,7 @@ export const AnimalProfilePage: React.FC = () => {
               <h1>FarmNest Passport Card</h1>
               <p>Livestock Registry: <strong>${animal.animal_code}</strong></p>
             </div>
-            <span class="badge">${animal.status}</span>
+            <span class="badge ${isDeceased ? 'deceased' : ''}">${animal.status}</span>
           </div>
           <img class="photo" src="${animal.primaryPhoto}" />
           <table>
@@ -414,9 +671,10 @@ export const AnimalProfilePage: React.FC = () => {
             <tr><th>Species Class</th><td>${animal.species}</td></tr>
             <tr><th>Breed</th><td>${animal.breed}</td></tr>
             <tr><th>Sex Type</th><td>${animal.sex}</td></tr>
+            <tr><th>Status</th><td>${animal.status}${animal.deathDate ? ` (Deceased Date: ${animal.deathDate})` : ''}</td></tr>
             <tr><th>Ownership</th><td>${animal.ownershipType || "Farm Owned"}${animal.ownerName ? ` (${animal.ownerName})` : ''}</td></tr>
-            <tr><th>Birth date</th><td>${animal.dob || "Unrecorded"} (${currentAge})</td></tr>
-            <tr><th>Source</th><td>${animal.source}</td></tr>
+            <tr><th>Acquisition</th><td>${animal.source}${animal.purchaseDate ? ` (Purchased: ${animal.purchaseDate})` : ''}${animal.purchasePrice ? ` - Price: ${animal.purchasePrice}` : ''}</td></tr>
+            <tr><th>Birth date</th><td>${animal.dob ? `${animal.dob} (${currentAge})` : "Unrecorded"}</td></tr>
             <tr><th>Current notes</th><td>${animal.notes || "No extra bio."}</td></tr>
           </table>
         </body>
@@ -463,7 +721,7 @@ export const AnimalProfilePage: React.FC = () => {
     .filter(b => b.female_id === animal.id && b.status !== "Failed")
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   const latestBreeding = femaleBreedingRecords[0];
-  const gestationCountdown = animal.sex === "Female" && latestBreeding ? calculateGestation(latestBreeding.date) : null;
+  const gestationCountdown = !isDeceased && animal.sex === "Female" && latestBreeding ? calculateGestation(latestBreeding.date) : null;
 
   const chartData = animalWeights
     .map(w => ({
@@ -473,6 +731,10 @@ export const AnimalProfilePage: React.FC = () => {
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   const handleOpenAddNoteModal = () => {
+    if (isDeceased) {
+      showError("Deceased animal records are read-only.");
+      return;
+    }
     setNoteContentText("");
     setShowAddAnimalNoteModal(true);
   };
@@ -521,6 +783,10 @@ export const AnimalProfilePage: React.FC = () => {
   };
 
   const handleDeleteAnimalNoteTrigger = (noteId: string) => {
+    if (isDeceased) {
+      showError("Deceased animal records are read-only.");
+      return;
+    }
     setPendingConfirm({
       title: "Delete this note?",
       message: "This action cannot be undone.",
@@ -541,16 +807,34 @@ export const AnimalProfilePage: React.FC = () => {
 
   const triggerEditConfirm = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (editForm.source === "Born on farm" && !editForm.dob) {
+      showError("Date of Birth is required for animals born on farm.");
+      return;
+    }
+    if (editForm.source === "Purchased" && !editForm.purchaseDate) {
+      showError("Date of Purchase is required for purchased animals.");
+      return;
+    }
+
     setPendingConfirm({
       title: "Save Profile Changes?",
-      message: "Save changes to this animal profile?",
+      message: editForm.status === "Deceased" 
+        ? "Warning: Setting the status to Deceased will lock this animal profile to read-only mode. Confirm?"
+        : "Save changes to this animal profile?",
       onConfirm: () => {
+        const parsedPrice = editForm.source === "Purchased" && editForm.purchasePrice.trim() !== "" 
+          ? parseFloat(editForm.purchasePrice) 
+          : undefined;
+
         updateAnimal(animal.id, {
           name: editForm.name,
           breed: editForm.breed,
           sex: editForm.sex,
-          dob: editForm.dob,
+          dob: editForm.dob || undefined,
           purchaseDate: editForm.purchaseDate || undefined,
+          purchasePrice: parsedPrice,
+          deathDate: editForm.status === "Deceased" ? (editForm.deathDate || new Date().toISOString().split("T")[0]) : undefined,
           source: editForm.source,
           status: editForm.status,
           notes: editForm.notes,
@@ -568,6 +852,10 @@ export const AnimalProfilePage: React.FC = () => {
 
   const triggerSaveParentsConfirm = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isDeceased) {
+      showError("Deceased animal records are read-only.");
+      return;
+    }
     setPendingConfirm({
       title: "Link Parents?",
       message: "Update Mother (Dam) and Father (Sire) pedigree lineage for this animal?",
@@ -602,6 +890,10 @@ export const AnimalProfilePage: React.FC = () => {
 
   const triggerOwnershipConfirm = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isDeceased) {
+      showError("Deceased animal records are read-only.");
+      return;
+    }
     setPendingConfirm({
       title: "Update Ownership?",
       message: ownershipForm.type === "Farm Owned" 
@@ -622,6 +914,10 @@ export const AnimalProfilePage: React.FC = () => {
 
   const triggerHealthConfirm = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isDeceased) {
+      showError("Deceased animal records are read-only.");
+      return;
+    }
     setPendingConfirm({
       title: "Submit Clinical Event?",
       message: "Add this health record?",
@@ -649,6 +945,10 @@ export const AnimalProfilePage: React.FC = () => {
 
   const triggerTreatmentConfirm = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isDeceased) {
+      showError("Deceased animal records are read-only.");
+      return;
+    }
     setPendingConfirm({
       title: "Activate Medical Treatment?",
       message: "Record active prescription treatment?",
@@ -671,6 +971,10 @@ export const AnimalProfilePage: React.FC = () => {
 
   const triggerWeightConfirm = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isDeceased) {
+      showError("Deceased animal records are read-only.");
+      return;
+    }
     if (!newWeight.weight || isNaN(Number(newWeight.weight))) return;
     setPendingConfirm({
       title: "Log Weight?",
@@ -690,6 +994,10 @@ export const AnimalProfilePage: React.FC = () => {
 
   const triggerBreedingConfirm = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isDeceased) {
+      showError("Deceased animal records are read-only.");
+      return;
+    }
     setPendingConfirm({
       title: "Record Breeding?",
       message: "Log breeding event? This will automatically initiate/update the delivery countdown.",
@@ -762,12 +1070,9 @@ export const AnimalProfilePage: React.FC = () => {
   };
 
   const currentOwnershipType = animal.ownershipType || "Farm Owned";
-
-  // Eligible females and males for linking parents
   const eligibleMothers = animals.filter(a => a.id !== animal.id && a.sex === "Female" && a.species === animal.species);
   const eligibleFathers = animals.filter(a => a.id !== animal.id && a.sex === "Male" && a.species === animal.species);
 
-  // Helper to format animal tag for display without showing database IDs
   const formatAnimalDisplayTag = (anim?: Animal | null): string => {
     if (!anim) return "";
     return anim.name ? `${anim.animal_code} (${anim.name})` : anim.animal_code;
@@ -787,13 +1092,44 @@ export const AnimalProfilePage: React.FC = () => {
             Back to Directory
           </Link>
 
-          <span className="text-[11px] font-black uppercase bg-emerald-50 text-emerald-800 px-3 py-1 rounded-full border border-emerald-100">
-            Digital Identity Certified
-          </span>
+          <div className="flex items-center gap-2">
+            {isDeceased && (
+              <span className="text-[11px] font-black uppercase bg-red-100 text-red-800 px-3 py-1 rounded-full border border-red-200 flex items-center gap-1">
+                <Lock size={12} /> Read-Only (Deceased)
+              </span>
+            )}
+            <span className="text-[11px] font-black uppercase bg-emerald-50 text-emerald-800 px-3 py-1 rounded-full border border-emerald-100">
+              Digital Identity Certified
+            </span>
+          </div>
         </div>
       </div>
 
       <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6">
+
+        {/* DECEASED STATUS WATERMARK BANNER */}
+        {isDeceased && (
+          <div className="bg-gradient-to-r from-red-900 via-rose-950 to-slate-900 text-white rounded-3xl p-5 border border-red-800/60 shadow-lg relative overflow-hidden flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1 relative z-10">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🕊️</span>
+                <h3 className="font-extrabold text-sm uppercase tracking-wide text-red-200">
+                  Deceased Animal Record
+                </h3>
+              </div>
+              <p className="text-xs text-slate-300">
+                This animal profile is locked in read-only mode to preserve pedigree history and veterinary logs.
+              </p>
+            </div>
+            
+            {animal.deathDate && (
+              <div className="bg-black/40 border border-red-500/30 px-4 py-2.5 rounded-2xl shrink-0 text-center sm:text-right">
+                <span className="text-[10px] text-red-300 uppercase font-bold block">Recorded Death Date</span>
+                <span className="text-xs font-black text-white block mt-0.5">{animal.deathDate}</span>
+              </div>
+            )}
+          </div>
+        )}
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           
@@ -809,7 +1145,7 @@ export const AnimalProfilePage: React.FC = () => {
                 <img
                   src={animal.primaryPhoto}
                   alt={displayName}
-                  className="w-full h-full object-cover"
+                  className={`w-full h-full object-cover ${isDeceased ? 'grayscale' : ''}`}
                 />
                 
                 <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition text-xs font-black gap-2">
@@ -818,12 +1154,19 @@ export const AnimalProfilePage: React.FC = () => {
 
                 <div className="absolute top-4 right-4">
                   <span className={`text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full shadow-md ${
+                    isDeceased ? "bg-red-100 text-red-900 border border-red-200" :
                     animal.healthStatus === "Healthy" ? "bg-emerald-100 text-emerald-800 border border-emerald-200" :
                     animal.healthStatus === "Under Treatment" ? "bg-purple-100 text-purple-800 border border-purple-200" : "bg-amber-100 text-amber-800 border border-amber-200"
                   }`}>
                     ● {animal.status}
                   </span>
                 </div>
+
+                {isDeceased && animal.deathDate && (
+                  <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-xs text-white px-2.5 py-1 rounded-lg text-[9px] font-bold">
+                    🕊️ Death: {animal.deathDate}
+                  </div>
+                )}
               </div>
 
               <div className="p-5 space-y-3">
@@ -850,47 +1193,83 @@ export const AnimalProfilePage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Editable Date of Birth and Dynamic Age display */}
-                <div className="pt-2 text-[10px] text-slate-500 bg-slate-50 p-2.5 rounded-xl space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-400 uppercase">DATE OF BIRTH</span>
-                    <button 
-                      onClick={() => setShowEditModal(true)} 
-                      className="text-emerald-700 font-bold hover:underline flex items-center gap-0.5"
-                    >
-                      <Edit size={11} /> Edit DOB
-                    </button>
-                  </div>
-                  <div className="flex flex-col gap-0.5 text-xs">
-                    <span className="font-bold text-slate-800">{animal.dob || "Unrecorded"}</span>
-                    <span className="font-black text-emerald-800 bg-emerald-100/80 px-2 py-1 rounded-md text-[11px] leading-tight self-start mt-0.5">
-                      {currentAge}
-                    </span>
-                  </div>
-                  {animal.purchaseDate && (
-                    <div className="text-[10px] text-slate-400 pt-1 border-t border-slate-200/60">
-                      Acquired on: <strong className="text-slate-600">{animal.purchaseDate}</strong>
+                {/* Purchase Price Display if Purchased */}
+                {animal.source === "Purchased" && (
+                  <div className="p-2.5 bg-blue-50/70 border border-blue-100 rounded-xl space-y-1 text-xs">
+                    <div className="flex items-center justify-between text-blue-900 font-bold">
+                      <span className="text-[9px] uppercase tracking-wider text-blue-700">PURCHASE PRICE</span>
+                      <span className="font-black text-sm">
+                        {animal.purchasePrice !== undefined && animal.purchasePrice !== null ? `₦${Number(animal.purchasePrice).toLocaleString()}` : "Not recorded"}
+                      </span>
                     </div>
+                  </div>
+                )}
+
+                {/* Dates Display (DOB / Acquisition) */}
+                <div className="pt-2 text-[10px] text-slate-500 bg-slate-50 p-2.5 rounded-xl space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-400 uppercase">
+                      {animal.source === "Purchased" ? "ACQUISITION & AGE" : "DATE OF BIRTH"}
+                    </span>
+                    {!isDeceased && (
+                      <button 
+                        onClick={() => setShowEditModal(true)} 
+                        className="text-emerald-700 font-bold hover:underline flex items-center gap-0.5"
+                      >
+                        <Edit size={11} /> Edit Dates
+                      </button>
+                    )}
+                  </div>
+                  
+                  {animal.dob && (
+                    <div className="flex flex-col gap-0.5 text-xs">
+                      <span className="text-[10px] text-slate-500 font-semibold">Born: <strong className="text-slate-800">{animal.dob}</strong></span>
+                      <span className="font-black text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-md text-[11px] leading-tight self-start mt-0.5">
+                        Age: {currentAge}
+                      </span>
+                    </div>
+                  )}
+
+                  {animal.purchaseDate && (
+                    <div className="text-[11px] text-slate-700 pt-1 border-t border-slate-200/60 space-y-0.5">
+                      <p>Purchased: <strong className="text-slate-900">{animal.purchaseDate}</strong></p>
+                      {timeOnFarm && (
+                        <p className="text-[10px] text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded inline-block">
+                          On farm for: {timeOnFarm}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {!animal.dob && !animal.purchaseDate && (
+                    <p className="text-xs text-slate-400 italic">No birth or purchase date recorded.</p>
                   )}
                 </div>
 
                 <div className="pt-1 text-[10px] text-slate-400">
-                  <span>Added to registry: {new Date(animal.created_at).toLocaleDateString()}</span>
+                  <span>Registered: {new Date(animal.created_at).toLocaleDateString()}</span>
                 </div>
 
+                {/* Edit & Delete Action Buttons */}
                 <div className="pt-3 flex gap-2">
-                  <button
-                    onClick={() => setShowEditModal(true)}
-                    className="flex-1 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-extrabold rounded-xl border border-emerald-100 transition text-center block"
-                  >
-                    Edit Profile & Dates
-                  </button>
+                  {!isDeceased ? (
+                    <button
+                      onClick={() => setShowEditModal(true)}
+                      className="flex-1 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-extrabold rounded-xl border border-emerald-100 transition text-center block"
+                    >
+                      Edit Profile & Dates
+                    </button>
+                  ) : (
+                    <div className="flex-1 py-2 bg-slate-100 text-slate-400 text-xs font-bold rounded-xl text-center flex items-center justify-center gap-1">
+                      <Lock size={12} /> Locked Profile
+                    </div>
+                  )}
 
                   <button
                     onClick={() => {
                       setPendingConfirm({
                         title: `Permanently Delete ${animal.animal_code}?`,
-                        message: "This action clears all lineage trees and weight growth trends. There is no undo.",
+                        message: "This action clears all lineage trees and growth records. There is no undo.",
                         onConfirm: () => {
                           deleteAnimal(animal.id);
                           navigate("/animals");
@@ -898,6 +1277,7 @@ export const AnimalProfilePage: React.FC = () => {
                       });
                     }}
                     className="p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl border border-red-100 transition"
+                    title="Delete record"
                   >
                     <Trash2 size={16} />
                   </button>
@@ -918,20 +1298,22 @@ export const AnimalProfilePage: React.FC = () => {
                     Ownership Details
                   </h3>
                 </div>
-                <button
-                  onClick={() => {
-                    setOwnershipForm({
-                      type: animal.ownershipType || "Farm Owned",
-                      ownerName: animal.ownerName || "",
-                      custodian: animal.custodian || "",
-                      agreement: animal.agreement || ""
-                    });
-                    setShowOwnershipModal(true);
-                  }}
-                  className="text-xs font-bold text-emerald-700 hover:text-emerald-900 flex items-center gap-1 transition"
-                >
-                  <Edit size={13} /> Edit
-                </button>
+                {!isDeceased && (
+                  <button
+                    onClick={() => {
+                      setOwnershipForm({
+                        type: animal.ownershipType || "Farm Owned",
+                        ownerName: animal.ownerName || "",
+                        custodian: animal.custodian || "",
+                        agreement: animal.agreement || ""
+                      });
+                      setShowOwnershipModal(true);
+                    }}
+                    className="text-xs font-bold text-emerald-700 hover:text-emerald-900 flex items-center gap-1 transition"
+                  >
+                    <Edit size={13} /> Edit
+                  </button>
+                )}
               </div>
 
               <div className="space-y-2 text-xs pt-1">
@@ -975,48 +1357,58 @@ export const AnimalProfilePage: React.FC = () => {
             <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm space-y-2">
               <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Registry Shortcuts</h4>
               
-              <button
-                onClick={() => setShowAddHealth(true)}
-                className="w-full flex items-center justify-between text-left p-2 hover:bg-slate-50 rounded-xl transition text-xs font-bold text-slate-700"
-              >
-                <span>🩺 Add Health Record</span>
-                <span className="text-emerald-600 font-extrabold">+</span>
-              </button>
+              {!isDeceased ? (
+                <>
+                  <button
+                    onClick={() => setShowAddHealth(true)}
+                    className="w-full flex items-center justify-between text-left p-2 hover:bg-slate-50 rounded-xl transition text-xs font-bold text-slate-700"
+                  >
+                    <span>🩺 Add Health Record</span>
+                    <span className="text-emerald-600 font-extrabold">+</span>
+                  </button>
 
-              <button
-                onClick={() => setShowAddTreatment(true)}
-                className="w-full flex items-center justify-between text-left p-2 hover:bg-slate-50 rounded-xl transition text-xs font-bold text-slate-700"
-              >
-                <span>💊 Start Medical Rx</span>
-                <span className="text-emerald-600 font-extrabold">+</span>
-              </button>
+                  <button
+                    onClick={() => setShowAddTreatment(true)}
+                    className="w-full flex items-center justify-between text-left p-2 hover:bg-slate-50 rounded-xl transition text-xs font-bold text-slate-700"
+                  >
+                    <span>💊 Start Medical Rx</span>
+                    <span className="text-emerald-600 font-extrabold">+</span>
+                  </button>
 
-              <button
-                onClick={() => setShowAddWeight(true)}
-                className="w-full flex items-center justify-between text-left p-2 hover:bg-slate-50 rounded-xl transition text-xs font-bold text-slate-700"
-              >
-                <span>⚖️ Record New Weight</span>
-                <span className="text-emerald-600 font-extrabold">+</span>
-              </button>
+                  <button
+                    onClick={() => setShowAddWeight(true)}
+                    className="w-full flex items-center justify-between text-left p-2 hover:bg-slate-50 rounded-xl transition text-xs font-bold text-slate-700"
+                  >
+                    <span>⚖️ Record New Weight</span>
+                    <span className="text-emerald-600 font-extrabold">+</span>
+                  </button>
 
-              {animal.sex === "Female" && (
-                <button
-                  onClick={() => setShowAddBreeding(true)}
-                  className="w-full flex items-center justify-between text-left p-2 hover:bg-slate-50 rounded-xl transition text-xs font-bold text-slate-700"
-                >
-                  <span>❤️ Log Breeding Act</span>
-                  <span className="text-emerald-600 font-extrabold">+</span>
-                </button>
+                  {animal.sex === "Female" && (
+                    <button
+                      onClick={() => setShowAddBreeding(true)}
+                      className="w-full flex items-center justify-between text-left p-2 hover:bg-slate-50 rounded-xl transition text-xs font-bold text-slate-700"
+                    >
+                      <span>❤️ Log Breeding Act</span>
+                      <span className="text-emerald-600 font-extrabold">+</span>
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => setShowAddOffspring(true)}
+                    className="w-full flex items-center justify-between text-left p-2 hover:bg-slate-50 rounded-xl transition text-xs font-bold text-slate-700"
+                  >
+                    <span>🐑 Link Offspring</span>
+                    <span className="text-emerald-600 font-extrabold">+</span>
+                  </button>
+                </>
+              ) : (
+                <div className="p-2.5 bg-slate-50 text-slate-500 rounded-xl text-xs flex items-center gap-2">
+                  <Lock size={14} className="text-slate-400" />
+                  <span>Modifications locked (Deceased)</span>
+                </div>
               )}
 
-              <button
-                onClick={() => setShowAddOffspring(true)}
-                className="w-full flex items-center justify-between text-left p-2 hover:bg-slate-50 rounded-xl transition text-xs font-bold text-slate-700"
-              >
-                <span>🐑 Link Offspring</span>
-                <span className="text-emerald-600 font-extrabold">+</span>
-              </button>
-
+              {/* Generate Passport remains active */}
               <button
                 onClick={handlePdfSingleReport}
                 className="w-full flex items-center justify-between text-left p-2 hover:bg-slate-50 rounded-xl transition text-xs font-bold text-emerald-800"
@@ -1119,21 +1511,23 @@ export const AnimalProfilePage: React.FC = () => {
                       </p>
                     </div>
 
-                    <button
-                      onClick={() => {
-                        setPendingConfirm({
-                          title: "Mark Treatment Complete?",
-                          message: "Revert livestock to 'Healthy' status?",
-                          onConfirm: () => {
-                            updateTreatmentStatus(tx.id, "Completed");
-                            setPendingConfirm(null);
-                          }
-                        });
-                      }}
-                      className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-xl shadow-sm transition"
-                    >
-                      Mark Complete
-                    </button>
+                    {!isDeceased && (
+                      <button
+                        onClick={() => {
+                          setPendingConfirm({
+                            title: "Mark Treatment Complete?",
+                            message: "Revert livestock to 'Healthy' status?",
+                            onConfirm: () => {
+                              updateTreatmentStatus(tx.id, "Completed");
+                              setPendingConfirm(null);
+                            }
+                          });
+                        }}
+                        className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-xl shadow-sm transition"
+                      >
+                        Mark Complete
+                      </button>
+                    )}
                   </div>
                 ))}
 
@@ -1144,18 +1538,20 @@ export const AnimalProfilePage: React.FC = () => {
                       <span className="text-emerald-600 text-base">🧬</span>
                       Lineage & Line Tree
                     </h3>
-                    <button
-                      onClick={() => {
-                        setParentsForm({
-                          motherId: animal.parents?.motherId || "",
-                          fatherId: animal.parents?.fatherId || ""
-                        });
-                        setShowLinkParentsModal(true);
-                      }}
-                      className="text-xs font-bold text-emerald-700 hover:text-emerald-900 flex items-center gap-1 transition"
-                    >
-                      <Edit size={13} /> Edit Parents
-                    </button>
+                    {!isDeceased && (
+                      <button
+                        onClick={() => {
+                          setParentsForm({
+                            motherId: animal.parents?.motherId || "",
+                            fatherId: animal.parents?.fatherId || ""
+                          });
+                          setShowLinkParentsModal(true);
+                        }}
+                        className="text-xs font-bold text-emerald-700 hover:text-emerald-900 flex items-center gap-1 transition"
+                      >
+                        <Edit size={13} /> Edit Parents
+                      </button>
+                    )}
                   </div>
                   
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1164,7 +1560,7 @@ export const AnimalProfilePage: React.FC = () => {
                       onClick={() => {
                         if (mother) {
                           navigate(`/animals/${mother.id}`);
-                        } else {
+                        } else if (!isDeceased) {
                           setParentsForm({
                             motherId: animal.parents?.motherId || "",
                             fatherId: animal.parents?.fatherId || ""
@@ -1189,7 +1585,7 @@ export const AnimalProfilePage: React.FC = () => {
                           </span>
                         ) : (
                           <span className="text-xs font-bold text-emerald-700 block">
-                            + Link Mother (Dam)
+                            {isDeceased ? "Unrecorded Mother" : "+ Link Mother (Dam)"}
                           </span>
                         )}
                       </div>
@@ -1200,7 +1596,7 @@ export const AnimalProfilePage: React.FC = () => {
                       onClick={() => {
                         if (father) {
                           navigate(`/animals/${father.id}`);
-                        } else {
+                        } else if (!isDeceased) {
                           setParentsForm({
                             motherId: animal.parents?.motherId || "",
                             fatherId: animal.parents?.fatherId || ""
@@ -1225,7 +1621,7 @@ export const AnimalProfilePage: React.FC = () => {
                           </span>
                         ) : (
                           <span className="text-xs font-bold text-emerald-700 block">
-                            + Link Father (Sire)
+                            {isDeceased ? "Unrecorded Father" : "+ Link Father (Sire)"}
                           </span>
                         )}
                       </div>
@@ -1238,12 +1634,14 @@ export const AnimalProfilePage: React.FC = () => {
                     <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wider text-slate-400">
                       Derived Progeny ({offspringList.length})
                     </h3>
-                    <button
-                      onClick={() => setShowAddOffspring(true)}
-                      className="text-xs font-bold text-emerald-600 hover:underline"
-                    >
-                      + Register Kid/Progeny
-                    </button>
+                    {!isDeceased && (
+                      <button
+                        onClick={() => setShowAddOffspring(true)}
+                        className="text-xs font-bold text-emerald-600 hover:underline"
+                      >
+                        + Register Kid/Progeny
+                      </button>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -1271,12 +1669,14 @@ export const AnimalProfilePage: React.FC = () => {
                     <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wider text-slate-400">
                       Weight Mass Growth Curve
                     </h3>
-                    <button
-                      onClick={() => setShowAddWeight(true)}
-                      className="text-xs font-bold text-emerald-600 hover:underline"
-                    >
-                      + Record Weight
-                    </button>
+                    {!isDeceased && (
+                      <button
+                        onClick={() => setShowAddWeight(true)}
+                        className="text-xs font-bold text-emerald-600 hover:underline"
+                      >
+                        + Record Weight
+                      </button>
+                    )}
                   </div>
 
                   {chartData.length >= 2 ? (
@@ -1314,12 +1714,14 @@ export const AnimalProfilePage: React.FC = () => {
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
                   <h3 className="font-bold text-slate-900 text-sm">Clinical Incident Log</h3>
-                  <button
-                    onClick={() => setShowAddHealth(true)}
-                    className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold"
-                  >
-                    + Log Health Record
-                  </button>
+                  {!isDeceased && (
+                    <button
+                      onClick={() => setShowAddHealth(true)}
+                      className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold"
+                    >
+                      + Log Health Record
+                    </button>
+                  )}
                 </div>
 
                 <div className="space-y-3">
@@ -1353,12 +1755,14 @@ export const AnimalProfilePage: React.FC = () => {
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
                   <h3 className="font-bold text-slate-900 text-sm">Breeding History</h3>
-                  <button
-                    onClick={() => setShowAddBreeding(true)}
-                    className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold"
-                  >
-                    + Record Breeding
-                  </button>
+                  {!isDeceased && (
+                    <button
+                      onClick={() => setShowAddBreeding(true)}
+                      className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold"
+                    >
+                      + Record Breeding
+                    </button>
+                  )}
                 </div>
 
                 <div className="space-y-3">
@@ -1403,14 +1807,16 @@ export const AnimalProfilePage: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="font-bold text-slate-900 text-sm">Photos</h3>
-                    <p className="text-[10px] text-slate-400">Select multiple files to upload at once</p>
+                    <p className="text-[10px] text-slate-400">View or inspect high-resolution portraits</p>
                   </div>
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold"
-                  >
-                    + Upload Photos
-                  </button>
+                  {!isDeceased && (
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold"
+                    >
+                      + Upload Photos
+                    </button>
+                  )}
                   <input
                     type="file"
                     accept="image/*"
@@ -1430,20 +1836,28 @@ export const AnimalProfilePage: React.FC = () => {
                         onClick={() => setFullscreenPhoto(ph)}
                       />
                       <div className="p-2 flex gap-1.5 justify-between">
-                        <button
-                          onClick={() => setPhotoAsPrimary(ph)}
-                          className={`text-[9px] font-black px-2 py-1 rounded-lg ${
-                            animal.primaryPhoto === ph ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 hover:bg-slate-200"
-                          }`}
-                        >
-                          {animal.primaryPhoto === ph ? "Active ID" : "Set Primary"}
-                        </button>
-                        <button
-                          onClick={() => deletePhoto(ph)}
-                          className="p-1 hover:bg-red-50 text-red-500 rounded text-xs"
-                        >
-                          🗑️
-                        </button>
+                        {!isDeceased ? (
+                          <>
+                            <button
+                              onClick={() => setPhotoAsPrimary(ph)}
+                              className={`text-[9px] font-black px-2 py-1 rounded-lg ${
+                                animal.primaryPhoto === ph ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 hover:bg-slate-200"
+                              }`}
+                            >
+                              {animal.primaryPhoto === ph ? "Active ID" : "Set Primary"}
+                            </button>
+                            <button
+                              onClick={() => deletePhoto(ph)}
+                              className="p-1 hover:bg-red-50 text-red-500 rounded text-xs"
+                            >
+                              🗑️
+                            </button>
+                          </>
+                        ) : (
+                          <span className="text-[9px] font-bold text-slate-400 px-2 py-1">
+                            {animal.primaryPhoto === ph ? "Primary ID" : "Portrait"}
+                          </span>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -1459,12 +1873,14 @@ export const AnimalProfilePage: React.FC = () => {
                     <h3 className="font-bold text-slate-900 text-sm">Animal Notes</h3>
                     <p className="text-[10px] text-slate-400">Specific notes for {displayName}</p>
                   </div>
-                  <button
-                    onClick={handleOpenAddNoteModal}
-                    className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow transition"
-                  >
-                    <Plus size={14} /> Add Note
-                  </button>
+                  {!isDeceased && (
+                    <button
+                      onClick={handleOpenAddNoteModal}
+                      className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow transition"
+                    >
+                      <Plus size={14} /> Add Note
+                    </button>
+                  )}
                 </div>
 
                 <div className="space-y-2.5">
@@ -1529,7 +1945,7 @@ export const AnimalProfilePage: React.FC = () => {
       </div>
 
       {/* EDIT PARENTS MODAL */}
-      {showLinkParentsModal && (
+      {showLinkParentsModal && !isDeceased && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4 animate-in fade-in">
           <form 
             onSubmit={triggerSaveParentsConfirm}
@@ -1602,7 +2018,7 @@ export const AnimalProfilePage: React.FC = () => {
       )}
 
       {/* EDIT OWNERSHIP MODAL */}
-      {showOwnershipModal && (
+      {showOwnershipModal && !isDeceased && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4 animate-in fade-in">
           <form 
             onSubmit={triggerOwnershipConfirm}
@@ -1696,7 +2112,7 @@ export const AnimalProfilePage: React.FC = () => {
       )}
 
       {/* CREATE ANIMAL NOTE MODAL */}
-      {showAddAnimalNoteModal && (
+      {showAddAnimalNoteModal && !isDeceased && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4 animate-in fade-in">
           <form 
             onSubmit={handleCreateAnimalNoteSubmit}
@@ -1719,7 +2135,7 @@ export const AnimalProfilePage: React.FC = () => {
                 Note <span className="text-red-500">*</span>
               </label>
               <textarea
-                placeholder="e.g. Behavior observation..."
+                placeholder="e.g. Behavior observation, appetite changes..."
                 value={noteContentText}
                 onChange={(e) => setNoteContentText(e.target.value)}
                 disabled={isSubmittingAnimalNote}
@@ -1783,22 +2199,24 @@ export const AnimalProfilePage: React.FC = () => {
                   </p>
                 </div>
 
-                <div className="flex gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsEditingAnimalNote(true)}
-                    className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5"
-                  >
-                    <Edit size={14} /> Edit
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteAnimalNoteTrigger(selectedAnimalNote.id)}
-                    className="flex-1 py-2 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5"
-                  >
-                    <Trash2 size={14} /> Delete
-                  </button>
-                </div>
+                {!isDeceased && (
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingAnimalNote(true)}
+                      className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5"
+                    >
+                      <Edit size={14} /> Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteAnimalNoteTrigger(selectedAnimalNote.id)}
+                      className="flex-1 py-2 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5"
+                    >
+                      <Trash2 size={14} /> Delete
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <form onSubmit={handleUpdateAnimalNoteSubmit} className="space-y-4">
@@ -1914,7 +2332,7 @@ export const AnimalProfilePage: React.FC = () => {
       )}
 
       {/* EDIT ANIMAL MODAL */}
-      {showEditModal && (
+      {showEditModal && !isDeceased && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
           <form 
             onSubmit={triggerEditConfirm}
@@ -1936,28 +2354,97 @@ export const AnimalProfilePage: React.FC = () => {
               />
             </div>
 
-            {/* Editable Dates Grid */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 block">Acquisition Source</label>
+                <select
+                  value={editForm.source}
+                  onChange={(e) => setEditForm({ ...editForm, source: e.target.value as any })}
+                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1 font-semibold"
+                >
+                  <option value="Born on farm">Born on farm</option>
+                  <option value="Purchased">Purchased</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 block">Status</label>
+                <select
+                  value={editForm.status}
+                  onChange={(e) => setEditForm({ ...editForm, status: e.target.value as any })}
+                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1 font-semibold"
+                >
+                  {["Healthy", "Monitoring", "Sick", "Under Treatment", "Pregnant", "Sold", "Deceased", "Retired"].map((st) => (
+                    <option key={st} value={st}>{st}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Conditional Dates based on Source */}
             <div className="grid grid-cols-2 gap-3 bg-emerald-50/50 p-3 rounded-2xl border border-emerald-100">
               <div>
-                <label className="text-[10px] font-extrabold text-emerald-900 uppercase block mb-1">Date of Birth</label>
+                <label className="text-[10px] font-extrabold text-emerald-900 uppercase block mb-1">
+                  Date of Birth {editForm.source === "Born on farm" && <span className="text-red-500">*</span>}
+                </label>
                 <input
                   type="date"
                   value={editForm.dob}
                   onChange={(e) => setEditForm({ ...editForm, dob: e.target.value })}
                   className="w-full p-2 bg-white border rounded-xl text-xs font-bold text-slate-800"
+                  required={editForm.source === "Born on farm"}
                 />
               </div>
 
               <div>
-                <label className="text-[10px] font-extrabold text-emerald-900 uppercase block mb-1">Acquisition Date</label>
+                <label className="text-[10px] font-extrabold text-emerald-900 uppercase block mb-1">
+                  Date of Purchase {editForm.source === "Purchased" && <span className="text-red-500">*</span>}
+                </label>
                 <input
                   type="date"
                   value={editForm.purchaseDate}
                   onChange={(e) => setEditForm({ ...editForm, purchaseDate: e.target.value })}
                   className="w-full p-2 bg-white border rounded-xl text-xs font-bold text-slate-800"
+                  required={editForm.source === "Purchased"}
                 />
               </div>
             </div>
+
+            {/* Dedicated Purchase Price Field */}
+            {editForm.source === "Purchased" && (
+              <div className="p-3 bg-blue-50/60 rounded-2xl border border-blue-100 animate-in fade-in">
+                <label className="text-[10px] font-bold text-blue-900 uppercase tracking-wider block mb-1">
+                  Purchase Price (₦ / Currency)
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="e.g. 150000"
+                    value={editForm.purchasePrice}
+                    onChange={(e) => setEditForm({ ...editForm, purchasePrice: e.target.value })}
+                    className="w-full p-2.5 pl-8 bg-white border rounded-xl text-xs font-bold text-slate-900 outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-400">₦</span>
+                </div>
+              </div>
+            )}
+
+            {/* Optional Death Date when status is Deceased */}
+            {editForm.status === "Deceased" && (
+              <div className="p-3 bg-red-50 rounded-2xl border border-red-200 animate-in fade-in">
+                <label className="text-[10px] font-bold text-red-900 uppercase tracking-wider block mb-1">
+                  Date of Death (Optional)
+                </label>
+                <input
+                  type="date"
+                  value={editForm.deathDate}
+                  onChange={(e) => setEditForm({ ...editForm, deathDate: e.target.value })}
+                  className="w-full p-2 bg-white border rounded-xl text-xs font-bold text-slate-800"
+                />
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -2014,34 +2501,6 @@ export const AnimalProfilePage: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 block">Acquisition Source</label>
-                <select
-                  value={editForm.source}
-                  onChange={(e) => setEditForm({ ...editForm, source: e.target.value as any })}
-                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1 font-semibold"
-                >
-                  <option value="Born on farm">Born on farm</option>
-                  <option value="Purchased">Purchased</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 block">Status</label>
-                <select
-                  value={editForm.status}
-                  onChange={(e) => setEditForm({ ...editForm, status: e.target.value as any })}
-                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1 font-semibold"
-                >
-                  {["Healthy", "Monitoring", "Sick", "Under Treatment", "Pregnant", "Sold", "Deceased", "Retired"].map((st) => (
-                    <option key={st} value={st}>{st}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
             <button
               type="submit"
               className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-3 rounded-xl shadow transition"
@@ -2053,7 +2512,7 @@ export const AnimalProfilePage: React.FC = () => {
       )}
 
       {/* HEALTH MODAL */}
-      {showAddHealth && (
+      {showAddHealth && !isDeceased && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
           <form 
             onSubmit={triggerHealthConfirm}
@@ -2086,7 +2545,7 @@ export const AnimalProfilePage: React.FC = () => {
       )}
 
       {/* TREATMENT MODAL */}
-      {showAddTreatment && (
+      {showAddTreatment && !isDeceased && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
           <form 
             onSubmit={triggerTreatmentConfirm}
@@ -2130,7 +2589,7 @@ export const AnimalProfilePage: React.FC = () => {
       )}
 
       {/* WEIGHT MODAL */}
-      {showAddWeight && (
+      {showAddWeight && !isDeceased && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
           <form 
             onSubmit={triggerWeightConfirm}
@@ -2164,7 +2623,7 @@ export const AnimalProfilePage: React.FC = () => {
       )}
 
       {/* BREEDING MODAL */}
-      {showAddBreeding && (
+      {showAddBreeding && !isDeceased && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
           <form 
             onSubmit={triggerBreedingConfirm}
@@ -2196,7 +2655,7 @@ export const AnimalProfilePage: React.FC = () => {
               >
                 <option value="">-- Choose Partner --</option>
                 {animals
-                  .filter(a => a.sex !== animal.sex && a.species === animal.species)
+                  .filter(a => a.sex !== animal.sex && a.species === animal.species && a.status !== "Deceased")
                   .map(a => (
                     <option key={a.id} value={a.id}>{a.animal_code} - {a.name || a.animal_code}</option>
                   ))}
@@ -2214,7 +2673,7 @@ export const AnimalProfilePage: React.FC = () => {
       )}
 
       {/* OFFSPRING MODAL */}
-      {showAddOffspring && (
+      {showAddOffspring && !isDeceased && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
           <form 
             onSubmit={triggerOffspringConfirm}

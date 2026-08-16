@@ -9,11 +9,11 @@ import {
   Plus, 
   ChevronRight, 
   Camera, 
-  Upload,
-  HelpCircle,
-  Eye,
-  Download,
-  X
+  Upload, 
+  HelpCircle, 
+  Download, 
+  X, 
+  Lock 
 } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 
@@ -43,6 +43,9 @@ export const Animals: React.FC = () => {
     breed: "",
     sex: "Female" as Animal["sex"],
     dob: new Date().toISOString().split("T")[0],
+    purchaseDate: "",
+    purchasePrice: "",
+    deathDate: "",
     source: "Born on farm" as Animal["source"],
     status: "Healthy" as Animal["status"],
     notes: "",
@@ -58,7 +61,6 @@ export const Animals: React.FC = () => {
     onConfirm: () => void;
   } | null>(null);
 
-  // Photo handlers
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
@@ -105,6 +107,16 @@ export const Animals: React.FC = () => {
       return;
     }
 
+    if (newAnimal.source === "Born on farm" && !newAnimal.dob) {
+      showError("Date of Birth is required for animals born on farm.");
+      return;
+    }
+
+    if (newAnimal.source === "Purchased" && !newAnimal.purchaseDate) {
+      showError("Date of Purchase is required for purchased animals.");
+      return;
+    }
+
     setPendingConfirm({
       title: "Add New Animal Record?",
       message: `Verify details for registering this new ${finalSpecies} in the main pedigree registry.`,
@@ -113,12 +125,19 @@ export const Animals: React.FC = () => {
         const finalPhotos = newAnimal.photos.length > 0 ? newAnimal.photos : [defaultPhoto];
         const finalPrimary = newAnimal.primaryPhoto || finalPhotos[0];
 
+        const parsedPrice = newAnimal.source === "Purchased" && newAnimal.purchasePrice.trim() !== ""
+          ? parseFloat(newAnimal.purchasePrice)
+          : undefined;
+
         addAnimal({
           name: newAnimal.name,
           species: finalSpecies,
           breed: newAnimal.breed || "Local Breed",
           sex: newAnimal.sex,
-          dob: newAnimal.dob,
+          dob: newAnimal.dob || undefined,
+          purchaseDate: newAnimal.purchaseDate || undefined,
+          purchasePrice: parsedPrice,
+          deathDate: newAnimal.status === "Deceased" ? (newAnimal.deathDate || new Date().toISOString().split("T")[0]) : undefined,
           source: newAnimal.source,
           status: newAnimal.status,
           healthStatus: "Healthy",
@@ -139,6 +158,285 @@ export const Animals: React.FC = () => {
           breed: "",
           sex: "Female",
           dob: new Date().toISOString().split("T")[0],
+          purchaseDate: "",
+          purchasePrice: "",
+          deathDate: "",
+          source: "Born on farm",
+          status: "Healthy",
+          notes: "",
+          primaryPhoto: "",
+          photos: [],
+          motherId: "",
+          fatherId: "",
+        });
+      }
+    });
+  };
+
+  const filteredAnimals = animals.filter(animal => {
+    const codeMatch = animal.animal_code.toLowerCase().includes(searchQuery.toLowerCase());
+    const nameMatch = animal.name?.toLowerCase().includes(searchQuery.toLowerCase());
+    const breedMatch = animal.breed.toLowerCase().includes(searchQuery.toLowerCase());
+    const speciesMatchText = animal.species.toLowerCase().includes(searchQuery.toLowerCase());
+    const queryMatch = codeMatch || nameMatch || breedMatch || speciesMatchText;
+
+    const speciesMatchFilter = speciesFilter === "All" || animal.species === speciesFilter;
+    const statusMatchFilter = statusFilter === "All" || animal.status === statusFilter;
+
+    return queryMatch && speciesMatchFilter && statusMatchFilter;
+  });
+
+  const handleDownloadFullscreen = () => {
+    if (!fullscreenPhoto) return;
+    const link = document.createElement("a");
+    link.href = fullscreenPhoto;
+    link.download = "livestock_roster_snapshot.png";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showSuccess("Image downloaded successfully!");
+  };
+
+  return (
+    <div className="space-y-4">
+      
+      {/* Header + Add Button */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-black text-slate-900">Livestock Directory</h2>
+          <p className="text-xs text-slate-500">Search codes, names, or filter by species health status.</p>
+        </div>
+        <button
+          onClick={() => setShowAddAnimal(true)}
+          className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl shadow-md transition"
+        >
+          <Plus size={14} />
+          Register Animal
+        </button>
+      </div>
+
+      {/* Search Bar */}
+      <div className="relative">
+        <Search className="absolute left-3 top-3 text-slate-400" size={16} />
+        <input
+          type="text"
+          placeholder="Search tags, breeds, species, names (e.g. ADG001, Cow)..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-1 focus:ring-emerald-500 outline-none transition"
+        />
+      </div>
+
+      {/* Filters */}
+      <div className="space-y-2 bg-white p-3.5 rounded-2xl border border-slate-100 shadow-sm">
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            onClick={() => setSpeciesFilter("All")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition ${
+              speciesFilter === "All"
+                ? "bg-emerald-600 border-emerald-600 text-white shadow-sm"
+                : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            🌍 All Species
+          </button>
+
+          {SPECIES_OPTIONS.map((species) => (
+            <button
+              key={species}
+              onClick={() => setSpeciesFilter(species)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition ${
+                speciesFilter === species
+                  ? "bg-emerald-600 border-emerald-600 text-white shadow-sm"
+                  : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              {species}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap gap-1 pt-1 border-t border-slate-100">
+          {["All", "Healthy", "Monitoring", "Sick", "Under Treatment", "Pregnant", "Sold", "Deceased"].map((st) => (
+            <button
+              key={st}
+              onClick={() => setStatusFilter(st)}
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition ${
+                statusFilter === st
+                  ? "bg-slate-900 border-slate-900 text-white"
+                  : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
+              }`}
+            >
+              {st}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {<dyad-write path="src/pages/Animals.tsx" description="Complete Animals directory component with conditional date requirements, purchase price, deceased indicators, and user data isolation">
+"use client";
+
+import React, { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { useFarm, Animal, SPECIES_OPTIONS } from "@/context/FarmContext";
+import { compressImage } from "@/utils/imageCompressor";
+import { 
+  Search, 
+  Plus, 
+  ChevronRight, 
+  Camera, 
+  Upload, 
+  HelpCircle, 
+  Download, 
+  X, 
+  Lock 
+} from "lucide-react";
+import { showSuccess, showError } from "@/utils/toast";
+
+export const Animals: React.FC = () => {
+  const navigate = useNavigate();
+  const { animals, addAnimal, loadAnimals } = useFarm();
+
+  useEffect(() => {
+    loadAnimals();
+  }, [loadAnimals]);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  const [showAddAnimal, setShowAddAnimal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [speciesFilter, setSpeciesFilter] = useState("All");
+  const [statusFilter, setStatusFilter] = useState("All");
+
+  const [fullscreenPhoto, setFullscreenPhoto] = useState<string | null>(null);
+
+  const [selectedSpeciesOption, setSelectedSpeciesOption] = useState<string>("Goat");
+  const [customSpecies, setCustomSpecies] = useState<string>("");
+
+  const [newAnimal, setNewAnimal] = useState({
+    name: "",
+    breed: "",
+    sex: "Female" as Animal["sex"],
+    dob: new Date().toISOString().split("T")[0],
+    purchaseDate: "",
+    purchasePrice: "",
+    deathDate: "",
+    source: "Born on farm" as Animal["source"],
+    status: "Healthy" as Animal["status"],
+    notes: "",
+    primaryPhoto: "",
+    photos: [] as string[],
+    motherId: "",
+    fatherId: "",
+  });
+
+  const [pendingConfirm, setPendingConfirm] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  } | null>(null);
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      try {
+        const fileList = Array.from(files);
+        const compressedList = await Promise.all(
+          fileList.map(file => compressImage(file, 600, 600, 0.7))
+        );
+        setNewAnimal(prev => {
+          const allPhotos = [...prev.photos, ...compressedList];
+          return {
+            ...prev,
+            primaryPhoto: prev.primaryPhoto || allPhotos[0] || "",
+            photos: allPhotos
+          };
+        });
+        showSuccess(`${compressedList.length} photo${compressedList.length > 1 ? "s" : ""} attached!`);
+      } catch (err) {
+        showError("Failed to process images.");
+      }
+    }
+  };
+
+  const removeNewAnimalPhoto = (index: number) => {
+    setNewAnimal(prev => {
+      const updatedPhotos = prev.photos.filter((_, idx) => idx !== index);
+      return {
+        ...prev,
+        photos: updatedPhotos,
+        primaryPhoto: prev.primaryPhoto === prev.photos[index] ? (updatedPhotos[0] || "") : prev.primaryPhoto
+      };
+    });
+  };
+
+  const finalSpecies = selectedSpeciesOption === "Other" 
+    ? (customSpecies.trim() || "Other") 
+    : selectedSpeciesOption;
+
+  const triggerCreateAnimal = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (selectedSpeciesOption === "Other" && !customSpecies.trim()) {
+      showError("Please enter a custom species name.");
+      return;
+    }
+
+    if (newAnimal.source === "Born on farm" && !newAnimal.dob) {
+      showError("Date of Birth is required for animals born on farm.");
+      return;
+    }
+
+    if (newAnimal.source === "Purchased" && !newAnimal.purchaseDate) {
+      showError("Date of Purchase is required for purchased animals.");
+      return;
+    }
+
+    setPendingConfirm({
+      title: "Add New Animal Record?",
+      message: `Verify details for registering this new ${finalSpecies} in the main pedigree registry.`,
+      onConfirm: () => {
+        const defaultPhoto = "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=400";
+        const finalPhotos = newAnimal.photos.length > 0 ? newAnimal.photos : [defaultPhoto];
+        const finalPrimary = newAnimal.primaryPhoto || finalPhotos[0];
+
+        const parsedPrice = newAnimal.source === "Purchased" && newAnimal.purchasePrice.trim() !== ""
+          ? parseFloat(newAnimal.purchasePrice)
+          : undefined;
+
+        addAnimal({
+          name: newAnimal.name,
+          species: finalSpecies,
+          breed: newAnimal.breed || "Local Breed",
+          sex: newAnimal.sex,
+          dob: newAnimal.dob || undefined,
+          purchaseDate: newAnimal.purchaseDate || undefined,
+          purchasePrice: parsedPrice,
+          deathDate: newAnimal.status === "Deceased" ? (newAnimal.deathDate || new Date().toISOString().split("T")[0]) : undefined,
+          source: newAnimal.source,
+          status: newAnimal.status,
+          healthStatus: "Healthy",
+          primaryPhoto: finalPrimary,
+          photos: finalPhotos,
+          notes: newAnimal.notes,
+          parents: {
+            motherId: newAnimal.motherId || undefined,
+            fatherId: newAnimal.fatherId || undefined
+          }
+        });
+        setShowAddAnimal(false);
+        setPendingConfirm(null);
+        setSelectedSpeciesOption("Goat");
+        setCustomSpecies("");
+        setNewAnimal({
+          name: "",
+          breed: "",
+          sex: "Female",
+          dob: new Date().toISOString().split("T")[0],
+          purchaseDate: "",
+          purchasePrice: "",
+          deathDate: "",
           source: "Born on farm",
           status: "Healthy",
           notes: "",
@@ -256,27 +554,32 @@ export const Animals: React.FC = () => {
         {filteredAnimals.map((animal) => {
           const hasCustomName = Boolean(animal.name && animal.name.trim().length > 0);
           const displayName = hasCustomName ? animal.name : animal.animal_code;
+          const isDeceased = animal.status === "Deceased";
 
           return (
             <div
               key={animal.id}
-              className="bg-white rounded-2xl overflow-hidden border border-slate-100 shadow-sm hover:border-emerald-300 transition flex flex-col group"
+              className={`bg-white rounded-2xl overflow-hidden border shadow-sm transition flex flex-col group ${
+                isDeceased ? 'border-red-150 bg-slate-50/50' : 'border-slate-100 hover:border-emerald-300'
+              }`}
             >
               <div className="relative h-32 bg-slate-100">
                 <img
                   src={animal.primaryPhoto}
                   alt={displayName}
                   onClick={() => setFullscreenPhoto(animal.primaryPhoto)}
-                  className="w-full h-full object-cover group-hover:scale-105 transition duration-300 cursor-zoom-in"
+                  className={`w-full h-full object-cover group-hover:scale-105 transition duration-300 cursor-zoom-in ${
+                    isDeceased ? 'grayscale' : ''
+                  }`}
                 />
                 <div className="absolute top-2 right-2">
                   <span className={`text-[9px] font-black tracking-wide px-2 py-0.5 rounded-full shadow ${
+                    isDeceased ? "bg-red-200 text-red-900 border border-red-300" :
                     animal.status === "Sold" ? "bg-slate-200 text-slate-700" :
-                    animal.status === "Deceased" ? "bg-red-200 text-red-800" :
                     animal.healthStatus === "Healthy" ? "bg-emerald-100 text-emerald-800" :
                     animal.healthStatus === "Under Treatment" ? "bg-purple-100 text-purple-800" : "bg-amber-100 text-amber-800"
                   }`}>
-                    {animal.status}
+                    {isDeceased ? "🕊️ Deceased" : animal.status}
                   </span>
                 </div>
               </div>
@@ -302,11 +605,22 @@ export const Animals: React.FC = () => {
                       {animal.animal_code}
                     </p>
                   )}
+
+                  {/* Purchase Price Badge if purchased */}
+                  {animal.source === "Purchased" && animal.purchasePrice && (
+                    <span className="inline-block mt-1 text-[9px] font-black text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">
+                      ₦{Number(animal.purchasePrice).toLocaleString()}
+                    </span>
+                  )}
                 </div>
 
                 <div className="pt-2 border-t border-slate-50 flex items-center justify-between mt-2">
                   <span className="text-[9px] text-slate-400">{animal.breed}</span>
-                  <ChevronRight size={12} className="text-slate-400" />
+                  {isDeceased ? (
+                    <Lock size={12} className="text-slate-400" />
+                  ) : (
+                    <ChevronRight size={12} className="text-slate-400" />
+                  )}
                 </div>
               </div>
             </div>
@@ -353,7 +667,7 @@ export const Animals: React.FC = () => {
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
           <form 
             onSubmit={triggerCreateAnimal}
-            className="bg-white w-full max-w-md rounded-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto"
+            className="bg-white w-full max-w-md rounded-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto shadow-2xl"
           >
             <div className="flex items-center justify-between border-b pb-2">
               <h3 className="font-extrabold text-sm text-slate-900">Register New Livestock</h3>
@@ -472,6 +786,98 @@ export const Animals: React.FC = () => {
                   onChange={(e) => setCustomSpecies(e.target.value)}
                   className="w-full p-2.5 bg-emerald-50/50 border border-emerald-300 rounded-xl text-xs font-bold text-slate-900 outline-none focus:ring-1 focus:ring-emerald-500"
                   required
+                />
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 block">Acquisition Source</label>
+                <select
+                  value={newAnimal.source}
+                  onChange={(e) => setNewAnimal({ ...newAnimal, source: e.target.value as any })}
+                  className="w-full p-2 bg-slate-50 border rounded-xl text-xs mt-1"
+                >
+                  <option value="Born on farm">Born on farm</option>
+                  <option value="Purchased">Purchased</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 block">Status</label>
+                <select
+                  value={newAnimal.status}
+                  onChange={(e) => setNewAnimal({ ...newAnimal, status: e.target.value as any })}
+                  className="w-full p-2 bg-slate-50 border rounded-xl text-xs mt-1"
+                >
+                  {["Healthy", "Monitoring", "Sick", "Under Treatment", "Pregnant", "Sold", "Deceased", "Retired"].map((st) => (
+                    <option key={st} value={st}>{st}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Conditional Dates */}
+            <div className="grid grid-cols-2 gap-3 bg-emerald-50/50 p-3 rounded-2xl border border-emerald-100">
+              <div>
+                <label className="text-[10px] font-extrabold text-emerald-900 uppercase block mb-1">
+                  Date of Birth {newAnimal.source === "Born on farm" && <span className="text-red-500">*</span>}
+                </label>
+                <input
+                  type="date"
+                  value={newAnimal.dob}
+                  onChange={(e) => setNewAnimal({ ...newAnimal, dob: e.target.value })}
+                  className="w-full p-2 bg-white border rounded-xl text-xs font-bold text-slate-800"
+                  required={newAnimal.source === "Born on farm"}
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-extrabold text-emerald-900 uppercase block mb-1">
+                  Date of Purchase {newAnimal.source === "Purchased" && <span className="text-red-500">*</span>}
+                </label>
+                <input
+                  type="date"
+                  value={newAnimal.purchaseDate}
+                  onChange={(e) => setNewAnimal({ ...newAnimal, purchaseDate: e.target.value })}
+                  className="w-full p-2 bg-white border rounded-xl text-xs font-bold text-slate-800"
+                  required={newAnimal.source === "Purchased"}
+                />
+              </div>
+            </div>
+
+            {/* Purchase Price Input */}
+            {newAnimal.source === "Purchased" && (
+              <div className="p-3 bg-blue-50/60 rounded-2xl border border-blue-100 animate-in fade-in">
+                <label className="text-[10px] font-bold text-blue-900 uppercase tracking-wider block mb-1">
+                  Purchase Price (₦ / Currency)
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="e.g. 150000"
+                    value={newAnimal.purchasePrice}
+                    onChange={(e) => setNewAnimal({ ...newAnimal, purchasePrice: e.target.value })}
+                    className="w-full p-2.5 pl-8 bg-white border rounded-xl text-xs font-bold text-slate-900 outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-400">₦</span>
+                </div>
+              </div>
+            )}
+
+            {/* Death Date Input if marked Deceased upon registration */}
+            {newAnimal.status === "Deceased" && (
+              <div className="p-3 bg-red-50 rounded-2xl border border-red-200 animate-in fade-in">
+                <label className="text-[10px] font-bold text-red-900 uppercase tracking-wider block mb-1">
+                  Date of Death (Optional)
+                </label>
+                <input
+                  type="date"
+                  value={newAnimal.deathDate}
+                  onChange={(e) => setNewAnimal({ ...newAnimal, deathDate: e.target.value })}
+                  className="w-full p-2 bg-white border rounded-xl text-xs font-bold text-slate-800"
                 />
               </div>
             )}
