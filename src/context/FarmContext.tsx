@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { showSuccess, showError } from "@/utils/toast";
 import { supabase } from "@/lib/supabaseClient";
-import { compressImage } from "@/utils/imageCompressor";
+import { compressImage, uploadOrCompressImage } from "@/utils/imageCompressor";
 
 export const DEFAULT_ANIMAL_PHOTO = "/placeholder.svg";
 
@@ -627,15 +627,45 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     fetchingAnimalsRef.current = true;
 
     try {
+      // Attempt to load standard fields
+      let dataRows: any[] | null = null;
+      
       const { data, error } = await supabase
         .from("animals")
         .select("id, animal_code, name, species, breed, sex, dob, purchase_date, purchase_price, death_date, source, status, health_status, primary_photo, photos, mother_id, father_id, notes, created_at")
         .eq("user_id", session.userId)
         .order("created_at", { ascending: false });
 
-      if (!error && data) {
-        setAnimals(data.map((a: any) => {
+      if (error) {
+        console.warn("[FarmContext] Full animals query failed (possible 500 payload limit). Retrying lightweight query...", error);
+        // Fallback query omitting heavy photo columns
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from("animals")
+          .select("id, animal_code, name, species, breed, sex, dob, purchase_date, purchase_price, death_date, source, status, health_status, mother_id, father_id, notes, created_at")
+          .eq("user_id", session.userId)
+          .order("created_at", { ascending: false });
+
+        if (!fallbackError && fallbackData) {
+          dataRows = fallbackData.map((a: any) => ({
+            ...a,
+            primary_photo: DEFAULT_ANIMAL_PHOTO,
+            photos: [DEFAULT_ANIMAL_PHOTO]
+          }));
+        } else {
+          console.error("[FarmContext] Lightweight query error:", fallbackError);
+        }
+      } else {
+        dataRows = data;
+      }
+
+      if (dataRows) {
+        setAnimals(dataRows.map((a: any) => {
           const { ownership, cleanNotes } = parseOwnershipFromNotes(a.notes || "");
+          const photoUrl = a.primary_photo && a.primary_photo.length < 500000 ? a.primary_photo : DEFAULT_ANIMAL_PHOTO;
+          const photosList = (a.photos && Array.isArray(a.photos) && a.photos.length > 0)
+            ? a.photos.filter((p: string) => p && p.length < 500000)
+            : [photoUrl];
+
           return {
             id: a.id,
             animal_code: a.animal_code,
@@ -650,8 +680,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
             source: a.source || "Born on farm",
             status: a.status || "Healthy",
             healthStatus: a.health_status || "Healthy",
-            primaryPhoto: a.primary_photo || DEFAULT_ANIMAL_PHOTO,
-            photos: (a.photos && Array.isArray(a.photos) && a.photos.length > 0) ? a.photos : [a.primary_photo || DEFAULT_ANIMAL_PHOTO],
+            primaryPhoto: photoUrl,
+            photos: photosList.length > 0 ? photosList : [DEFAULT_ANIMAL_PHOTO],
             ownershipType: ownership.ownershipType,
             ownerName: ownership.ownerName,
             custodian: ownership.custodian,
@@ -691,6 +721,11 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (resAnimal.data) {
         const a = resAnimal.data;
         const { ownership, cleanNotes } = parseOwnershipFromNotes(a.notes || "");
+        const photoUrl = a.primary_photo && a.primary_photo.length < 500000 ? a.primary_photo : DEFAULT_ANIMAL_PHOTO;
+        const photosList = (a.photos && Array.isArray(a.photos) && a.photos.length > 0)
+          ? a.photos.filter((p: string) => p && p.length < 500000)
+          : [photoUrl];
+
         const loadedAnimal: Animal = {
           id: a.id,
           animal_code: a.animal_code,
@@ -705,8 +740,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
           source: a.source,
           status: a.status,
           healthStatus: a.health_status,
-          primaryPhoto: a.primary_photo || DEFAULT_ANIMAL_PHOTO,
-          photos: (a.photos && a.photos.length > 0) ? a.photos : [DEFAULT_ANIMAL_PHOTO],
+          primaryPhoto: photoUrl,
+          photos: photosList.length > 0 ? photosList : [DEFAULT_ANIMAL_PHOTO],
           ownershipType: ownership.ownershipType,
           ownerName: ownership.ownerName,
           custodian: ownership.custodian,
@@ -1036,35 +1071,26 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [session.isAuthenticated, session.userId, loadAccount]);
 
   const logActivity = async (type: string, description: string, actor: string, targetId?: string) => {
+    const newId = "l_" + Date.now();
     const newLog = {
-      id: "l_" + Date.now(),
+      id: newId,
       type,
       description,
       date: new Date().toISOString(),
       actor,
-      target_id: targetId
+      targetId
     };
 
-    setActivityLogs(prev => [
-      {
-        id: newLog.id,
-        type: newLog.type,
-        description: newLog.description,
-        date: newLog.date,
-        actor: newLog.actor,
-        targetId: newLog.target_id
-      },
-      ...prev
-    ].slice(0, 50));
+    setActivityLogs(prev => [newLog, ...prev].slice(0, 50));
 
     if (session.userId) {
       try {
         await supabase.from("activity_logs").insert([{
-          id: newLog.id,
-          type: newLog.type,
-          description: newLog.description,
+          id: newId,
+          type,
+          description,
           date: newLog.date,
-          actor: newLog.actor,
+          actor,
           target_id: targetId,
           user_id: session.userId
         }]);
@@ -1263,7 +1289,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       // Check if target farm name conflicts with another user's farm
-      const { data: existingFarm, error: checkErr } = await supabase
+      const { data: existingFarm } = await supabase
         .from("accounts")
         .select("id, user_id")
         .ilike("farm_name", normalizedFarmName)
@@ -1476,6 +1502,11 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const encodedNotes = encodeOwnershipIntoNotes(ownershipInfo, animalData.notes || "");
 
+    const cleanPhotos = (animalData.photos && animalData.photos.length > 0)
+      ? animalData.photos
+      : [DEFAULT_ANIMAL_PHOTO];
+    const cleanPrimary = animalData.primaryPhoto || cleanPhotos[0] || DEFAULT_ANIMAL_PHOTO;
+
     const dbPayload = {
       id: newId,
       animal_code: generatedCode,
@@ -1490,8 +1521,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       source: animalData.source,
       status: animalData.status,
       health_status: animalData.healthStatus,
-      primary_photo: animalData.primaryPhoto || DEFAULT_ANIMAL_PHOTO,
-      photos: (animalData.photos && animalData.photos.length > 0) ? animalData.photos : [DEFAULT_ANIMAL_PHOTO],
+      primary_photo: cleanPrimary,
+      photos: cleanPhotos,
       notes: encodedNotes,
       mother_id: animalData.parents?.motherId || null,
       father_id: animalData.parents?.fatherId || null,
@@ -1518,8 +1549,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       source: animalData.source,
       status: animalData.status,
       healthStatus: animalData.healthStatus,
-      primaryPhoto: animalData.primaryPhoto || DEFAULT_ANIMAL_PHOTO,
-      photos: (animalData.photos && animalData.photos.length > 0) ? animalData.photos : [DEFAULT_ANIMAL_PHOTO],
+      primaryPhoto: cleanPrimary,
+      photos: cleanPhotos,
       ownershipType: ownershipInfo.ownershipType,
       ownerName: ownershipInfo.ownerName,
       custodian: ownershipInfo.custodian,
@@ -1539,7 +1570,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const existing = animals.find(a => a.id === id);
     if (!existing) return;
 
-    // Disallow updates to deceased animals unless it is already deceased or being marked deceased
+    // Disallow updates to deceased animals unless changing status
     if (existing.status === "Deceased" && updates.status !== "Healthy" && updates.status !== "Active") {
       showError("This animal record is marked as deceased and is read-only.");
       return;
@@ -2149,20 +2180,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       if (photoData.file) {
-        const file = photoData.file;
-        const fileExt = file.name.split('.').pop() || 'jpg';
-        const filePath = `${session.userId}/${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
-
-        const { data: uploadData, error: uploadErr } = await supabase.storage
-          .from("farm-gallery")
-          .upload(filePath, file, { cacheControl: "3600", upsert: false });
-
-        if (!uploadErr && uploadData?.path) {
-          const { data: publicData } = supabase.storage.from("farm-gallery").getPublicUrl(uploadData.path);
-          finalImageUrl = publicData.publicUrl;
-        } else {
-          finalImageUrl = await compressImage(file, 800, 800, 0.7);
-        }
+        finalImageUrl = await uploadOrCompressImage(photoData.file, session.userId, supabase);
       }
 
       if (!finalImageUrl) {

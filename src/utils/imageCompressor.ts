@@ -5,26 +5,11 @@
  */
 export const compressImage = (
   file: File,
-  maxWidth = 600,
-  maxHeight = 600,
-  quality = 0.7
+  maxWidth = 500,
+  maxHeight = 500,
+  quality = 0.6
 ): Promise<string> => {
   return new Promise((resolve, reject) => {
-    // If file is already small (< 100KB), read directly
-    if (file.size < 100 * 1024) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (typeof reader.result === "string") {
-          resolve(reader.result);
-        } else {
-          reject(new Error("Failed to read file"));
-        }
-      };
-      reader.onerror = (err) => reject(err);
-      reader.readAsDataURL(file);
-      return;
-    }
-
     const reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onload = (event) => {
@@ -70,4 +55,38 @@ export const compressImage = (
     };
     reader.onerror = (err) => reject(err);
   });
+};
+
+/**
+ * Uploads an image file or compressed dataUrl to Supabase storage 'farm-gallery' bucket.
+ * Returns public URL if successful, otherwise returns compressed data URL fallback.
+ */
+export const uploadOrCompressImage = async (
+  file: File,
+  userId?: string,
+  supabaseClient?: any
+): Promise<string> => {
+  if (supabaseClient && userId) {
+    try {
+      const fileExt = file.name.split(".").pop() || "jpg";
+      const filePath = `animals/${userId}/${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+      const { data, error } = await supabaseClient.storage
+        .from("farm-gallery")
+        .upload(filePath, file, { cacheControl: "3600", upsert: true });
+
+      if (!error && data?.path) {
+        const { data: pubData } = supabaseClient.storage
+          .from("farm-gallery")
+          .getPublicUrl(data.path);
+        if (pubData?.publicUrl) {
+          return pubData.publicUrl;
+        }
+      }
+    } catch (e) {
+      console.warn("[uploadOrCompressImage] Storage upload fallback to compressed base64", e);
+    }
+  }
+
+  // Fallback to compressed base64 under 50KB
+  return await compressImage(file, 500, 500, 0.6);
 };
