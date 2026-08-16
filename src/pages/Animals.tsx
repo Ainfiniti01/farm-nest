@@ -261,19 +261,7 @@ export const Animals: React.FC = () => {
             <button
               key={st}
               onClick={() => setStatusFilter(st)}
-              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition ${
-                statusFilter === st
-                  ? "bg-slate-900 border-slate-900 text-white"
-                  : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
-              }`}
-            >
-              {st}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {<dyad-write path="src/pages/Animals.tsx" description="Complete Animals directory component with conditional date requirements, purchase price, deceased indicators, and user data isolation">
+              className={`px-2.5 py-1 rounded-lg text-[10<dyad-write path="src/pages/Animals.tsx" description="Complete Animals directory component with proper formatting and complete JSX tags">
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
