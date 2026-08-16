@@ -2271,12 +2271,7 @@ export const AnimalProfilePage: React.FC = () => {
           >
             <div className="flex items-center justify-between border-b pb-2">
               <h3 className="font-extrabold text-sm text-slate-900">Link Born Offspring</h3>
-              <button type="button" onClick={() => setShowAddOffspring(false)} className="text-slate-400 hover:text-slate-600">✕</button>
-            </div>
-
-            {/* Photo Upload & Camera Section */}
-            <div className="space-y-2">
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block">Offspring Portraits<dyad-write path="src/pages/AnimalProfilePage.tsx" description="Complete AnimalProfilePage with full offspring modal and robust photo handling">
+              <button type="button" onClick<dyad-write path="src/pages/AnimalProfilePage.tsx" description="Complete AnimalProfilePage with full offspring modal and robust photo handling">
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
@@ -4550,7 +4545,13 @@ export const AnimalProfilePage: React.FC = () => {
           >
             <div className="flex items-center justify-between border-b pb-2">
               <h3 className="font-extrabold text-sm text-slate-900">Link Born Offspring</h3>
-              <button type="button" onClick={() => setShowAddOffspring(false)} className="text-slate-400 hover:text-slate-600">✕</button>
+              <button 
+                type="button" 
+                onClick={() => setShowAddOffspring(false)} 
+                className="text-slate-400 hover:text-slate-600"
+              >
+                ✕
+              </button>
             </div>
 
             {/* Photo Upload & Camera Section */}
