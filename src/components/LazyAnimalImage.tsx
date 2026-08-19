@@ -7,7 +7,7 @@ interface LazyAnimalImageProps {
   alt: string;
   className?: string;
   containerClassName?: string;
-  onClick?: () => void;
+  onClick?: (e: React.MouseEvent) => void;
 }
 
 export const LazyAnimalImage: React.FC<LazyAnimalImageProps> = ({
@@ -21,14 +21,15 @@ export const LazyAnimalImage: React.FC<LazyAnimalImageProps> = ({
   const [hasError, setHasError] = useState(false);
 
   const fallbackSrc = "/placeholder.svg";
-  const imageSource = (!src || src.trim() === "" || hasError) ? fallbackSrc : src;
+  const isValidSrc = src && src.trim() !== "" && !hasError;
+  const imageSource = isValidSrc ? src : fallbackSrc;
 
   return (
     <div className={containerClassName} onClick={onClick}>
       {/* Loading Skeleton */}
       {!isLoaded && !hasError && (
-        <div className="absolute inset-0 bg-slate-200 animate-pulse flex items-center justify-center">
-          <span className="text-slate-400 text-xs font-semibold">📷</span>
+        <div className="absolute inset-0 bg-slate-200/80 animate-pulse flex items-center justify-center z-0">
+          <span className="text-slate-400 text-xs font-semibold select-none">📷</span>
         </div>
       )}
 
