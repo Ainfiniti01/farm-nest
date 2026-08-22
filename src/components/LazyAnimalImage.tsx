@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 interface LazyAnimalImageProps {
   src?: string;
@@ -21,8 +21,14 @@ export const LazyAnimalImage: React.FC<LazyAnimalImageProps> = ({
   const [hasError, setHasError] = useState(false);
 
   const fallbackSrc = "/placeholder.svg";
-  const isValidSrc = src && src.trim() !== "" && !hasError;
+  const isValidSrc = src && src.trim() !== "" && src !== fallbackSrc && !hasError;
   const imageSource = isValidSrc ? src : fallbackSrc;
+
+  useEffect(() => {
+    // Reset state when src changes
+    setIsLoaded(false);
+    setHasError(false);
+  }, [src]);
 
   return (
     <div className={containerClassName} onClick={onClick}>

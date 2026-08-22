@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useFarm, Animal, SPECIES_OPTIONS } from "@/context/FarmContext";
 import { uploadOrCompressImage } from "@/utils/imageCompressor";
+import { LazyAnimalImage } from "@/components/LazyAnimalImage";
 import { supabase } from "@/lib/supabaseClient";
 import { 
   Search, 
@@ -45,6 +46,7 @@ export const Animals: React.FC = () => {
     sex: "Female" as Animal["sex"],
     dob: new Date().toISOString().split("T")[0],
     purchaseDate: "",
+    purchasePrice: "",
     source: "Born on farm" as Animal["source"],
     status: "Healthy" as Animal["status"],
     notes: "",
@@ -113,6 +115,9 @@ export const Animals: React.FC = () => {
         const defaultPhoto = "/placeholder.svg";
         const finalPhotos = newAnimal.photos.length > 0 ? newAnimal.photos : [defaultPhoto];
         const finalPrimary = newAnimal.primaryPhoto || finalPhotos[0];
+        const parsedPrice = newAnimal.source === "Purchased" && newAnimal.purchasePrice && !isNaN(Number(newAnimal.purchasePrice))
+          ? parseFloat(newAnimal.purchasePrice)
+          : undefined;
 
         addAnimal({
           name: newAnimal.name,
@@ -120,7 +125,8 @@ export const Animals: React.FC = () => {
           breed: newAnimal.breed || "Local Breed",
           sex: newAnimal.sex,
           dob: newAnimal.dob,
-          purchaseDate: newAnimal.purchaseDate || undefined,
+          purchaseDate: newAnimal.source === "Purchased" ? (newAnimal.purchaseDate || undefined) : undefined,
+          purchasePrice: parsedPrice,
           source: newAnimal.source,
           status: newAnimal.status,
           healthStatus: "Healthy",
@@ -142,6 +148,7 @@ export const Animals: React.FC = () => {
           sex: "Female",
           dob: new Date().toISOString().split("T")[0],
           purchaseDate: "",
+          purchasePrice: "",
           source: "Born on farm",
           status: "Healthy",
           notes: "",
@@ -269,15 +276,16 @@ export const Animals: React.FC = () => {
               }`}
             >
               <div className="relative h-32 bg-slate-100">
-                <img
-                  src={animal.primaryPhoto || "/placeholder.svg"}
+                <LazyAnimalImage
+                  src={animal.primaryPhoto}
                   alt={displayName}
                   onClick={() => setFullscreenPhoto(animal.primaryPhoto || "/placeholder.svg")}
                   className={`w-full h-full object-cover group-hover:scale-105 transition duration-300 cursor-zoom-in ${
                     isDeceased ? 'grayscale' : ''
                   }`}
+                  containerClassName="w-full h-full"
                 />
-                <div className="absolute top-2 right-2">
+                <div className="absolute top-2 right-2 z-10 pointer-events-none">
                   <span className={`text-[9px] font-black tracking-wide px-2 py-0.5 rounded-full shadow ${
                     isDeceased ? "bg-red-200 text-red-900 border border-red-300" :
                     animal.status === "Sold" ? "bg-slate-200 text-slate-700" :
@@ -494,7 +502,7 @@ export const Animals: React.FC = () => {
                 <select
                   value={newAnimal.source}
                   onChange={(e) => setNewAnimal({ ...newAnimal, source: e.target.value as any })}
-                  className="w-full p-2 bg-slate-50 border rounded-xl text-xs mt-1"
+                  className="w-full p-2 bg-slate-50 border rounded-xl text-xs mt-1 font-semibold"
                 >
                   <option value="Born on farm">Born on farm</option>
                   <option value="Purchased">Purchased</option>
@@ -533,10 +541,27 @@ export const Animals: React.FC = () => {
                   type="date"
                   value={newAnimal.purchaseDate}
                   onChange={(e) => setNewAnimal({ ...newAnimal, purchaseDate: e.target.value })}
-                  className="w-full p-2 bg-slate-50 border rounded-xl text-xs mt-1"
+                  disabled={newAnimal.source === "Born on farm"}
+                  className="w-full p-2 bg-slate-50 border rounded-xl text-xs mt-1 disabled:opacity-40"
                 />
               </div>
             </div>
+
+            {newAnimal.source === "Purchased" && (
+              <div>
+                <label className="text-[10px] font-bold text-emerald-800 uppercase block mb-1">
+                  Purchase Price (Optional)
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  placeholder="e.g. 85000"
+                  value={newAnimal.purchasePrice}
+                  onChange={(e) => setNewAnimal({ ...newAnimal, purchasePrice: e.target.value })}
+                  className="w-full p-2.5 bg-emerald-50/40 border border-emerald-200 rounded-xl text-xs font-semibold outline-none focus:ring-1 focus:ring-emerald-500"
+                />
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div>
