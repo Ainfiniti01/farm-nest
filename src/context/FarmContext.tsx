@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { showSuccess, showError } from "@/utils/toast";
 import { supabase } from "@/lib/supabaseClient";
+import { ensureStorageUrl, uploadImageToStorage } from "@/utils/imageCompressor";
 
 export const DEFAULT_ANIMAL_PHOTO = "/placeholder.svg";
 
@@ -153,7 +154,6 @@ export const formatDbError = (err: any, fallbackMessage = "An unexpected error o
   return msg || fallbackMessage;
 };
 
-// Normalize legacy statuses into separate lifecycle, health, and reproductive states
 export const normalizeStatuses = (rawStatus: string, rawHealth?: string, rawRepro?: ReproductiveStatus): {
   status: LifecycleStatus;
   healthStatus: HealthStatus;
@@ -170,7 +170,6 @@ export const normalizeStatuses = (rawStatus: string, rawHealth?: string, rawRepr
   else if (lower === "retired") status = "Retired";
   else if (lower === "active") status = "Active";
 
-  // Handle legacy status values that mixed health/reproduction into status
   if (lower === "sick") {
     status = "Active";
     healthStatus = "Sick";
@@ -461,6 +460,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const fetchingGalleryRef = useRef<boolean>(false);
   const fetchingAnimalProfileRef = useRef<string | null>(null);
   const isLoggingOutRef = useRef<boolean>(false);
+  const isMigratingBase64Ref = useRef<boolean>(false);
 
   const [accountId, setAccountId] = useState<string | null>(null);
   
@@ -509,6 +509,54 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     fetchingContactsRef.current = false;
     fetchingGalleryRef.current = false;
     fetchingAnimalProfileRef.current = null;
+    isMigratingBase64Ref.current = false;
+  }, []);
+
+  /**
+   * Background migration: Converts any legacy base64 image strings in the animals table
+   * into lightweight Supabase Storage URLs and updates the DB rows.
+   */
+  const migrateLegacyBase64Animals = useCallback(async (rawAnimalsList: any[], userId: string) => {
+    if (isMigratingBase64Ref.current) return;
+    const recordsToMigrate = rawAnimalsList.filter(
+      (a) =>
+        (a.primary_photo && a.primary_photo.startsWith("data:image/")) ||
+        (Array.isArray(a.photos) && a.photos.some((p: string) => p && p.startsWith("data:image/")))
+    );
+
+    if (recordsToMigrate.length === 0) return;
+    isMigratingBase64Ref.current = true;
+
+    try {
+      for (const item of recordsToMigrate) {
+        let newPrimary = item.primary_photo;
+        if (newPrimary && newPrimary.startsWith("data:image/")) {
+          newPrimary = await ensureStorageUrl(newPrimary, userId, "animals");
+        }
+
+        let newPhotos = item.photos;
+        if (Array.isArray(newPhotos) && newPhotos.some((p: string) => p && p.startsWith("data:image/"))) {
+          newPhotos = await Promise.all(
+            newPhotos.map((p: string) => (p && p.startsWith("data:image/") ? ensureStorageUrl(p, userId, "animals") : p))
+          );
+        }
+
+        const updatePayload: any = {};
+        if (newPrimary !== item.primary_photo) updatePayload.primary_photo = newPrimary;
+        if (newPhotos !== item.photos) updatePayload.photos = newPhotos;
+
+        if (Object.keys(updatePayload).length > 0) {
+          await supabase.from("animals").update(updatePayload).eq("id", item.id).eq("user_id", userId);
+          setAnimals((prev) =>
+            prev.map((a) => (a.id === item.id ? { ...a, primaryPhoto: newPrimary, photos: newPhotos || [newPrimary] } : a))
+          );
+        }
+      }
+    } catch (e) {
+      console.warn("[FarmContext] Base64 migration notice:", e);
+    } finally {
+      isMigratingBase64Ref.current = false;
+    }
   }, []);
 
   const loadAccount = useCallback(async (force = false) => {
@@ -617,6 +665,9 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
           };
         }));
         hasLoadedAnimalsRef.current = true;
+
+        // Trigger background cleanup if any base64 remains
+        migrateLegacyBase64Animals(resAnimals.data, currentUserId);
       }
 
       if (resTreatments.data) {
@@ -685,7 +736,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       fetchingDashboardRef.current = false;
     }
-  }, [session.isAuthenticated, session.userId, session.email]);
+  }, [session.isAuthenticated, session.userId, session.email, migrateLegacyBase64Animals]);
 
   const loadAnimals = useCallback(async (force = false) => {
     if (!session.isAuthenticated || !session.userId) return;
@@ -735,13 +786,14 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
           };
         }));
         hasLoadedAnimalsRef.current = true;
+        migrateLegacyBase64Animals(data, session.userId);
       }
     } catch (err) {
       console.error("[FarmContext] Load animals unexpected error:", err);
     } finally {
       fetchingAnimalsRef.current = false;
     }
-  }, [session.isAuthenticated, session.userId]);
+  }, [session.isAuthenticated, session.userId, migrateLegacyBase64Animals]);
 
   const loadAnimalProfile = useCallback(async (animalId: string, force = false) => {
     if (!animalId || !session.isAuthenticated || !session.userId) return;
@@ -803,6 +855,14 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
           return [...prev, loadedAnimal];
         });
+
+        // If this animal profile has base64 photos, migrate it in the background
+        if (
+          (a.primary_photo && a.primary_photo.startsWith("data:image/")) ||
+          (Array.isArray(a.photos) && a.photos.some((p: string) => p && p.startsWith("data:image/")))
+        ) {
+          migrateLegacyBase64Animals([a], currentUserId);
+        }
       }
 
       if (resHealth.data) {
@@ -880,7 +940,7 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       fetchingAnimalProfileRef.current = null;
     }
-  }, [session.isAuthenticated, session.userId]);
+  }, [session.isAuthenticated, session.userId, migrateLegacyBase64Animals]);
 
   const loadInventory = useCallback(async (force = false) => {
     if (!session.isAuthenticated || !session.userId) return;
@@ -1550,10 +1610,17 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       animalData.notes || ""
     );
 
-    const cleanPhotos = (animalData.photos && animalData.photos.length > 0)
+    // Convert any base64 images to Supabase Storage URLs before DB insertion
+    const rawPhotos = (animalData.photos && animalData.photos.length > 0)
       ? animalData.photos
       : [DEFAULT_ANIMAL_PHOTO];
-    const cleanPrimary = animalData.primaryPhoto || cleanPhotos[0] || DEFAULT_ANIMAL_PHOTO;
+    
+    const cleanPhotos = await Promise.all(
+      rawPhotos.map(p => ensureStorageUrl(p, session.userId, "animals"))
+    );
+    const cleanPrimary = animalData.primaryPhoto 
+      ? await ensureStorageUrl(animalData.primaryPhoto, session.userId, "animals")
+      : (cleanPhotos[0] || DEFAULT_ANIMAL_PHOTO);
 
     const dbPayload = {
       id: newId,
@@ -1638,9 +1705,19 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const baseNotes = updates.notes !== undefined ? updates.notes : (existing.notes || "");
     const encodedNotes = encodeExtendedDataIntoNotes(currentOwnership, currentRepro, baseNotes);
 
-    const payload: any = {
-      notes: encodedNotes
-    };
+    // Build targeted payload with ONLY changed fields to avoid re-transmitting heavy data
+    const payload: any = {};
+
+    if (
+      updates.notes !== undefined ||
+      updates.ownershipType !== undefined ||
+      updates.ownerName !== undefined ||
+      updates.custodian !== undefined ||
+      updates.agreement !== undefined ||
+      updates.reproductiveStatus !== undefined
+    ) {
+      payload.notes = encodedNotes;
+    }
 
     if (updates.name !== undefined) payload.name = updates.name.trim();
     if (updates.species !== undefined) payload.species = updates.species;
@@ -1653,12 +1730,23 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (updates.source !== undefined) payload.source = updates.source;
     if (updates.status !== undefined) payload.status = updates.status;
     if (updates.healthStatus !== undefined) payload.health_status = updates.healthStatus;
-    if (updates.primaryPhoto !== undefined) payload.primary_photo = updates.primaryPhoto;
-    if (updates.photos !== undefined) payload.photos = updates.photos;
+
+    if (updates.primaryPhoto !== undefined) {
+      payload.primary_photo = await ensureStorageUrl(updates.primaryPhoto, session.userId, "animals");
+    }
+
+    if (updates.photos !== undefined) {
+      payload.photos = await Promise.all(
+        updates.photos.map(p => ensureStorageUrl(p, session.userId, "animals"))
+      );
+    }
+
     if (updates.parents !== undefined) {
       payload.mother_id = updates.parents.motherId || null;
       payload.father_id = updates.parents.fatherId || null;
     }
+
+    if (Object.keys(payload).length === 0) return;
 
     const { error } = await supabase
       .from("animals")
@@ -1680,6 +1768,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return {
           ...a,
           ...updates,
+          primaryPhoto: payload.primary_photo !== undefined ? payload.primary_photo : a.primaryPhoto,
+          photos: payload.photos !== undefined ? payload.photos : a.photos,
           parents: newParents,
           ownershipType: currentOwnership.ownershipType,
           ownerName: currentOwnership.ownerName,
@@ -2242,7 +2332,9 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       if (photoData.file) {
-        finalImageUrl = await uploadOrCompressImage(photoData.file, session.userId, supabase);
+        finalImageUrl = await uploadImageToStorage(photoData.file, session.userId, "farm-gallery");
+      } else if (photoData.dataUrl) {
+        finalImageUrl = await ensureStorageUrl(photoData.dataUrl, session.userId, "farm-gallery");
       }
 
       if (!finalImageUrl) {

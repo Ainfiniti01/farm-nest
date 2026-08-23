@@ -3,14 +3,14 @@
 import React, { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useFarm, Animal, HealthRecord, Reminder, SPECIES_OPTIONS } from "@/context/FarmContext";
-import { compressImage } from "@/utils/imageCompressor";
+import { uploadOrCompressImage } from "@/utils/imageCompressor";
 import { 
   Home, 
   Search, 
   Plus, 
   Calendar, 
   Camera, 
-  Upload,
+  Upload, 
   Settings as SettingsIcon, 
   ChevronRight, 
   Package,
@@ -28,6 +28,7 @@ const Index = () => {
     inventory,
     reminders,
     farmProfile,
+    session,
     addAnimal,
     addHealthRecord,
     addTreatment,
@@ -106,18 +107,18 @@ const Index = () => {
     if (files && files.length > 0) {
       try {
         const fileList = Array.from(files);
-        const compressedList = await Promise.all(
-          fileList.map(file => compressImage(file, 600, 600, 0.7))
+        const uploadedList = await Promise.all(
+          fileList.map(file => uploadOrCompressImage(file, session.userId))
         );
         setNewAnimal(prev => {
-          const allPhotos = [...prev.photos, ...compressedList];
+          const allPhotos = [...prev.photos, ...uploadedList];
           return {
             ...prev,
             primaryPhoto: prev.primaryPhoto || allPhotos[0] || "",
             photos: allPhotos
           };
         });
-        showSuccess(`${compressedList.length} photo${compressedList.length > 1 ? "s" : ""} attached!`);
+        showSuccess(`${uploadedList.length} photo${uploadedList.length > 1 ? "s" : ""} attached!`);
       } catch (err) {
         showError("Failed to process images.");
       }
@@ -151,7 +152,227 @@ const Index = () => {
       title: "Register New Livestock?",
       message: `Confirm addition of ${finalSpecies} to pasture paddock registry database.`,
       onConfirm: () => {
-        const defaultPhoto = "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=400";
+        const defaultPhoto = "/placeholder.svg";
+        const finalPhotos = newAnimal.photos.length > 0 ? newAnimal.photos : [defaultPhoto];
+        const finalPrimary = newAnimal.primaryPhoto || finalPhotos[0];
+
+        addAnimal({
+          name: newAnimal.name,
+          species: finalSpecies,
+          breed: newAnimal.breed || "Local Breed",
+          sex: newAnimal.sex,
+          dob: newAnimal.dob,
+          source: newAnimal.source,
+          status: newAnimal.status,
+          healthStatus: "Healthy",
+          primaryPhoto: finalPrimary,
+          photos: finalPhotos,
+          notes: newAnimal.notes,
+          parents: {
+            motherId: newAnimal.motherId || undefined,
+            fatherId: newAnimal.fatherId || undefined
+          }
+        });
+        setShowAddAnimal(false);
+        setPendingConfirm(null);
+        setSelectedSpeciesOption("Goat");
+        setCustomSpecies("");
+        setNewAnimal({
+          name: "",
+          breed: "",
+          sex: "Female",
+          dob: new Date().toISOString().split("T")[0],
+          source: "Born on farm",
+          status: "Healthy",
+          notes: "",
+          primaryPhoto: "",
+          photos: [],
+          motherId: "",
+          fatherId: "",
+        });
+      }
+    });
+  };
+
+  const triggerToggleReminderConfirm = (reminderId: string, text: string) => {
+    setPendingConfirm({
+      title: "Complete Reminder Procedure?",
+      message: `Verify execution task status of procedure: "${text}"?`,
+      onConfirm: () => {
+        toggleReminder(reminderId);
+        setPendingConfirm(null);
+        showSuccess("Reminder status toggled successfully!");
+      }
+    });
+  };
+
+  const activeAnimals = animals.filter(a => a.status !== "Sold" && a.status !== "Deceased");
+  const totalAnimals = activeAnimals.length;
+  const attentionCount = activeAnimals.filter(a => a.status === "Sick" || a.status === "Under Treatment" || a.status === "Monitoring").length;
+
+  const filteredAnimals = animals.filter(animal => {
+    const codeMatch = animal.animal_code.toLowerCase().includes(searchQuery.toLowerCase());
+    const nameMatch = animal.name?.toLowerCase().includes(searchQuery.toLowerCase());
+    const breedMatch = animal.breed.toLowerCase().includes(searchQuery.toLowerCase());
+    const speciesTextMatch = animal.species.toLowerCase().includes(searchQuery.toLowerCase());
+    const queryMatch = codeMatch || nameMatch || breedMatch || speciesTextMatch;
+
+    const speciesMatchFilter = speciesFilter<dyad-write path="src/pages/Index.tsx" description="Complete Index.tsx component with efficient photo uploads and fast rendering">
+"use client";
+
+import React, { useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { useFarm, Animal, HealthRecord, Reminder, SPECIES_OPTIONS } from "@/context/FarmContext";
+import { uploadOrCompressImage } from "@/utils/imageCompressor";
+import { 
+  Home, 
+  Search, 
+  Plus, 
+  Calendar, 
+  Camera, 
+  Upload, 
+  Settings as SettingsIcon, 
+  ChevronRight, 
+  Package,
+  HelpCircle,
+  Check,
+  LogOut,
+  X
+} from "lucide-react";
+import { showSuccess, showError } from "@/utils/toast";
+
+const Index = () => {
+  const {
+    animals,
+    treatments,
+    inventory,
+    reminders,
+    farmProfile,
+    session,
+    addAnimal,
+    addHealthRecord,
+    addTreatment,
+    addReminder,
+    toggleReminder,
+    logout
+  } = useFarm();
+
+  const navigate = useNavigate();
+
+  const [activeTab, setActiveTab] = useState<"dashboard" | "animals" | "ai" | "inventory" | "settings">("dashboard");
+
+  const [showAddAnimal, setShowAddAnimal] = useState(false);
+  const [selectedSpeciesOption, setSelectedSpeciesOption] = useState<string>("Goat");
+  const [customSpecies, setCustomSpecies] = useState<string>("");
+
+  const [newAnimal, setNewAnimal] = useState({
+    name: "",
+    breed: "",
+    sex: "Female" as Animal["sex"],
+    dob: new Date().toISOString().split("T")[0],
+    source: "Born on farm" as Animal["source"],
+    status: "Healthy" as Animal["status"],
+    notes: "",
+    primaryPhoto: "",
+    photos: [] as string[],
+    motherId: "",
+    fatherId: "",
+  });
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  const [showAddHealth, setShowAddHealth] = useState(false);
+  const [newHealth, setNewHealth] = useState({
+    type: "Observation" as HealthRecord["type"],
+    details: "",
+    medication: "",
+    recordedBy: farmProfile.ownerName || "Operator",
+    date: new Date().toISOString().split("T")[0],
+  });
+
+  const [showAddTreatment, setShowAddTreatment] = useState(false);
+  const [newTreatment, setNewTreatment] = useState({
+    condition: "",
+    medication: "",
+    startDate: new Date().toISOString().split("T")[0],
+    endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+    notes: "",
+    followUpDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+  });
+
+  const [showAddReminder, setShowAddReminder] = useState(false);
+  const [newReminderForm, setNewReminderForm] = useState({
+    title: "",
+    type: "Vaccination" as Reminder["type"],
+    dueDate: new Date().toISOString().split("T")[0],
+    animalId: "",
+    notes: ""
+  });
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [speciesFilter, setSpeciesFilter] = useState<string>("All");
+  const [statusFilter, setStatusFilter] = useState<string>("All");
+
+  const [pendingConfirm, setPendingConfirm] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  } | null>(null);
+
+  const [fullscreenPhoto, setFullscreenPhoto] = useState<string | null>(null);
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      try {
+        const fileList = Array.from(files);
+        const uploadedList = await Promise.all(
+          fileList.map(file => uploadOrCompressImage(file, session.userId))
+        );
+        setNewAnimal(prev => {
+          const allPhotos = [...prev.photos, ...uploadedList];
+          return {
+            ...prev,
+            primaryPhoto: prev.primaryPhoto || allPhotos[0] || "",
+            photos: allPhotos
+          };
+        });
+        showSuccess(`${uploadedList.length} photo${uploadedList.length > 1 ? "s" : ""} attached!`);
+      } catch (err) {
+        showError("Failed to process images.");
+      }
+    }
+  };
+
+  const removeNewAnimalPhoto = (index: number) => {
+    setNewAnimal(prev => {
+      const updatedPhotos = prev.photos.filter((_, idx) => idx !== index);
+      return {
+        ...prev,
+        photos: updatedPhotos,
+        primaryPhoto: prev.primaryPhoto === prev.photos[index] ? (updatedPhotos[0] || "") : prev.primaryPhoto
+      };
+    });
+  };
+
+  const finalSpecies = selectedSpeciesOption === "Other" 
+    ? (customSpecies.trim() || "Other") 
+    : selectedSpeciesOption;
+
+  const triggerCreateAnimal = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (selectedSpeciesOption === "Other" && !customSpecies.trim()) {
+      showError("Please enter a custom species name.");
+      return;
+    }
+
+    setPendingConfirm({
+      title: "Register New Livestock?",
+      message: `Confirm addition of ${finalSpecies} to pasture paddock registry database.`,
+      onConfirm: () => {
+        const defaultPhoto = "/placeholder.svg";
         const finalPhotos = newAnimal.photos.length > 0 ? newAnimal.photos : [defaultPhoto];
         const finalPrimary = newAnimal.primaryPhoto || finalPhotos[0];
 
@@ -399,10 +620,9 @@ const Index = () => {
               </div>
             </div>
 
-            {/* Quick Action Hub & Reminders dual columns */}
+            {/* Quick Action Hub & Reminders */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               
-              {/* Quick Actions Card */}
               <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm space-y-4">
                 <h3 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
                   <Plus size={16} className="text-emerald-600" />
@@ -433,7 +653,6 @@ const Index = () => {
                 </div>
               </div>
 
-              {/* Due Reminders Card */}
               <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
@@ -499,7 +718,6 @@ const Index = () => {
         {activeTab === "animals" && (
           <div className="space-y-4">
             
-            {/* Header + Add Button */}
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-black text-slate-900">Livestock Directory</h2>
@@ -514,7 +732,6 @@ const Index = () => {
               </button>
             </div>
 
-            {/* Roster Search Bar */}
             <div className="flex gap-2">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
@@ -528,7 +745,6 @@ const Index = () => {
               </div>
             </div>
 
-            {/* Filter Pills */}
             <div className="space-y-1.5">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Quick Category Filter</p>
               <div className="flex flex-wrap gap-1.5">
@@ -559,7 +775,6 @@ const Index = () => {
               </div>
             </div>
 
-            {/* Health Filter Row */}
             <div className="flex flex-wrap gap-1">
               {["All", "Healthy", "Monitoring", "Sick", "Under Treatment", "Pregnant", "Sold", "Deceased"].map((st) => (
                 <button
@@ -576,7 +791,6 @@ const Index = () => {
               ))}
             </div>
 
-            {/* Animals Grid List */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-2">
               {filteredAnimals.map((animal) => {
                 const hasCustomName = Boolean(animal.name && animal.name.trim().length > 0);
@@ -587,12 +801,11 @@ const Index = () => {
                     key={animal.id}
                     className="bg-white rounded-2xl overflow-hidden border border-slate-100 shadow-sm hover:border-emerald-300 transition flex flex-col group animate-in fade-in"
                   >
-                    {/* Animal Photo */}
                     <div className="relative h-32 bg-slate-100">
                       <img
-                        src={animal.primaryPhoto}
+                        src={animal.primaryPhoto || "/placeholder.svg"}
                         alt={displayName}
-                        onClick={() => setFullscreenPhoto(animal.primaryPhoto)}
+                        onClick={() => setFullscreenPhoto(animal.primaryPhoto || "/placeholder.svg")}
                         className="w-full h-full object-cover group-hover:scale-105 transition duration-300 cursor-zoom-in"
                       />
                       <div className="absolute top-2 right-2">
@@ -607,7 +820,6 @@ const Index = () => {
                       </div>
                     </div>
 
-                    {/* Animal Identity */}
                     <div 
                       onClick={() => navigate(`/animals/${animal.id}`)}
                       className="p-3 flex-1 flex flex-col justify-between cursor-pointer"
@@ -662,7 +874,7 @@ const Index = () => {
 
       </main>
 
-      {/* DIALOG 1: REGISTER ANIMAL */}
+      {/* REGISTER ANIMAL DIALOG */}
       {showAddAnimal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
           <form 
@@ -674,7 +886,6 @@ const Index = () => {
               <button type="button" onClick={() => setShowAddAnimal(false)} className="text-slate-400 hover:text-slate-600">✕</button>
             </div>
 
-            {/* Photo upload + Portrait file selector */}
             <div className="space-y-2">
               <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block">Take/Upload Animal Portraits (Multiple Allowed)</label>
               
@@ -714,7 +925,6 @@ const Index = () => {
                 />
               </div>
 
-              {/* Preview thumbnails */}
               {newAnimal.photos.length > 0 && (
                 <div className="grid grid-cols-4 gap-2 pt-2">
                   {newAnimal.photos.map((photo, idx) => (
@@ -776,7 +986,6 @@ const Index = () => {
               </div>
             </div>
 
-            {/* Custom Species Text Input when Other is selected */}
             {selectedSpeciesOption === "Other" && (
               <div className="animate-in fade-in">
                 <label className="text-[10px] font-bold text-emerald-800 uppercase block mb-1">
