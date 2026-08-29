@@ -334,121 +334,160 @@ export const Animals: React.FC = () => {
         </div>
       </div>
 
-      {/* Grid Cards List */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-2">
-        {filteredAnimals.map((animal) => {
-          const hasCustomName = Boolean(animal.name && animal.name.trim().length > 0);
-          const displayName = hasCustomName ? animal.name : animal.animal_code;
-          const isDeceased = animal.status === "Deceased";
-          const isPregnant = animal.reproductiveStatus === "Pregnant";
-          const isLactating = animal.reproductiveStatus === "Lactating";
-          const isBreeding = animal.reproductiveStatus === "Breeding";
+{/* Grid Cards List */}
+<div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-2">
+  {[...filteredAnimals]
+    .sort((a, b) => {
+      // Sort by the numeric portion of animal_code:
+      // YUSG001 → YUSR002 → YUSC003 → ...
+      const getCodeNumber = (code?: string) => {
+        if (!code) return Number.MAX_SAFE_INTEGER;
 
-          return (
-            <div
-              key={animal.id}
-              className={`bg-white rounded-2xl overflow-hidden border shadow-sm transition flex flex-col group ${
-                isDeceased ? 'border-red-100 bg-slate-50/50' : 'border-slate-100 hover:border-emerald-300'
+        const match = code.match(/(\d+)$/);
+        return match ? parseInt(match[1], 10) : Number.MAX_SAFE_INTEGER;
+      };
+
+      return getCodeNumber(a.animal_code) - getCodeNumber(b.animal_code);
+    })
+    .map((animal) => {
+      const hasCustomName = Boolean(
+        animal.name && animal.name.trim().length > 0
+      );
+
+      const displayName = hasCustomName
+        ? animal.name
+        : animal.animal_code;
+
+      const isDeceased = animal.status === "Deceased";
+      const isPregnant = animal.reproductiveStatus === "Pregnant";
+      const isLactating = animal.reproductiveStatus === "Lactating";
+      const isBreeding = animal.reproductiveStatus === "Breeding";
+
+      return (
+        <div
+          key={animal.id}
+          className={`bg-white rounded-2xl overflow-hidden border shadow-sm transition flex flex-col group ${
+            isDeceased
+              ? "border-red-100 bg-slate-50/50"
+              : "border-slate-100 hover:border-emerald-300"
+          }`}
+        >
+          <div className="relative h-32 bg-slate-100">
+            <LazyAnimalImage
+              src={animal.primaryPhoto}
+              alt={displayName}
+              onClick={() =>
+                setFullscreenPhoto(
+                  animal.primaryPhoto || "/placeholder.svg"
+                )
+              }
+              className={`w-full h-full object-cover group-hover:scale-105 transition duration-300 cursor-zoom-in ${
+                isDeceased ? "grayscale" : ""
               }`}
-            >
-              <div className="relative h-32 bg-slate-100">
-                <LazyAnimalImage
-                  src={animal.primaryPhoto}
-                  alt={displayName}
-                  onClick={() => setFullscreenPhoto(animal.primaryPhoto || "/placeholder.svg")}
-                  className={`w-full h-full object-cover group-hover:scale-105 transition duration-300 cursor-zoom-in ${
-                    isDeceased ? 'grayscale' : ''
-                  }`}
-                  containerClassName="w-full h-full"
-                />
-                
-                {/* Badges Stack */}
-                <div className="absolute top-2 right-2 z-10 pointer-events-none flex flex-col items-end gap-1">
-                  {isDeceased ? (
-                    <span className="text-[9px] font-black px-2 py-0.5 rounded-full shadow bg-red-200 text-red-900 border border-red-300">
-                      🕊️ Deceased
+              containerClassName="w-full h-full"
+            />
+
+            {/* Badges Stack */}
+            <div className="absolute top-2 right-2 z-10 pointer-events-none flex flex-col items-end gap-1">
+              {isDeceased ? (
+                <span className="text-[9px] font-black px-2 py-0.5 rounded-full shadow bg-red-200 text-red-900 border border-red-300">
+                  🕊️ Deceased
+                </span>
+              ) : (
+                <>
+                  {/* Lifecycle status - only show non-default statuses */}
+                  {animal.status && animal.status !== "Active" && (
+                    <span className="text-[9px] font-black px-2 py-0.5 rounded-full shadow bg-slate-200 text-slate-700">
+                      {animal.status}
                     </span>
-                  ) : (
-                    <>
-                      {animal.status && animal.status !== "Active" && (
-                        <span className="text-[9px] font-black px-2 py-0.5 rounded-full shadow bg-slate-200 text-slate-700">
-                          {animal.status}
-                        </span>
-                      )}
-
-                      {/* Authoritative Health Status Badge */}
-                      <span className={`text-[9px] font-black px-2 py-0.5 rounded-full shadow ${
-                        animal.healthStatus === "Healthy" ? "bg-emerald-100 text-emerald-800 border border-emerald-200" :
-                        animal.healthStatus === "Under Treatment" ? "bg-purple-100 text-purple-800 border border-purple-200" : 
-                        "bg-amber-100 text-amber-800 border border-amber-200"
-                      }`}>
-                        ● {animal.healthStatus || "Healthy"}
-                      </span>
-
-                      {/* Authoritative Reproductive Status Badges */}
-                      {isPregnant && (
-                        <span className="text-[9px] font-black px-2 py-0.5 rounded-full shadow bg-rose-100 text-rose-800 border border-rose-200">
-                          🤰 Pregnant
-                        </span>
-                      )}
-
-                      {isLactating && (
-                        <span className="text-[9px] font-black px-2 py-0.5 rounded-full shadow bg-blue-100 text-blue-800 border border-blue-200">
-                          🍼 Lactating
-                        </span>
-                      )}
-
-                      {isBreeding && (
-                        <span className="text-[9px] font-black px-2 py-0.5 rounded-full shadow bg-pink-100 text-pink-800 border border-pink-200">
-                          ❤️ In Breeding
-                        </span>
-                      )}
-                    </>
                   )}
-                </div>
-              </div>
 
-              <div 
-                onClick={() => handleOpenAnimal(animal.id)}
-                className="p-3 flex-1 flex flex-col justify-between cursor-pointer"
-              >
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-slate-400">{animal.species}</span>
-                    <span className="text-[10px] text-slate-500">{animal.sex === "Female" ? "♀️" : "♂️"}</span>
-                  </div>
-                  
-                  {/* Main Title Name Display */}
-                  <h4 className="font-extrabold text-xs text-slate-900 mt-0.5 truncate">
-                    {displayName}
-                  </h4>
+                  {/* Health Status */}
+                  <span
+                    className={`text-[9px] font-black px-2 py-0.5 rounded-full shadow ${
+                      animal.healthStatus === "Healthy"
+                        ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                        : animal.healthStatus === "Under Treatment"
+                        ? "bg-purple-100 text-purple-800 border border-purple-200"
+                        : "bg-amber-100 text-amber-800 border border-amber-200"
+                    }`}
+                  >
+                    ● {animal.healthStatus || "Healthy"}
+                  </span>
 
-                  {/* Secondary Code Display when custom name exists */}
-                  {hasCustomName && (
-                    <p className="text-[10px] font-mono text-slate-500 mt-0.5 truncate">
-                      {animal.animal_code}
-                    </p>
+                  {/* Reproductive Status */}
+                  {isPregnant && (
+                    <span className="text-[9px] font-black px-2 py-0.5 rounded-full shadow bg-rose-100 text-rose-800 border border-rose-200">
+                      🤰 Pregnant
+                    </span>
                   )}
-                </div>
 
-                <div className="pt-2 border-t border-slate-50 flex items-center justify-between mt-2">
-                  <span className="text-[9px] text-slate-400">{animal.breed}</span>
-                  {isDeceased ? (
-                    <Lock size={12} className="text-slate-400" />
-                  ) : (
-                    <ChevronRight size={12} className="text-slate-400" />
+                  {isLactating && (
+                    <span className="text-[9px] font-black px-2 py-0.5 rounded-full shadow bg-blue-100 text-blue-800 border border-blue-200">
+                      🍼 Lactating
+                    </span>
                   )}
-                </div>
-              </div>
+
+                  {isBreeding && (
+                    <span className="text-[9px] font-black px-2 py-0.5 rounded-full shadow bg-pink-100 text-pink-800 border border-pink-200">
+                      ❤️ In Breeding
+                    </span>
+                  )}
+                </>
+              )}
             </div>
-          );
-        })}
-        {filteredAnimals.length === 0 && (
-          <div className="col-span-full text-center py-12 text-slate-400 text-xs">
-            No matching livestock records found. Click "Register Animal" to begin!
           </div>
-        )}
-      </div>
+
+          <div
+            onClick={() => handleOpenAnimal(animal.id)}
+            className="p-3 flex-1 flex flex-col justify-between cursor-pointer"
+          >
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-400">
+                  {animal.species}
+                </span>
+
+                <span className="text-[10px] text-slate-500">
+                  {animal.sex === "Female" ? "♀️" : "♂️"}
+                </span>
+              </div>
+
+              {/* Main Title Name Display */}
+              <h4 className="font-extrabold text-xs text-slate-900 mt-0.5 truncate">
+                {displayName}
+              </h4>
+
+              {/* Secondary Code Display when custom name exists */}
+              {hasCustomName && (
+                <p className="text-[10px] font-mono text-slate-500 mt-0.5 truncate">
+                  {animal.animal_code}
+                </p>
+              )}
+            </div>
+
+            <div className="pt-2 border-t border-slate-50 flex items-center justify-between mt-2">
+              <span className="text-[9px] text-slate-400">
+                {animal.breed}
+              </span>
+
+              {isDeceased ? (
+                <Lock size={12} className="text-slate-400" />
+              ) : (
+                <ChevronRight size={12} className="text-slate-400" />
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    })}
+
+  {filteredAnimals.length === 0 && (
+    <div className="col-span-full text-center py-12 text-slate-400 text-xs">
+      No matching livestock records found. Click "Register Animal" to begin!
+    </div>
+  )}
+</div>
 
       {/* FULLSCREEN PREVIEW WITH DOWNLOAD */}
       {fullscreenPhoto && (

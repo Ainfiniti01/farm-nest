@@ -1576,40 +1576,63 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const farmPrefix = getFarmPrefix(farmProfile.name || "YUS");
-    const speciesCode = getSpeciesCode(animalData.species);
-    const codePrefix = `${farmPrefix}${speciesCode}`;
+const speciesCode = getSpeciesCode(animalData.species);
+const codePrefix = `${farmPrefix}${speciesCode}`;
 
-    const { data: existingRows } = await supabase
-      .from("animals")
-      .select("animal_code")
-      .eq("user_id", session.userId)
-      .ilike("animal_code", `${codePrefix}%`);
+// Fetch ALL existing animal codes for this user.
+// The sequence number is global across all species.
+const { data: existingRows, error: existingRowsError } = await supabase
+  .from("animals")
+  .select("animal_code")
+  .eq("user_id", session.userId);
 
-    const dbCodes = (existingRows || []).map((r: any) => r.animal_code);
-    const localCodes = animals.map(a => a.animal_code);
-    const allCodes = new Set([...dbCodes, ...localCodes]);
+if (existingRowsError) {
+  console.error("Failed to fetch existing animal codes:", existingRowsError);
+  showError("Could not generate animal code. Please try again.");
+  return;
+}
 
-    let maxNum = 0;
-    allCodes.forEach(code => {
-      if (code && typeof code === "string" && code.toUpperCase().startsWith(codePrefix.toUpperCase())) {
-        const numPart = code.slice(codePrefix.length);
-        const match = numPart.match(/^(\d+)$/);
-        if (match) {
-          const num = parseInt(match[1], 10);
-          if (!isNaN(num) && num > maxNum) {
-            maxNum = num;
-          }
-        }
-      }
-    });
+const dbCodes = (existingRows || [])
+  .map((r: { animal_code?: string }) => r.animal_code)
+  .filter(Boolean) as string[];
 
-    let countNumber = maxNum + 1;
-    let generatedCode = `${codePrefix}${countNumber.toString().padStart(3, "0")}`;
+const localCodes = animals
+  .map(a => a.animal_code)
+  .filter(Boolean) as string[];
 
-    while (allCodes.has(generatedCode)) {
-      countNumber++;
-      generatedCode = `${codePrefix}${countNumber.toString().padStart(3, "0")}`;
+const allCodes = new Set([...dbCodes, ...localCodes]);
+
+// Find the highest number across ALL species.
+let maxNum = 0;
+
+allCodes.forEach(code => {
+  if (!code || typeof code !== "string") return;
+
+  const match = code.match(/(\d+)$/);
+
+  if (match) {
+    const num = parseInt(match[1], 10);
+
+    if (!isNaN(num) && num > maxNum) {
+      maxNum = num;
     }
+  }
+});
+
+let countNumber = maxNum + 1;
+
+let generatedCode = `${codePrefix}${countNumber
+  .toString()
+  .padStart(3, "0")}`;
+
+// Make sure the generated code does not already exist.
+while (allCodes.has(generatedCode)) {
+  countNumber++;
+
+  generatedCode = `${codePrefix}${countNumber
+    .toString()
+    .padStart(3, "0")}`;
+}
 
     const newId = "a_" + Date.now();
 
