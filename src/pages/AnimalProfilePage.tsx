@@ -1,4 +1,4 @@
-    "use client";
+"use client";
 
 import React, { useState, useRef, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
@@ -11,7 +11,10 @@ import {
   BreedingRecord, 
   AnimalNote, 
   DEFAULT_ANIMAL_PHOTO, 
-  SPECIES_OPTIONS 
+  SPECIES_OPTIONS,
+  LifecycleStatus,
+  HealthStatus,
+  ReproductiveStatus
 } from "@/context/FarmContext";
 import { uploadOrCompressImage } from "@/utils/imageCompressor";
 import { LazyAnimalImage } from "@/components/LazyAnimalImage";
@@ -31,8 +34,8 @@ import {
   UserCheck, 
   Building, 
   Camera, 
-  Upload,
-  Receipt
+  Upload, 
+  Receipt 
 } from "lucide-react";
 import { showSuccess, showError } from "@/utils/toast";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
@@ -191,7 +194,9 @@ export const AnimalProfilePage: React.FC = () => {
     purchaseDate: animal?.purchaseDate || "",
     purchasePrice: animal?.purchasePrice !== undefined && animal?.purchasePrice !== null ? String(animal.purchasePrice) : "",
     source: animal ? animal.source : ("Born on farm" as Animal["source"]),
-    status: animal ? animal.status : ("Healthy" as Animal["status"]),
+    status: animal ? animal.status : ("Active" as LifecycleStatus),
+    healthStatus: animal ? animal.healthStatus : ("Healthy" as HealthStatus),
+    reproductiveStatus: animal ? animal.reproductiveStatus : ("None" as ReproductiveStatus),
     notes: animal ? animal.notes : "",
     primaryPhoto: animal ? animal.primaryPhoto : "",
     motherId: animal?.parents?.motherId || "",
@@ -268,7 +273,9 @@ export const AnimalProfilePage: React.FC = () => {
         purchaseDate: animal.purchaseDate || "",
         purchasePrice: animal.purchasePrice !== undefined && animal.purchasePrice !== null ? String(animal.purchasePrice) : "",
         source: animal.source,
-        status: animal.status,
+        status: animal.status || "Active",
+        healthStatus: animal.healthStatus || "Healthy",
+        reproductiveStatus: animal.reproductiveStatus || "None",
         notes: animal.notes,
         primaryPhoto: animal.primaryPhoto,
         motherId: animal.parents?.motherId || "",
@@ -426,7 +433,7 @@ export const AnimalProfilePage: React.FC = () => {
               <h1>FarmNest Passport Card</h1>
               <p>Livestock Registry: <strong>${animal.animal_code}</strong></p>
             </div>
-            <span class="badge">${animal.status}</span>
+            <span class="badge">${animal.healthStatus}</span>
           </div>
           <img class="photo" src="${animal.primaryPhoto}" />
           <table>
@@ -436,6 +443,9 @@ export const AnimalProfilePage: React.FC = () => {
             <tr><th>Species Class</th><td>${animal.species}</td></tr>
             <tr><th>Breed</th><td>${animal.breed}</td></tr>
             <tr><th>Sex Type</th><td>${animal.sex}</td></tr>
+            <tr><th>Health Status</th><td>${animal.healthStatus}</td></tr>
+            <tr><th>Reproductive Status</th><td>${animal.reproductiveStatus}</td></tr>
+            <tr><th>Lifecycle Status</th><td>${animal.status}</td></tr>
             <tr><th>Ownership</th><td>${animal.ownershipType || "Farm Owned"}${animal.ownerName ? ` (${animal.ownerName})` : ''}</td></tr>
             <tr><th>Birth date</th><td>${animal.dob || "Unrecorded"} (${currentAge})</td></tr>
             <tr><th>Acquisition Source</th><td>${animal.source}</td></tr>
@@ -482,11 +492,13 @@ export const AnimalProfilePage: React.FC = () => {
   const father = animals.find(a => a.id === animal.parents?.fatherId);
   const offspringList = animals.filter(a => a.parents?.motherId === animal.id || a.parents?.fatherId === animal.id);
 
+  // Pick the newest active breeding record for pregnancy countdown
   const femaleBreedingRecords = breedingRecords
-    .filter(b => b.female_id === animal.id && b.status !== "Failed")
+    .filter(b => b.female_id === animal.id && b.status !== "Failed" && b.status !== "Gave Birth")
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   const latestBreeding = femaleBreedingRecords[0];
-  const gestationCountdown = animal.sex === "Female" && latestBreeding ? calculateGestation(latestBreeding.date) : null;
+  const isPregnant = animal.reproductiveStatus === "Pregnant";
+  const gestationCountdown = animal.sex === "Female" && isPregnant && latestBreeding ? calculateGestation(latestBreeding.date) : null;
 
   const chartData = animalWeights
     .map(w => ({
@@ -592,6 +604,8 @@ export const AnimalProfilePage: React.FC = () => {
           purchasePrice: parsedPrice,
           source: editForm.source,
           status: editForm.status,
+          healthStatus: editForm.healthStatus,
+          reproductiveStatus: editForm.reproductiveStatus,
           notes: editForm.notes,
           primaryPhoto: editForm.primaryPhoto,
           parents: {
@@ -773,8 +787,9 @@ export const AnimalProfilePage: React.FC = () => {
           sex: newOffspring.sex,
           dob: newOffspring.dob,
           source: "Born on farm",
-          status: "Healthy",
+          status: "Active",
           healthStatus: "Healthy",
+          reproductiveStatus: "None",
           primaryPhoto: finalPrimary,
           photos: finalPhotos,
           notes: newOffspring.notes || "Offspring of parent lineage.",
@@ -863,13 +878,23 @@ export const AnimalProfilePage: React.FC = () => {
                   <Eye size={18} /> View Portrait Fullscreen
                 </div>
 
-                <div className="absolute top-4 right-4 z-10">
+                <div className="absolute top-4 right-4 z-10 flex flex-col items-end gap-1.5 pointer-events-none">
+                  {/* Primary Authoritative Health Badge (Never replaced by Active) */}
                   <span className={`text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full shadow-md ${
                     animal.healthStatus === "Healthy" ? "bg-emerald-100 text-emerald-800 border border-emerald-200" :
                     animal.healthStatus === "Under Treatment" ? "bg-purple-100 text-purple-800 border border-purple-200" : "bg-amber-100 text-amber-800 border border-amber-200"
                   }`}>
-                    ● {animal.status}
+                    ● {animal.healthStatus || "Healthy"}
                   </span>
+
+                  {/* Reproductive Badge */}
+                  {animal.reproductiveStatus && animal.reproductiveStatus !== "None" && animal.reproductiveStatus !== "Not applicable" && (
+                    <span className="text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full shadow-md bg-rose-100 text-rose-800 border border-rose-200">
+                      {animal.reproductiveStatus === "Pregnant" ? "🤰 Pregnant" : 
+                       animal.reproductiveStatus === "Lactating" ? "🍼 Lactating" : 
+                       animal.reproductiveStatus === "Breeding" ? "❤️ In Breeding" : animal.reproductiveStatus}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -894,6 +919,22 @@ export const AnimalProfilePage: React.FC = () => {
                   <div>
                     <span className="text-[9px] text-slate-400 block font-bold">SOURCE</span>
                     <span className="font-bold text-slate-700">{animal.source}</span>
+                  </div>
+                </div>
+
+                {/* Status Dimension Summary */}
+                <div className="pt-2 border-t border-slate-50 grid grid-cols-3 gap-1.5 text-[10px] text-slate-500 bg-slate-50 p-2.5 rounded-xl">
+                  <div>
+                    <span className="font-bold text-slate-400 uppercase block text-[8px]">LIFECYCLE</span>
+                    <span className="font-extrabold text-slate-700">{animal.status || "Active"}</span>
+                  </div>
+                  <div>
+                    <span className="font-bold text-slate-400 uppercase block text-[8px]">HEALTH</span>
+                    <span className="font-extrabold text-emerald-800">{animal.healthStatus || "Healthy"}</span>
+                  </div>
+                  <div>
+                    <span className="font-bold text-slate-400 uppercase block text-[8px]">REPRO</span>
+                    <span className="font-extrabold text-rose-700">{animal.reproductiveStatus || "None"}</span>
                   </div>
                 </div>
 
@@ -925,7 +966,7 @@ export const AnimalProfilePage: React.FC = () => {
                     onClick={() => setShowEditModal(true)}
                     className="flex-1 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-extrabold rounded-xl border border-emerald-100 transition text-center block"
                   >
-                    Edit Profile & Dates
+                    Edit Profile & Status
                   </button>
 
                   <button
@@ -1151,7 +1192,7 @@ export const AnimalProfilePage: React.FC = () => {
               <div className="space-y-6">
 
                 {/* FEMALE PREGNANCY / DELIVERY COUNTDOWN BANNER */}
-                {animal.sex === "Female" && gestationCountdown && (
+                {animal.sex === "Female" && isPregnant && gestationCountdown && (
                   <div className="bg-gradient-to-r from-rose-500 via-pink-600 to-rose-600 text-white rounded-3xl p-5 shadow-lg relative overflow-hidden space-y-3">
                     <div className="absolute -right-6 -bottom-6 w-32 h-36 bg-white/10 rounded-full blur-xl" />
                     <div className="flex items-center justify-between border-b border-white/20 pb-2">
@@ -1161,11 +1202,11 @@ export const AnimalProfilePage: React.FC = () => {
                         </div>
                         <div>
                           <h4 className="font-extrabold text-sm tracking-wide">Pregnancy & Delivery Countdown</h4>
-                          <p className="text-[10px] text-rose-100">Calculated ~5 months (150 days) from latest breeding run</p>
+                          <p className="text-[10px] text-rose-100">Calculated ~150 days from latest breeding run</p>
                         </div>
                       </div>
                       <span className="text-[10px] font-black uppercase bg-white text-rose-800 px-2.5 py-0.5 rounded-full shadow-sm">
-                        {latestBreeding.status}
+                        {gestationCountdown.isOverdue ? "Overdue" : "Pregnant"}
                       </span>
                     </div>
 
@@ -1181,12 +1222,12 @@ export const AnimalProfilePage: React.FC = () => {
                       </div>
 
                       <div className="bg-white text-slate-900 p-2.5 rounded-2xl border border-white/30 shadow-md">
-                        <span className="text-[9px] uppercase font-extrabold text-rose-600 block">Countdown</span>
-                        <span className="text-sm font-black text-rose-600 block mt-0.5">
+                        <span className="text-[9px] uppercase font-extrabold text-rose-600 block">Status</span>
+                        <span className="text-xs sm:text-sm font-black text-rose-600 block mt-0.5">
                           {gestationCountdown.isToday ? (
                             "Due Today! 👶"
                           ) : gestationCountdown.isOverdue ? (
-                            `${Math.abs(gestationCountdown.daysRemaining)} days overdue!`
+                            `Overdue by ${Math.abs(gestationCountdown.daysRemaining)} days`
                           ) : (
                             `${gestationCountdown.daysRemaining} days left`
                           )}
@@ -1461,7 +1502,11 @@ export const AnimalProfilePage: React.FC = () => {
                     return (
                       <div key={b.id} className="p-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
                         <div className="flex justify-between items-center mb-2">
-                          <span className="text-xs font-black text-rose-800 bg-rose-50 px-2 py-0.5 rounded-full">
+                          <span className={`text-xs font-black px-2.5 py-0.5 rounded-full ${
+                            b.status === "Gave Birth" ? "bg-emerald-100 text-emerald-800" :
+                            b.status === "Pregnant" ? "bg-rose-100 text-rose-800" :
+                            b.status === "Failed" ? "bg-red-100 text-red-800" : "bg-slate-100 text-slate-700"
+                          }`}>
                             {b.status}
                           </span>
                           <span className="text-[10px] text-slate-400">{b.date}</span>
@@ -2008,7 +2053,7 @@ export const AnimalProfilePage: React.FC = () => {
             className="bg-white w-full max-w-md rounded-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between border-b pb-2">
-              <h3 className="font-extrabold text-sm text-slate-900">Update Animal Record & Dates</h3>
+              <h3 className="font-extrabold text-sm text-slate-900">Update Animal Record & Status</h3>
               <button type="button" onClick={() => setShowEditModal(false)} className="text-slate-400 hover:text-slate-600">✕</button>
             </div>
 
@@ -2082,15 +2127,61 @@ export const AnimalProfilePage: React.FC = () => {
               </div>
 
               <div>
-                <label className="text-[10px] font-bold text-slate-500 block">Status</label>
+                <label className="text-[10px] font-bold text-slate-500 block">Acquisition Source</label>
                 <select
-                  value={editForm.status}
-                  onChange={(e) => setEditForm({ ...editForm, status: e.target.value as any })}
+                  value={editForm.source}
+                  onChange={(e) => setEditForm({ ...editForm, source: e.target.value as any })}
                   className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1 font-semibold"
                 >
-                  {["Healthy", "Monitoring", "Sick", "Under Treatment", "Pregnant", "Sold", "Deceased", "Retired"].map((st) => (
-                    <option key={st} value={st}>{st}</option>
-                  ))}
+                  <option value="Born on farm">Born on farm</option>
+                  <option value="Purchased">Purchased</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Independent Status Dimensions in Edit Modal */}
+            <div className="grid grid-cols-3 gap-2 bg-slate-50 p-3 rounded-2xl border border-slate-200/70">
+              <div>
+                <label className="text-[9px] font-bold text-slate-500 block">Lifecycle</label>
+                <select
+                  value={editForm.status}
+                  onChange={(e) => setEditForm({ ...editForm, status: e.target.value as LifecycleStatus })}
+                  className="w-full p-2 bg-white border rounded-xl text-xs mt-1 font-semibold"
+                >
+                  <option value="Active">Active</option>
+                  <option value="Sold">Sold</option>
+                  <option value="Deceased">Deceased</option>
+                  <option value="Retired">Retired</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[9px] font-bold text-slate-500 block">Health</label>
+                <select
+                  value={editForm.healthStatus}
+                  onChange={(e) => setEditForm({ ...editForm, healthStatus: e.target.value as HealthStatus })}
+                  className="w-full p-2 bg-white border rounded-xl text-xs mt-1 font-semibold"
+                >
+                  <option value="Healthy">Healthy</option>
+                  <option value="Monitoring">Monitoring</option>
+                  <option value="Sick">Sick</option>
+                  <option value="Under Treatment">Under Tx</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[9px] font-bold text-slate-500 block">Reproduction</label>
+                <select
+                  value={editForm.reproductiveStatus}
+                  onChange={(e) => setEditForm({ ...editForm, reproductiveStatus: e.target.value as ReproductiveStatus })}
+                  className="w-full p-2 bg-white border rounded-xl text-xs mt-1 font-semibold"
+                >
+                  <option value="None">None/Normal</option>
+                  <option value="Pregnant">Pregnant</option>
+                  <option value="Breeding">Breeding</option>
+                  <option value="Lactating">Lactating</option>
+                  <option value="Not applicable">N/A</option>
                 </select>
               </div>
             </div>
@@ -2122,20 +2213,7 @@ export const AnimalProfilePage: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 block">Acquisition Source</label>
-                <select
-                  value={editForm.source}
-                  onChange={(e) => setEditForm({ ...editForm, source: e.target.value as any })}
-                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1 font-semibold"
-                >
-                  <option value="Born on farm">Born on farm</option>
-                  <option value="Purchased">Purchased</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-
+            {editForm.source === "Purchased" && (
               <div>
                 <label className="text-[10px] font-bold text-slate-500 block">Purchase Price</label>
                 <input
@@ -2144,11 +2222,10 @@ export const AnimalProfilePage: React.FC = () => {
                   placeholder="e.g. 50000"
                   value={editForm.purchasePrice}
                   onChange={(e) => setEditForm({ ...editForm, purchasePrice: e.target.value })}
-                  disabled={editForm.source === "Born on farm"}
-                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1 font-semibold disabled:opacity-40"
+                  className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs mt-1 font-semibold"
                 />
               </div>
-            </div>
+            )}
 
             <div>
               <label className="text-[10px] font-bold text-slate-500 block">Mother (Dam)</label>

@@ -341,7 +341,8 @@ export const Animals: React.FC = () => {
           const displayName = hasCustomName ? animal.name : animal.animal_code;
           const isDeceased = animal.status === "Deceased";
           const isPregnant = animal.reproductiveStatus === "Pregnant";
-          const isSickOrTx = animal.healthStatus === "Sick" || animal.healthStatus === "Under Treatment";
+          const isLactating = animal.reproductiveStatus === "Lactating";
+          const isBreeding = animal.reproductiveStatus === "Breeding";
 
           return (
             <div
@@ -369,22 +370,37 @@ export const Animals: React.FC = () => {
                     </span>
                   ) : (
                     <>
-                      {animal.status !== "Active" && (
+                      {animal.status && animal.status !== "Active" && (
                         <span className="text-[9px] font-black px-2 py-0.5 rounded-full shadow bg-slate-200 text-slate-700">
                           {animal.status}
                         </span>
                       )}
 
+                      {/* Authoritative Health Status Badge */}
                       <span className={`text-[9px] font-black px-2 py-0.5 rounded-full shadow ${
-                        animal.healthStatus === "Healthy" ? "bg-emerald-100 text-emerald-800" :
-                        animal.healthStatus === "Under Treatment" ? "bg-purple-100 text-purple-800" : "bg-amber-100 text-amber-800"
+                        animal.healthStatus === "Healthy" ? "bg-emerald-100 text-emerald-800 border border-emerald-200" :
+                        animal.healthStatus === "Under Treatment" ? "bg-purple-100 text-purple-800 border border-purple-200" : 
+                        "bg-amber-100 text-amber-800 border border-amber-200"
                       }`}>
-                        ● {animal.healthStatus}
+                        ● {animal.healthStatus || "Healthy"}
                       </span>
 
+                      {/* Authoritative Reproductive Status Badges */}
                       {isPregnant && (
                         <span className="text-[9px] font-black px-2 py-0.5 rounded-full shadow bg-rose-100 text-rose-800 border border-rose-200">
                           🤰 Pregnant
+                        </span>
+                      )}
+
+                      {isLactating && (
+                        <span className="text-[9px] font-black px-2 py-0.5 rounded-full shadow bg-blue-100 text-blue-800 border border-blue-200">
+                          🍼 Lactating
+                        </span>
+                      )}
+
+                      {isBreeding && (
+                        <span className="text-[9px] font-black px-2 py-0.5 rounded-full shadow bg-pink-100 text-pink-800 border border-pink-200">
+                          ❤️ In Breeding
                         </span>
                       )}
                     </>
@@ -724,7 +740,7 @@ export const Animals: React.FC = () => {
       {/* CONFIRMATION OVERLAY */}
       {pendingConfirm && (
         <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-white max-w-sm w-full rounded-3xl p-6 space-y-4 shadow-2xl border border-slate-100">
+          <div className="bg-white max-w-sm w-full rounded-3xl p-6 space-y-4 border border-slate-100 shadow-2xl">
             <div className="flex items-center gap-3">
               <div className="p-2.5 bg-amber-50 rounded-xl text-amber-600">
                 <HelpCircle size={22} />
