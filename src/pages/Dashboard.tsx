@@ -208,7 +208,7 @@ export const Dashboard: React.FC = () => {
       
       {/* 1. WELCOME FARM HEADER CARD */}
       <div className="bg-white rounded-3xl overflow-hidden border border-slate-100 shadow-sm">
-        <div className="h-44 bg-slate-200 relative">
+        <div className="h-50 bg-slate-200 relative">
           <img 
             src={farmHeaderImage} 
             alt={farmProfile.name} 
