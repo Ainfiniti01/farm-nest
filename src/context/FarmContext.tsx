@@ -33,19 +33,37 @@ export const getSpeciesCode = (species: string): string => {
   switch (species) {
     case "Goat": return "G";
     case "Ram": return "R";
+    case "Sheep": return "S";
     case "Chicken": return "C";
     case "Turkey": return "T";
     case "Horse": return "H";
     case "Camel": return "CM";
     case "Duck": return "D";
     case "Cow": return "CW";
-    default: return "O";
+    default:
+      return species.trim().charAt(0).toUpperCase() || "O";
   }
 };
+
+// export const getSpeciesCode = (species: string): string => {
+//   switch (species) {
+//     case "Goat": return "G";
+//     case "Ram": return "R";
+//     case "Sheep": return "S";
+//     case "Chicken": return "C";
+//     case "Turkey": return "T";
+//     case "Horse": return "H";
+//     case "Camel": return "CM";
+//     case "Duck": return "D";
+//     case "Cow": return "CW";
+//     default: return "O";
+//   }
+// };
 
 export const SPECIES_OPTIONS = [
   "Goat",
   "Ram",
+  "Sheep",
   "Chicken",
   "Turkey",
   "Horse",
