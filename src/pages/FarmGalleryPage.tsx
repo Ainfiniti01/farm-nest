@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { useFarm, FarmGalleryItem } from "@/context/FarmContext";
 import { compressImage } from "@/utils/imageCompressor";
+import { uploadOrCompressImage } from "@/utils/imageCompressor";
 import { 
   ArrowLeft, 
   Plus, 

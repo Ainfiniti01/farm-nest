@@ -163,28 +163,33 @@ export const normalizeStatuses = (rawStatus: string, rawHealth?: string, rawRepr
   let healthStatus: HealthStatus = (rawHealth as HealthStatus) || "Healthy";
   let reproductiveStatus: ReproductiveStatus = rawRepro || "None";
 
-  const lower = (rawStatus || "").toLowerCase();
+  const lowerStatus = (rawStatus || "").toLowerCase().trim();
+  const lowerHealth = (rawHealth || "").toLowerCase().trim();
 
-  if (lower === "sold") status = "Sold";
-  else if (lower === "deceased") status = "Deceased";
-  else if (lower === "retired") status = "Retired";
-  else if (lower === "active") status = "Active";
+  // 1. Resolve Lifecycle Status
+  if (lowerStatus === "sold") status = "Sold";
+  else if (lowerStatus === "deceased") status = "Deceased";
+  else if (lowerStatus === "retired") status = "Retired";
+  else status = "Active";
 
-  if (lower === "sick") {
-    status = "Active";
+  // 2. Resolve Health Status (Never let pregnancy overwrite health status)
+  if (lowerHealth === "sick" || lowerStatus === "sick") {
     healthStatus = "Sick";
-  } else if (lower === "monitoring") {
-    status = "Active";
-    healthStatus = "Monitoring";
-  } else if (lower === "under treatment") {
-    status = "Active";
+  } else if (lowerHealth === "under treatment" || lowerStatus === "under treatment") {
     healthStatus = "Under Treatment";
-  } else if (lower === "pregnant") {
-    status = "Active";
-    reproductiveStatus = "Pregnant";
-  } else if (lower === "healthy") {
-    status = "Active";
+  } else if (lowerHealth === "monitoring" || lowerStatus === "monitoring") {
+    healthStatus = "Monitoring";
+  } else if (lowerHealth === "healthy" || (!rawHealth && lowerStatus === "healthy")) {
     healthStatus = "Healthy";
+  }
+
+  // 3. Resolve Reproductive Status
+  if (rawRepro) {
+    reproductiveStatus = rawRepro;
+  } else if (lowerStatus === "pregnant") {
+    reproductiveStatus = "Pregnant";
+  } else if (lowerStatus === "lactating") {
+    reproductiveStatus = "Lactating";
   }
 
   return { status, healthStatus, reproductiveStatus };
@@ -512,10 +517,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     isMigratingBase64Ref.current = false;
   }, []);
 
-  /**
-   * Background migration: Converts any legacy base64 image strings in the animals table
-   * into lightweight Supabase Storage URLs and updates the DB rows.
-   */
   const migrateLegacyBase64Animals = useCallback(async (rawAnimalsList: any[], userId: string) => {
     if (isMigratingBase64Ref.current) return;
     const recordsToMigrate = rawAnimalsList.filter(
@@ -665,8 +666,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
           };
         }));
         hasLoadedAnimalsRef.current = true;
-
-        // Trigger background cleanup if any base64 remains
         migrateLegacyBase64Animals(resAnimals.data, currentUserId);
       }
 
@@ -856,7 +855,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return [...prev, loadedAnimal];
         });
 
-        // If this animal profile has base64 photos, migrate it in the background
         if (
           (a.primary_photo && a.primary_photo.startsWith("data:image/")) ||
           (Array.isArray(a.photos) && a.photos.some((p: string) => p && p.startsWith("data:image/")))
@@ -1610,7 +1608,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       animalData.notes || ""
     );
 
-    // Convert any base64 images to Supabase Storage URLs before DB insertion
     const rawPhotos = (animalData.photos && animalData.photos.length > 0)
       ? animalData.photos
       : [DEFAULT_ANIMAL_PHOTO];
@@ -1677,6 +1674,66 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     setAnimals(prev => [createdAnimalObj, ...prev]);
+
+    // AUTOMATIC POST-BIRTH OFFSPRING TRANSITION FOR MOTHER
+    // If an offspring is registered and linked to a mother, close pregnancy and transition mother to Lactating
+    if (animalData.parents?.motherId) {
+      const motherId = animalData.parents.motherId;
+      const motherObj = animals.find(a => a.id === motherId);
+
+      if (motherObj) {
+        // Transition reproductive status to Lactating while preserving health status
+        await updateAnimal(motherId, {
+          reproductiveStatus: "Lactating"
+        });
+
+        // Find latest active breeding record for the mother and mark it Gave Birth with timing classification
+        const motherBreedings = breedingRecords
+          .filter(b => b.female_id === motherId && b.status !== "Failed" && b.status !== "Gave Birth")
+          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+        if (motherBreedings.length > 0) {
+          const activeBreeding = motherBreedings[0];
+          const matingDate = new Date(activeBreeding.date);
+          const expectedDueDate = new Date(matingDate.getTime() + 150 * 24 * 60 * 60 * 1000);
+          
+          const birthDateStr = animalData.dob || new Date().toISOString().split("T")[0];
+          const actualBirthDate = new Date(birthDateStr);
+
+          // Calculate timing classification
+          const diffTime = actualBirthDate.getTime() - expectedDueDate.getTime();
+          const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+          let timingTag = "On Time";
+          if (diffDays < 0) {
+            timingTag = `Early by ${Math.abs(diffDays)} day${Math.abs(diffDays) === 1 ? '' : 's'}`;
+          } else if (diffDays > 0) {
+            timingTag = `Late by ${diffDays} day${diffDays === 1 ? '' : 's'}`;
+          }
+
+          const updatedNotes = activeBreeding.notes 
+            ? `${activeBreeding.notes} • [Birth: ${timingTag} on ${birthDateStr}]`
+            : `[Birth: ${timingTag} on ${birthDateStr}]`;
+
+          // Update breeding record status to Gave Birth in DB & local state
+          await supabase
+            .from("breeding_records")
+            .update({
+              status: "Gave Birth",
+              notes: updatedNotes
+            })
+            .eq("id", activeBreeding.id)
+            .eq("user_id", session.userId);
+
+          setBreedingRecords(prev => prev.map(b => b.id === activeBreeding.id ? {
+            ...b,
+            status: "Gave Birth",
+            notes: updatedNotes
+          } : b));
+        }
+      }
+    }
+
     await logActivity("Animal Registered", `Registered ${animalData.species} (${generatedCode})`, farmProfile.ownerName, newId);
     showSuccess(`Registered ${generatedCode}`);
   };
@@ -1702,10 +1759,17 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ? updates.reproductiveStatus 
       : (existing.reproductiveStatus || "None");
 
+    const currentHealth = updates.healthStatus !== undefined 
+      ? updates.healthStatus 
+      : (existing.healthStatus || "Healthy");
+
+    const currentLifecycle = updates.status !== undefined 
+      ? updates.status 
+      : (existing.status || "Active");
+
     const baseNotes = updates.notes !== undefined ? updates.notes : (existing.notes || "");
     const encodedNotes = encodeExtendedDataIntoNotes(currentOwnership, currentRepro, baseNotes);
 
-    // Build targeted payload with ONLY changed fields to avoid re-transmitting heavy data
     const payload: any = {};
 
     if (
@@ -1728,8 +1792,8 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (updates.purchasePrice !== undefined) payload.purchase_price = updates.purchasePrice !== null ? updates.purchasePrice : null;
     if (updates.deathDate !== undefined) payload.death_date = updates.deathDate || null;
     if (updates.source !== undefined) payload.source = updates.source;
-    if (updates.status !== undefined) payload.status = updates.status;
-    if (updates.healthStatus !== undefined) payload.health_status = updates.healthStatus;
+    if (updates.status !== undefined) payload.status = currentLifecycle;
+    if (updates.healthStatus !== undefined) payload.health_status = currentHealth;
 
     if (updates.primaryPhoto !== undefined) {
       payload.primary_photo = await ensureStorageUrl(updates.primaryPhoto, session.userId, "animals");
@@ -1768,6 +1832,9 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return {
           ...a,
           ...updates,
+          status: currentLifecycle,
+          healthStatus: currentHealth,
+          reproductiveStatus: currentRepro,
           primaryPhoto: payload.primary_photo !== undefined ? payload.primary_photo : a.primaryPhoto,
           photos: payload.photos !== undefined ? payload.photos : a.photos,
           parents: newParents,
@@ -1775,7 +1842,6 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
           ownerName: currentOwnership.ownerName,
           custodian: currentOwnership.custodian,
           agreement: currentOwnership.agreement,
-          reproductiveStatus: currentRepro,
           notes: baseNotes
         };
       }
@@ -1948,21 +2014,17 @@ export const FarmProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
-    if (record.status === "Pregnant") {
+    // When breeding is logged for female, start/update pregnancy reproductive status while leaving healthStatus untouched
+    if (record.female_id && record.status !== "Failed") {
       const femaleAnimal = animals.find(a => a.id === record.female_id);
       if (femaleAnimal) {
         await updateAnimal(femaleAnimal.id, { reproductiveStatus: "Pregnant" });
-      }
-    } else if (record.status === "Gave Birth") {
-      const femaleAnimal = animals.find(a => a.id === record.female_id);
-      if (femaleAnimal) {
-        await updateAnimal(femaleAnimal.id, { reproductiveStatus: "Lactating" });
       }
     }
 
     setBreedingRecords(prev => [{ id: newId, ...record }, ...prev]);
     await logActivity("Breeding Logged", `Logged mating cycle status (${record.status})`, farmProfile.ownerName, record.female_id);
-    showSuccess("Breeding event logged");
+    showSuccess("Breeding event logged & pregnancy countdown active");
   };
 
   const addInventoryItem = async (item: Omit<InventoryItem, "id">) => {
